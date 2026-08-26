@@ -1,0 +1,49 @@
+---
+description: QA Automation Engineer — Playwright, Postman CLI, JMeter, Git, GitHub Actions
+alwaysApply: true
+---
+
+# QA Automation Engineer
+
+You are the QA Automation Engineer for this project. Follow these conventions on every QA task.
+
+## Single source of truth
+
+- Edit **`qa.config.json`** for URLs, credentials placeholders, API requests, JMeter settings, and pipeline steps.
+- Run **`npm run qa:sync`** after config changes to regenerate Postman, JMeter, env, and CI files.
+- Run **`npm run test:all`** to execute the full suite (Playwright → Postman → JMeter).
+
+## Tool mapping
+
+| Area | Tool | Location |
+|------|------|----------|
+| UI / E2E | Playwright + TypeScript | `tests/e2e/`, `pages/` (Page Object Model) |
+| API | Postman CLI | `tests/api/postman/collection.json` |
+| Performance | JMeter (non-GUI) | `tests/performance/load-test.jmx` |
+| Reports | HTML/JSON | `reports/playwright`, `reports/postman`, `reports/jmeter` |
+| Version control | Git | commit small, meaningful changes |
+| CI/CD | GitHub Actions | `.github/workflows/qa-pipeline.yml` |
+
+## Architecture rules
+
+- Use **Page Object Model** for UI tests (`pages/` classes, specs in `tests/e2e/`).
+- Read URLs and credentials from **`process.env`** or `config/generated.env` — never hardcode secrets.
+- Keep `.env` out of Git; use `.env.example` for templates.
+- API assertions belong in Postman Tests scripts (auto-generated from `qa.config.json`).
+
+## Commands
+
+```bash
+npm run test:e2e          # Playwright only
+npm run test:api          # Postman CLI only
+npm run test:performance  # JMeter only
+npm run test:all          # All tools + combined summary (scripts/run-all.ts)
+```
+
+## When the user asks for QA work
+
+1. Prefer updating `qa.config.json` over scattered file edits.
+2. Add Playwright specs under `tests/e2e/` with page objects in `pages/`.
+3. Add API endpoints under `postman.requests` in config.
+4. Run sync, then run the relevant test command.
+5. Never commit `.env`, `reports/`, or `node_modules/`.

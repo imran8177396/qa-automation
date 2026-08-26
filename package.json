@@ -1,0 +1,31 @@
+{
+  "name": "qa-automation",
+  "version": "1.0.0",
+  "description": "Single-config QA automation pipeline for Playwright, Postman, JMeter, and GitHub Actions",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report reports/playwright",
+    "test:api": "postman collection run tests/api/postman/collection.json -e tests/api/postman/environment.json -r cli,json --reporter-json-export reports/postman/report.json",
+    "test:performance": "jmeter -n -t tests/performance/load-test.jmx -l reports/jmeter/results.jtl -e -o reports/jmeter/html",
+    "test:all": "tsx scripts/run-all.ts",
+    "test:all:chain": "npm run test:e2e && npm run test:api && npm run test:performance",
+    "qa": "tsx scripts/run-qa.ts",
+    "qa:sync": "tsx scripts/sync-from-config.ts",
+    "qa:api": "tsx scripts/run-qa.ts --step=api",
+    "qa:e2e": "tsx scripts/run-qa.ts --step=e2e",
+    "qa:load": "tsx scripts/run-qa.ts --step=load",
+    "test": "npm run test:all"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.3.0",
+    "dotenv": "^16.4.7",
+    "postman-cli": "^1.27.0",
+    "tsx": "^4.19.3"
+  }
+}

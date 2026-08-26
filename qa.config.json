@@ -1,0 +1,50 @@
+{
+  "project": {
+    "name": "QA Automation"
+  },
+  "urls": {
+    "website": "https://example.com",
+    "api": "https://jsonplaceholder.typicode.com",
+    "login": "https://your-website.com/login"
+  },
+  "credentials": {
+    "username": "test@example.com",
+    "password": "Password123"
+  },
+  "pipeline": {
+    "steps": ["sync", "api", "e2e", "load"],
+    "failFast": true
+  },
+  "postman": {
+    "enabled": true,
+    "collectionName": "QA Automation API",
+    "assertions": {
+      "statusCode": 200,
+      "expectJson": true
+    },
+    "requests": [
+      {
+        "name": "GET /users",
+        "method": "GET",
+        "path": "/users"
+      }
+    ]
+  },
+  "playwright": {
+    "enabled": true,
+    "baseURL": "https://example.com",
+    "browser": "chromium",
+    "headless": true
+  },
+  "jmeter": {
+    "enabled": true,
+    "threads": 10,
+    "rampUpSeconds": 10,
+    "loopCount": 1,
+    "path": "/users"
+  },
+  "github": {
+    "branches": ["main", "master"],
+    "runOnPullRequest": true
+  }
+}

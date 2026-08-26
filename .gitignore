@@ -1,0 +1,24 @@
+
+# Dependencies
+node_modules/
+
+# Playwright
+test-results/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+
+# Reports (generated at runtime)
+reports/
+playwright-report/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Generated config
+config/generated.env
+
+# Build output
+dist/
