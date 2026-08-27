@@ -29,7 +29,7 @@ export async function runSync(): Promise<void> {
   }
 
   generateGithubWorkflow(config);
-  logSuccess('Generated .github/workflows/qa-pipeline.yml');
+  logSuccess('Generated .github/workflows/qa-automation.yml');
 }
 
 if (require.main === module) {

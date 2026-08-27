@@ -8,12 +8,13 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
+    this.usernameInput = page.locator('[data-test="username"]');
+    this.passwordInput = page.locator('[data-test="password"]');
+    this.loginButton = page.locator('[data-test="login-button"]');
+  }
 
-    this.usernameInput = page.getByLabel('Username');
-    this.passwordInput = page.getByLabel('Password');
-    this.loginButton = page.getByRole('button', {
-      name: 'Login'
-    });
+  async goto() {
+    await this.page.goto('/');
   }
 
   async login(username: string, password: string) {

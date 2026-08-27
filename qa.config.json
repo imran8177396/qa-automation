@@ -1,15 +1,17 @@
 {
   "project": {
-    "name": "QA Automation"
+    "name": "Swag Labs QA Automation"
   },
   "urls": {
-    "website": "https://example.com",
-    "api": "https://jsonplaceholder.typicode.com",
-    "login": "https://your-website.com/login"
+    "website": "https://www.saucedemo.com",
+    "api": "https://www.saucedemo.com",
+    "login": "https://www.saucedemo.com/",
+    "inventory": "https://www.saucedemo.com/inventory.html",
+    "checkout": "https://www.saucedemo.com/checkout-step-one.html"
   },
   "credentials": {
-    "username": "test@example.com",
-    "password": "Password123"
+    "username": "standard_user",
+    "password": "secret_sauce"
   },
   "pipeline": {
     "steps": ["sync", "api", "e2e", "load"],
@@ -17,34 +19,39 @@
   },
   "postman": {
     "enabled": true,
-    "collectionName": "QA Automation API",
+    "collectionName": "Swag Labs API Smoke",
     "assertions": {
       "statusCode": 200,
-      "expectJson": true
+      "expectJson": false
     },
     "requests": [
       {
-        "name": "GET /users",
+        "name": "GET homepage",
         "method": "GET",
-        "path": "/users"
+        "path": "/"
       }
     ]
   },
   "playwright": {
     "enabled": true,
-    "baseURL": "https://example.com",
-    "browser": "chromium",
+    "baseURL": "https://www.saucedemo.com",
+    "browsers": ["chromium", "firefox", "webkit"],
     "headless": true
   },
   "jmeter": {
     "enabled": true,
-    "threads": 10,
-    "rampUpSeconds": 10,
+    "threads": 5,
+    "rampUpSeconds": 5,
     "loopCount": 1,
-    "path": "/users"
+    "path": "/"
   },
   "github": {
     "branches": ["main", "master"],
     "runOnPullRequest": true
+  },
+  "report": {
+    "enabled": true,
+    "format": "docs/templates/qa-test-results.format.json",
+    "autoGenerateAfterTests": true
   }
 }

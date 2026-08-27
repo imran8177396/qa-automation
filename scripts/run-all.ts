@@ -87,6 +87,18 @@ async function main(): Promise<void> {
   );
   logSuccess(`Combined summary saved to ${summaryPath}`);
 
+  try {
+    if (config.report?.enabled !== false && config.report?.autoGenerateAfterTests !== false) {
+      const { generateQaReportDocx } = await import('./generate-qa-report.js');
+      const { docxPath } = await generateQaReportDocx();
+      logSuccess(`Combined Word report: ${docxPath}`);
+    } else {
+      logWarn('Combined Word report skipped (disabled in qa.config.json report settings).');
+    }
+  } catch (error) {
+    logWarn(`Could not generate combined Word report: ${String(error)}`);
+  }
+
   const failed = results.filter((result) => !result.passed);
   if (failed.length > 0) {
     logError(`${failed.length} tool(s) failed: ${failed.map((r) => r.tool).join(', ')}`);

@@ -1,10 +1,10 @@
 {
   "id": "qa-automation-api-env",
-  "name": "QA Automation API - Local",
+  "name": "Swag Labs API Smoke - Local",
   "values": [
     {
       "key": "baseUrl",
-      "value": "https://jsonplaceholder.typicode.com",
+      "value": "https://www.saucedemo.com",
       "type": "default",
       "enabled": true
     }

@@ -1,5 +1,7 @@
 export type PipelineStep = 'sync' | 'api' | 'e2e' | 'load';
 
+export type PlaywrightBrowser = 'chromium' | 'firefox' | 'webkit';
+
 export interface PostmanAssertionsConfig {
   statusCode?: number;
   expectJson?: boolean;
@@ -20,6 +22,8 @@ export interface QaConfig {
     website: string;
     api: string;
     login: string;
+    inventory?: string;
+    checkout?: string;
   };
   credentials: {
     username: string;
@@ -38,7 +42,8 @@ export interface QaConfig {
   playwright: {
     enabled: boolean;
     baseURL: string;
-    browser: 'chromium' | 'firefox' | 'webkit';
+    browser?: PlaywrightBrowser;
+    browsers?: PlaywrightBrowser[];
     headless: boolean;
   };
   jmeter: {
@@ -51,5 +56,10 @@ export interface QaConfig {
   github: {
     branches: string[];
     runOnPullRequest: boolean;
+  };
+  report?: {
+    enabled: boolean;
+    format: string;
+    autoGenerateAfterTests: boolean;
   };
 }

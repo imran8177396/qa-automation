@@ -1,0 +1,18 @@
+{
+  "inputDir": "docs/input",
+  "outputDir": "docs/output",
+  "defaultInput": "docs/input/sample-report.txt",
+  "document": {
+    "title": "QA Document",
+    "author": "QA Automation",
+    "font": "Calibri",
+    "fontSize": 22,
+    "headingColor": "1F3864",
+    "margins": {
+      "top": 1440,
+      "right": 1440,
+      "bottom": 1440,
+      "left": 1440
+    }
+  }
+}

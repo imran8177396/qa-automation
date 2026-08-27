@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { PATHS } from '../lib/paths';
+import { resolvePlaywrightBrowsers } from '../lib/playwright-browsers';
 import type { QaConfig } from '../types';
 import { buildPostmanTestScript, resolveAssertions } from './postman-tests';
 
@@ -10,10 +11,13 @@ export function generateEnvFile(config: QaConfig): void {
     `QA_WEBSITE_URL=${config.urls.website}`,
     `QA_API_URL=${config.urls.api}`,
     `QA_LOGIN_URL=${config.urls.login}`,
+    `QA_INVENTORY_URL=${config.urls.inventory ?? config.urls.website + '/inventory.html'}`,
+    `QA_CHECKOUT_URL=${config.urls.checkout ?? config.urls.website + '/checkout-step-one.html'}`,
+    `QA_DASHBOARD_URL=${config.urls.inventory ?? config.urls.website + '/inventory.html'}`,
     `QA_USERNAME=${config.credentials.username}`,
     `QA_PASSWORD=${config.credentials.password}`,
     `QA_PLAYWRIGHT_BASE_URL=${config.playwright.baseURL}`,
-    `QA_PLAYWRIGHT_BROWSER=${config.playwright.browser}`,
+    `QA_PLAYWRIGHT_BROWSERS=${resolvePlaywrightBrowsers(config.playwright).join(',')}`,
     `QA_PLAYWRIGHT_HEADLESS=${config.playwright.headless}`,
   ];
 
@@ -207,8 +211,9 @@ export function generateGithubWorkflow(config: QaConfig): void {
     branches:
 ${branches}`
     : '';
+  const browsers = resolvePlaywrightBrowsers(config.playwright).join(' ');
 
-  const workflow = `name: QA Automation Pipeline
+  const workflow = `name: QA Automation
 
 on:
   push:
@@ -217,43 +222,66 @@ ${branches}
 ${prTrigger}
 
 jobs:
-  qa:
+  qa-automation:
     timeout-minutes: 60
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Sync configs from qa.config.json
+        run: npm run qa:sync
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps ${browsers}
 
-      - name: Run full QA pipeline
-        run: npm run test:all
+      - name: Run Playwright E2E tests
+        run: npm run test:e2e
 
-      - name: Upload Postman report
-        if: \${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: postman-report
-          path: reports/postman/
-          retention-days: 30
+      - name: Run Postman API tests
+        run: npm run test:api
+
+      - name: Install JMeter
+        run: |
+          JMETER_VERSION=5.6.3
+          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-\${JMETER_VERSION}.tgz" | tar xz
+          echo "JMETER_HOME=$PWD/apache-jmeter-\${JMETER_VERSION}" >> $GITHUB_ENV
+          echo "$PWD/apache-jmeter-\${JMETER_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Run JMeter performance tests
+        run: npm run test:performance
 
       - name: Upload Playwright report
-        if: \${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: reports/playwright/
           retention-days: 30
 
+      - name: Upload Postman report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-report
+          path: reports/postman/
+          retention-days: 30
+
       - name: Upload JMeter report
-        if: \${{ !cancelled() }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jmeter-report
@@ -261,7 +289,7 @@ jobs:
           retention-days: 30
 `;
 
-  const workflowPath = path.join(PATHS.root, '.github', 'workflows', 'qa-pipeline.yml');
+  const workflowPath = path.join(PATHS.root, '.github', 'workflows', 'qa-automation.yml');
   fs.mkdirSync(path.dirname(workflowPath), { recursive: true });
   fs.writeFileSync(workflowPath, workflow, 'utf8');
 }

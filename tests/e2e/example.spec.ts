@@ -1,13 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-const websiteUrl = process.env.QA_WEBSITE_URL ?? 'https://example.com';
+test('Swag Labs homepage should load', async ({ page }) => {
+  await page.goto('/');
 
-test('Verify Example website', async ({ page }) => {
-  await page.goto(websiteUrl);
-
-  await expect(page).toHaveTitle(/Example/);
-
-  await expect(
-    page.getByRole('heading', { name: 'Example Domain' })
-  ).toBeVisible();
+  await expect(page).toHaveTitle(/Swag Labs/);
+  await expect(page.locator('[data-test="login-button"]')).toBeVisible();
 });

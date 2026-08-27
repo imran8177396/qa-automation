@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "description": "Single-config QA automation pipeline for Playwright, Postman, JMeter, and GitHub Actions",
   "scripts": {
-    "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed",
+    "typecheck": "npx tsc --noEmit",
+    "test:e2e": "tsx scripts/run-playwright-e2e.ts",
+    "test:e2e:headed": "tsx scripts/run-playwright-e2e.ts --headed",
     "test:e2e:report": "playwright show-report reports/playwright",
     "test:api": "postman collection run tests/api/postman/collection.json -e tests/api/postman/environment.json -r cli,json --reporter-json-export reports/postman/report.json",
-    "test:performance": "jmeter -n -t tests/performance/load-test.jmx -l reports/jmeter/results.jtl -e -o reports/jmeter/html",
+    "test:performance": "tsx scripts/run-jmeter.ts",
     "test:all": "tsx scripts/run-all.ts",
     "test:all:chain": "npm run test:e2e && npm run test:api && npm run test:performance",
     "qa": "tsx scripts/run-qa.ts",
@@ -15,7 +16,11 @@
     "qa:api": "tsx scripts/run-qa.ts --step=api",
     "qa:e2e": "tsx scripts/run-qa.ts --step=e2e",
     "qa:load": "tsx scripts/run-qa.ts --step=load",
-    "test": "npm run test:all"
+    "test": "npm run test:all",
+    "docs:generate": "tsx scripts/txt-to-docx.ts",
+    "docs:sample": "tsx scripts/txt-to-docx.ts --input=docs/input/sample-report.txt",
+    "docs:qa-report": "tsx scripts/generate-qa-report.ts",
+    "test:report": "npm run test:all"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +31,8 @@
     "@types/node": "^26.3.0",
     "dotenv": "^16.4.7",
     "postman-cli": "^1.27.0",
-    "tsx": "^4.19.3"
+    "docx": "^9.5.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
   }
 }

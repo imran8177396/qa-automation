@@ -11,6 +11,7 @@ playwright/.auth/
 # Reports (generated at runtime)
 reports/
 playwright-report/
+jmeter.log
 
 # Environment & secrets
 .env
@@ -22,3 +23,6 @@ config/generated.env
 
 # Build output
 dist/
+
+# Generated Word documents
+docs/output/

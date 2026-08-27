@@ -10,8 +10,15 @@ if (fs.existsSync(generatedEnvPath)) {
   dotenv.config({ path: generatedEnvPath });
 }
 
+type PlaywrightBrowser = 'chromium' | 'firefox' | 'webkit';
+
 let qaConfig: {
-  playwright?: { baseURL?: string; browser?: string; headless?: boolean };
+  playwright?: {
+    baseURL?: string;
+    browser?: PlaywrightBrowser;
+    browsers?: PlaywrightBrowser[];
+    headless?: boolean;
+  };
 } = {};
 
 const qaConfigPath = path.join(rootDir, 'qa.config.json');
@@ -19,7 +26,17 @@ if (fs.existsSync(qaConfigPath)) {
   qaConfig = JSON.parse(fs.readFileSync(qaConfigPath, 'utf8'));
 }
 
-const browser = qaConfig.playwright?.browser ?? 'chromium';
+function resolveBrowsers(): PlaywrightBrowser[] {
+  const pw = qaConfig.playwright;
+  if (pw?.browsers?.length) {
+    return pw.browsers;
+  }
+  if (pw?.browser) {
+    return [pw.browser];
+  }
+  return ['chromium'];
+}
+
 const headless =
   process.env.QA_PLAYWRIGHT_HEADLESS !== undefined
     ? process.env.QA_PLAYWRIGHT_HEADLESS === 'true'
@@ -40,8 +57,9 @@ const browserProjects = {
   },
 } as const;
 
-const selectedBrowser =
-  browserProjects[browser as keyof typeof browserProjects] ?? browserProjects.chromium;
+const projects = resolveBrowsers().map(
+  (browser) => browserProjects[browser] ?? browserProjects.chromium
+);
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -55,5 +73,5 @@ export default defineConfig({
     headless,
     trace: 'on-first-retry',
   },
-  projects: [selectedBrowser],
+  projects,
 });

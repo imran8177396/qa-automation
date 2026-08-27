@@ -1,0 +1,260 @@
+import fs from 'fs';
+import path from 'path';
+import {
+  AlignmentType,
+  Document,
+  Footer,
+  Header,
+  HeadingLevel,
+  Packer,
+  PageNumber,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+} from 'docx';
+import type { DocBlock, DocsConfig, ParsedDocument } from './types';
+
+function blockToContent(
+  block: DocBlock,
+  config: DocsConfig['document']
+): Array<Paragraph | Table> {
+  switch (block.type) {
+    case 'heading1':
+      return [
+        new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 240, after: 120 },
+          children: [
+            new TextRun({
+              text: block.text,
+              bold: true,
+              color: config.headingColor,
+              font: config.font,
+            }),
+          ],
+        }),
+      ];
+    case 'heading2':
+      return [
+        new Paragraph({
+          heading: HeadingLevel.HEADING_2,
+          spacing: { before: 240, after: 120 },
+          children: [
+            new TextRun({
+              text: block.text,
+              bold: true,
+              color: config.headingColor,
+              font: config.font,
+            }),
+          ],
+        }),
+      ];
+    case 'heading3':
+      return [
+        new Paragraph({
+          heading: HeadingLevel.HEADING_3,
+          spacing: { before: 240, after: 120 },
+          children: [
+            new TextRun({
+              text: block.text,
+              bold: true,
+              color: config.headingColor,
+              font: config.font,
+            }),
+          ],
+        }),
+      ];
+    case 'paragraph':
+      return [
+        new Paragraph({
+          spacing: { after: 180, line: 276 },
+          children: [
+            new TextRun({
+              text: block.text,
+              font: config.font,
+              size: config.fontSize,
+            }),
+          ],
+        }),
+      ];
+    case 'bullet':
+      return block.items.map(
+        (item) =>
+          new Paragraph({
+            bullet: { level: 0 },
+            spacing: { after: 80 },
+            children: [
+              new TextRun({
+                text: item,
+                font: config.font,
+                size: config.fontSize,
+              }),
+            ],
+          })
+      );
+    case 'table':
+      return [
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: block.headers.map(
+                (header) =>
+                  new TableCell({
+                    shading: { fill: 'D9E2F3' },
+                    children: [
+                      new Paragraph({
+                        children: [new TextRun({ text: header, bold: true, font: config.font })],
+                      }),
+                    ],
+                  })
+              ),
+            }),
+            ...block.rows.map(
+              (row) =>
+                new TableRow({
+                  children: row.map(
+                    (cell) =>
+                      new TableCell({
+                        children: [
+                          new Paragraph({
+                            children: [
+                              new TextRun({ text: cell, font: config.font, size: config.fontSize }),
+                            ],
+                          }),
+                        ],
+                      })
+                  ),
+                })
+            ),
+          ],
+        }),
+        new Paragraph({ text: '' }),
+      ] as Array<Paragraph | Table>;
+    default:
+      return [];
+  }
+}
+
+export async function generateWordDocument(
+  parsed: ParsedDocument,
+  config: DocsConfig
+): Promise<Buffer> {
+  const docConfig = config.document;
+  const title = parsed.meta.title || docConfig.title;
+
+  const cover = [
+    new Paragraph({ spacing: { before: 2400 } }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new TextRun({
+          text: title,
+          bold: true,
+          size: 48,
+          color: docConfig.headingColor,
+          font: docConfig.font,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 240 },
+      children: [
+        new TextRun({
+          text: `Author: ${parsed.meta.author}`,
+          size: 24,
+          font: docConfig.font,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+      children: [
+        new TextRun({
+          text: `Date: ${parsed.meta.date}`,
+          size: 24,
+          font: docConfig.font,
+        }),
+      ],
+    }),
+    new Paragraph({
+      children: [new TextRun({ text: '', break: 1 })],
+      pageBreakBefore: false,
+    }),
+  ];
+
+  const body = parsed.blocks.flatMap((block) => blockToContent(block, docConfig));
+
+  const doc = new Document({
+    creator: parsed.meta.author,
+    title,
+    description: `Generated by npm-docs from plain text`,
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: docConfig.margins,
+          },
+        },
+        headers: {
+          default: new Header({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                children: [
+                  new TextRun({
+                    text: title,
+                    italics: true,
+                    size: 18,
+                    color: '666666',
+                    font: docConfig.font,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        },
+        footers: {
+          default: new Footer({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: 'Page ',
+                    size: 18,
+                    font: docConfig.font,
+                  }),
+                  new TextRun({
+                    children: [PageNumber.CURRENT],
+                    size: 18,
+                    font: docConfig.font,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        },
+        children: [...cover, ...body],
+      },
+    ],
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+export async function writeWordDocument(
+  parsed: ParsedDocument,
+  config: DocsConfig,
+  outputPath: string
+): Promise<string> {
+  const buffer = await generateWordDocument(parsed, config);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, buffer);
+  return outputPath;
+}

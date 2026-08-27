@@ -21,11 +21,28 @@ function resolveJmeterCommand(): string | null {
   const fromPath = spawnSync(
     process.platform === 'win32' ? 'where' : 'which',
     ['jmeter'],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', shell: process.platform === 'win32' }
   );
 
+  const commonWindowsPaths = [
+    'D:\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat',
+    'C:\\Program Files\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat',
+  ];
+
+  for (const candidate of commonWindowsPaths) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
   if (fromPath.status === 0 && fromPath.stdout.trim()) {
-    return fromPath.stdout.trim().split('\n')[0];
+    const found = fromPath.stdout
+      .trim()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return found.find((line) => !line.includes(' ')) ?? found[0];
   }
 
   return null;

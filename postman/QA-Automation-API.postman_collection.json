@@ -1,13 +1,13 @@
 {
   "info": {
     "_postman_id": "qa-automation-api-collection",
-    "name": "QA Automation API",
-    "description": "Auto-generated from qa.config.json for QA Automation.",
+    "name": "Swag Labs API Smoke",
+    "description": "Auto-generated from qa.config.json for Swag Labs QA Automation.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "GET /users",
+      "name": "GET homepage",
       "event": [
         {
           "listen": "test",
@@ -15,10 +15,6 @@
             "exec": [
               "pm.test(\"Status code is 200\", function () {",
               "    pm.response.to.have.status(200);",
-              "});",
-              "",
-              "pm.test(\"Response is JSON\", function () {",
-              "    pm.response.to.be.json;",
               "});"
             ],
             "type": "text/javascript"
@@ -29,15 +25,15 @@
         "method": "GET",
         "header": [],
         "url": {
-          "raw": "{{baseUrl}}/users",
+          "raw": "{{baseUrl}}/",
           "host": [
             "{{baseUrl}}"
           ],
           "path": [
-            "users"
+            ""
           ]
         },
-        "description": "GET /users"
+        "description": "GET /"
       },
       "response": []
     }
@@ -45,7 +41,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://jsonplaceholder.typicode.com",
+      "value": "https://www.saucedemo.com",
       "type": "string"
     }
   ]

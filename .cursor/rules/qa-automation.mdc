@@ -1,49 +1,59 @@
 ---
-description: QA Automation Engineer — Playwright, Postman CLI, JMeter, Git, GitHub Actions
+description: QA Automation Engineer — single-instruction full QA for Playwright, Postman, JMeter, Git, GitHub Actions
 alwaysApply: true
 ---
 
 # QA Automation Engineer
 
-You are the QA Automation Engineer for this project. Follow these conventions on every QA task.
+You are the QA Automation Engineer for this project.
+
+## Single instruction trigger
+
+When the user says **"Perform complete QA automation for this application"** (or similar), execute this workflow without asking for step-by-step confirmation:
+
+1. **Analyze requirements** — read `qa.config.json`, existing tests, pages, and API/performance config.
+2. **Identify UI tests** — map user flows to Playwright specs in `tests/e2e/` with Page Objects in `pages/`.
+3. **Identify API tests** — add/update requests and assertions in `qa.config.json` → `postman.requests`.
+4. **Identify performance scenarios** — update `qa.config.json` → `jmeter` (threads, ramp-up, path).
+5. **Write/update Playwright** — TypeScript, Page Object Model, env-based URLs/credentials.
+6. **Create/update Postman collection** — run `npm run qa:sync` to export to `tests/api/postman/`.
+7. **Create/update JMeter plan** — synced to `tests/performance/load-test.jmx`.
+8. **Run tests** — `npm run test:all` (runs all tools even if one fails).
+9. **Analyze failures** — read terminal output and reports under `reports/`.
+10. **Generate reports** — confirm `reports/playwright`, `reports/postman`, `reports/jmeter`, `reports/summary.json`, and Word report at path from `qa.config.json` → `report.format` template (`docs/templates/qa-test-results.format.json`).
+11. **Prepare Git changes** — stage only source files; never commit `.env`, `reports/`, or secrets.
 
 ## Single source of truth
 
-- Edit **`qa.config.json`** for URLs, credentials placeholders, API requests, JMeter settings, and pipeline steps.
-- Run **`npm run qa:sync`** after config changes to regenerate Postman, JMeter, env, and CI files.
-- Run **`npm run test:all`** to execute the full suite (Playwright → Postman → JMeter).
+- **`qa.config.json`** — URLs, credentials placeholders, API requests, JMeter, pipeline steps, and report template path (`report.format`).
+- After config edits: **`npm run qa:sync`** then **`npm run test:all`**.
 
 ## Tool mapping
 
 | Area | Tool | Location |
 |------|------|----------|
-| UI / E2E | Playwright + TypeScript | `tests/e2e/`, `pages/` (Page Object Model) |
+| UI / E2E | Playwright + TypeScript | `tests/e2e/`, `pages/` |
 | API | Postman CLI | `tests/api/postman/collection.json` |
 | Performance | JMeter (non-GUI) | `tests/performance/load-test.jmx` |
-| Reports | HTML/JSON | `reports/playwright`, `reports/postman`, `reports/jmeter` |
-| Version control | Git | commit small, meaningful changes |
-| CI/CD | GitHub Actions | `.github/workflows/qa-pipeline.yml` |
+| Test data | JSON fixtures | `test-data/`, `fixtures/` |
+| Helpers | TypeScript utils | `utils/` |
+| Reports | HTML/JSON + Word | `reports/`, `docs/output/` (format: `docs/templates/qa-test-results.format.json`) |
+| CI/CD | GitHub Actions | `.github/workflows/qa-automation.yml` |
 
-## Architecture rules
+## Rules
 
-- Use **Page Object Model** for UI tests (`pages/` classes, specs in `tests/e2e/`).
-- Read URLs and credentials from **`process.env`** or `config/generated.env` — never hardcode secrets.
-- Keep `.env` out of Git; use `.env.example` for templates.
-- API assertions belong in Postman Tests scripts (auto-generated from `qa.config.json`).
+- Page Object Model for all UI tests.
+- Never hardcode credentials — use `process.env` / `.env` / `config/generated.env`.
+- Never commit `.env`, `reports/`, or `node_modules/`.
+- API assertions in Postman Tests (generated from `qa.config.json`).
 
 ## Commands
 
 ```bash
-npm run test:e2e          # Playwright only
-npm run test:api          # Postman CLI only
-npm run test:performance  # JMeter only
-npm run test:all          # All tools + combined summary (scripts/run-all.ts)
+npm run typecheck       # TypeScript check
+npm run test:e2e        # Playwright
+npm run test:api        # Postman CLI
+npm run test:performance # JMeter
+npm run test:all        # Full QA suite + summary + Word report
+npm run docs:qa-report  # Regenerate Word report from existing results (uses saved format template)
 ```
-
-## When the user asks for QA work
-
-1. Prefer updating `qa.config.json` over scattered file edits.
-2. Add Playwright specs under `tests/e2e/` with page objects in `pages/`.
-3. Add API endpoints under `postman.requests` in config.
-4. Run sync, then run the relevant test command.
-5. Never commit `.env`, `reports/`, or `node_modules/`.

@@ -1,0 +1,23 @@
+{
+  "id": "qa-test-results-v1",
+  "version": "1.0.0",
+  "description": "Standard combined QA report — Playwright (all browsers), Postman CLI, and JMeter.",
+  "meta": {
+    "titleSuffix": "— QA Test Results Report",
+    "author": "QA Automation Framework"
+  },
+  "output": {
+    "txt": "docs/input/qa-test-results.txt",
+    "docx": "docs/output/qa-test-results.docx"
+  },
+  "sections": [
+    { "id": "overview", "heading": "## 1. Report Overview", "enabled": true },
+    { "id": "environments", "heading": "## 2. Test Environments & Configuration", "enabled": true },
+    { "id": "overall-results", "heading": "## 3. Overall Tool Results", "enabled": true },
+    { "id": "playwright-detail", "heading": "## 4. Playwright — UI / E2E (Detailed)", "enabled": true },
+    { "id": "postman-detail", "heading": "## 5. Postman CLI — API (Detailed)", "enabled": true },
+    { "id": "jmeter-detail", "heading": "## 6. JMeter — Performance (Detailed)", "enabled": true },
+    { "id": "artifacts", "heading": "## 7. Report Artifacts", "enabled": true },
+    { "id": "conclusion", "heading": "## 8. Conclusion", "enabled": true }
+  ]
+}

@@ -1,0 +1,35 @@
+# QA Automation Test Report
+# Generated from plain-text input
+
+@title Swag Labs — QA Automation Report
+@author QA Automation Framework
+@date 2026-08-26
+
+## Executive Summary
+
+Complete QA automation was executed against https://www.saucedemo.com using Playwright, Postman CLI, and JMeter.
+
+## Test Results
+
+- Playwright E2E: PASS (4 tests)
+- Postman API Smoke: PASS
+- JMeter Load Test: PASS (0% errors)
+
+## UI Test Coverage
+
+### Login Flow
+User logs in with standard_user and lands on inventory page.
+
+### Checkout Flow
+User adds item to cart, completes checkout, and sees order confirmation.
+
+## Performance Metrics
+
+| Metric | Value |
+| Threads | 5 |
+| Avg Response | 457 ms |
+| Error Rate | 0% |
+
+## Conclusion
+
+All critical paths passed. Application is ready for release candidate review.
