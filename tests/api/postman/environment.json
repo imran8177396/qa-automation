@@ -1,10 +1,10 @@
 {
   "id": "qa-automation-api-env",
-  "name": "Swag Labs API Smoke - Local",
+  "name": "Contact List API Smoke - Local",
   "values": [
     {
       "key": "baseUrl",
-      "value": "https://www.saucedemo.com",
+      "value": "https://thinking-tester-contact-list.herokuapp.com",
       "type": "default",
       "enabled": true
     }

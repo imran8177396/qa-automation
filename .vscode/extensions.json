@@ -1,0 +1,27 @@
+{
+  "recommendations": [
+    "ms-playwright.playwright",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "usernamehw.errorlens",
+    "eamodio.gitlens",
+    "github.vscode-pull-request-github",
+    "github.vscode-github-actions",
+    "redhat.vscode-yaml",
+    "mikestead.dotenv",
+    "christian-kohler.path-intellisense",
+    "christian-kohler.npm-intellisense",
+    "editorconfig.editorconfig",
+    "streetsidesoftware.code-spell-checker",
+    "gruntfuggly.todo-tree",
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+    "redhat.vscode-xml",
+    "humao.rest-client",
+    "rangav.vscode-thunder-client",
+    "aaron-bond.better-comments",
+    "mechatroner.rainbow-csv",
+    "oderwat.indent-rainbow"
+  ],
+  "unwantedRecommendations": []
+}

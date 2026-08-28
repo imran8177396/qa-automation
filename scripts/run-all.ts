@@ -90,8 +90,11 @@ async function main(): Promise<void> {
   try {
     if (config.report?.enabled !== false && config.report?.autoGenerateAfterTests !== false) {
       const { generateQaReportDocx } = await import('./generate-qa-report.js');
-      const { docxPath } = await generateQaReportDocx();
-      logSuccess(`Combined Word report: ${docxPath}`);
+      const { docxPath, pdfPath, htmlPath, timestamp, model } = await generateQaReportDocx();
+      logSuccess(`Enterprise QA report (${timestamp}) — status ${model.meta.overallStatus}`);
+      logSuccess(`Word: ${docxPath}`);
+      if (htmlPath) logSuccess(`HTML: ${htmlPath}`);
+      if (pdfPath) logSuccess(`PDF:  ${pdfPath}`);
     } else {
       logWarn('Combined Word report skipped (disabled in qa.config.json report settings).');
     }

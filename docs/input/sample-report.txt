@@ -1,35 +1,33 @@
-# QA Automation Test Report
-# Generated from plain-text input
-
-@title Swag Labs — QA Automation Report
+@title Contact List App QA Automation — Sample Report
 @author QA Automation Framework
-@date 2026-08-26
+@date 2026-08-28
 
-## Executive Summary
+## 1. Report Overview
 
-Complete QA automation was executed against https://www.saucedemo.com using Playwright, Postman CLI, and JMeter.
+- Project: Contact List App QA Automation
+- Target application: https://thinking-tester-contact-list.herokuapp.com
+- Overall result: PASS
 
-## Test Results
+## 2. Test Environments & Configuration
 
-- Playwright E2E: PASS (4 tests)
-- Postman API Smoke: PASS
-- JMeter Load Test: PASS (0% errors)
+### Application URLs
 
-## UI Test Coverage
+| Environment | URL |
+| --- | --- |
+| Website | https://thinking-tester-contact-list.herokuapp.com |
+| API | https://thinking-tester-contact-list.herokuapp.com |
+| Login | https://thinking-tester-contact-list.herokuapp.com/ |
+| Contact List | https://thinking-tester-contact-list.herokuapp.com/contactList |
+| Signup | https://thinking-tester-contact-list.herokuapp.com/addUser |
 
-### Login Flow
-User logs in with standard_user and lands on inventory page.
+## 3. Overall Tool Results
 
-### Checkout Flow
-User adds item to cart, completes checkout, and sees order confirmation.
+| Tool | Test Area | Result |
+| --- | --- | --- |
+| Playwright | E2E / UI | PASS |
+| Postman CLI | API Smoke | PASS |
+| JMeter | Performance Validation | PASS |
 
-## Performance Metrics
+## 4. Conclusion
 
-| Metric | Value |
-| Threads | 5 |
-| Avg Response | 457 ms |
-| Error Rate | 0% |
-
-## Conclusion
-
-All critical paths passed. Application is ready for release candidate review.
+Sample report used by `npm run docs:sample`. Replace with live results via `npm run docs:qa-report`.

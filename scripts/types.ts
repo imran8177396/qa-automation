@@ -22,8 +22,8 @@ export interface QaConfig {
     website: string;
     api: string;
     login: string;
-    inventory?: string;
-    checkout?: string;
+    contactList?: string;
+    signup?: string;
   };
   credentials: {
     username: string;

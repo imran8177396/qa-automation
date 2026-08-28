@@ -1,0 +1,25 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "jmeter",
+    "JMeter",
+    "playwright",
+    "Playwright",
+    "postman",
+    "Postman",
+    "headless",
+    "typecheck",
+    "herokuapp",
+    "docx",
+    "jmx",
+    "jtl",
+    "mdc"
+  ],
+  "ignorePaths": [
+    "node_modules/**",
+    "reports/**",
+    "docs/output/**",
+    "package-lock.json"
+  ]
+}

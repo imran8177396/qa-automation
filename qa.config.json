@@ -1,17 +1,17 @@
 {
   "project": {
-    "name": "Swag Labs QA Automation"
+    "name": "Contact List App QA Automation"
   },
   "urls": {
-    "website": "https://www.saucedemo.com",
-    "api": "https://www.saucedemo.com",
-    "login": "https://www.saucedemo.com/",
-    "inventory": "https://www.saucedemo.com/inventory.html",
-    "checkout": "https://www.saucedemo.com/checkout-step-one.html"
+    "website": "https://thinking-tester-contact-list.herokuapp.com",
+    "api": "https://thinking-tester-contact-list.herokuapp.com",
+    "login": "https://thinking-tester-contact-list.herokuapp.com/",
+    "contactList": "https://thinking-tester-contact-list.herokuapp.com/contactList",
+    "signup": "https://thinking-tester-contact-list.herokuapp.com/addUser"
   },
   "credentials": {
-    "username": "standard_user",
-    "password": "secret_sauce"
+    "username": "qa.test@example.com",
+    "password": "Password123!"
   },
   "pipeline": {
     "steps": ["sync", "api", "e2e", "load"],
@@ -19,7 +19,7 @@
   },
   "postman": {
     "enabled": true,
-    "collectionName": "Swag Labs API Smoke",
+    "collectionName": "Contact List API Smoke",
     "assertions": {
       "statusCode": 200,
       "expectJson": false
@@ -29,12 +29,17 @@
         "name": "GET homepage",
         "method": "GET",
         "path": "/"
+      },
+      {
+        "name": "GET contact list page",
+        "method": "GET",
+        "path": "/contactList"
       }
     ]
   },
   "playwright": {
     "enabled": true,
-    "baseURL": "https://www.saucedemo.com",
+    "baseURL": "https://thinking-tester-contact-list.herokuapp.com",
     "browsers": ["chromium", "firefox", "webkit"],
     "headless": true
   },

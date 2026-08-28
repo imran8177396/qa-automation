@@ -12,17 +12,15 @@ npm run test:all
 
 ## Single instruction (Cursor Agent)
 
-Tell Cursor:
-
 > **Perform complete QA automation for this application.**
 
-The rule in `.cursor/rules/qa-automation.mdc` handles analysis, test creation, execution, reports, and Git prep automatically.
+The rule in `.cursor/rules/qa-automation.mdc` (sourced from `.cursor/rules/qa-automation.json`) handles analysis, test creation, execution, reports, and Git prep.
 
 ## Project structure
 
 ```
 QA-AUTOMATION/
-├── .cursor/rules/qa-automation.mdc   # Cursor QA engineer rule
+├── .cursor/rules/                    # Cursor rules (.json source → .mdc)
 ├── .github/workflows/qa-automation.yml
 ├── qa.config.json                    # ← edit this (single source of truth)
 ├── pages/                            # Page Object Model
@@ -30,11 +28,14 @@ QA-AUTOMATION/
 │   ├── e2e/                          # Playwright UI tests
 │   ├── api/postman/                  # Postman collection + environment
 │   └── performance/                  # JMeter load-test.jmx
-├── fixtures/                         # Playwright fixtures
 ├── test-data/                        # JSON test data
 ├── utils/                            # Shared helpers
-├── scripts/run-all.ts                # Smart all-tools runner
-├── reports/                          # Generated reports (gitignored)
+├── scripts/                          # Sync, runners, enterprise report
+├── npm-docs/                         # Text sanitization / legacy txt→docx
+├── docs/
+│   ├── templates/                    # Report format template
+│   └── output/qa-test-results/       # Timestamped DOCX/HTML/PDF
+├── reports/                          # Runtime tool reports (gitignored)
 ├── playwright.config.ts
 ├── package.json
 └── .env.example
@@ -42,20 +43,29 @@ QA-AUTOMATION/
 
 ## Commands
 
-| Command | Tool |
-|---------|------|
-| `npm run typecheck` | TypeScript |
+| Command | Purpose |
+| --- | --- |
+| `npm run typecheck` | TypeScript check |
+| `npm run qa:sync` | Regenerate configs from `qa.config.json` |
 | `npm run test:e2e` | Playwright |
 | `npm run test:api` | Postman CLI |
 | `npm run test:performance` | JMeter |
-| `npm run test:all` | All tools + summary |
-| `npm run qa:sync` | Regenerate configs from `qa.config.json` |
+| `npm run test:all` | Full suite + summary + enterprise report |
+| `npm run docs:qa-report` | Regenerate enterprise DOCX/HTML/PDF |
+| `npm run rules:sync` | Sync `.cursor/rules/*.json` → `.mdc` |
+
+## Reports
+
+Enterprise five-layer SQA report (Executive Summary, Test Evidence, QA Analysis, Risks & Limitations, Release Recommendation):
+
+- Latest index: `docs/output/qa-test-results/latest.json`
+- Formats: DOCX, HTML, PDF (timestamped folders)
 
 ## CI/CD flow
 
 ```
 Push code → GitHub Actions → Install Node → TypeScript check
-  → Playwright → Postman → JMeter → Upload reports
+  → Sync → Playwright → Postman → JMeter → Upload reports
 ```
 
 ## Secrets

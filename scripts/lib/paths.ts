@@ -9,6 +9,11 @@ export const PATHS = {
   postmanCollection: path.join(ROOT, 'tests', 'api', 'postman', 'collection.json'),
   postmanEnvironment: path.join(ROOT, 'tests', 'api', 'postman', 'environment.json'),
   postmanExport: path.join(ROOT, 'postman', 'QA-Automation-API.postman_collection.json'),
+  postmanExportEnvironment: path.join(
+    ROOT,
+    'postman',
+    'QA-Automation-API.postman_environment.json'
+  ),
   jmeterPlan: path.join(ROOT, 'tests', 'performance', 'load-test.jmx'),
   reports: {
     root: path.join(ROOT, 'reports'),

@@ -1,0 +1,49 @@
+---
+description: TypeScript coding standards — architecture, DRY, secrets, CI/CD readiness
+globs: **/*.ts,scripts/**,utils/**,npm-docs/**
+alwaysApply: false
+---
+
+# Coding Standards
+
+Apply when writing or editing TypeScript in this repo.
+
+## Core principles
+
+- **Inspect first** — read surrounding code and callers before changing behavior.
+- **Preserve architecture** — follow existing module boundaries (`pages/`, `tests/`, `scripts/lib/`, `utils/`).
+- **DRY** — extract shared logic to `utils/` or `scripts/lib/`; never copy-paste runners or parsers.
+- **TypeScript strict** — explicit types for public APIs; no `any` unless unavoidable and documented.
+
+## Security
+
+```typescript
+// BAD — hardcoded secret
+const password = 'Password123!';
+
+// GOOD — env via utils/env
+import { getCredentials } from '../utils/env';
+const { password } = getCredentials();
+```
+
+- Never commit `.env`, credentials, tokens, or `reports/`.
+- Demo credentials in `qa.config.json` are placeholders only — load via env in runners.
+
+## Quality bar
+
+- Small, focused functions; one responsibility per file where practical.
+- Meaningful names; avoid magic numbers — use named constants or config.
+- No empty `catch` blocks; log and rethrow or handle explicitly.
+- Comments only for non-obvious business rules — code should be self-explanatory.
+
+## CI/CD readiness
+
+- All scripts must run headlessly on GitHub Actions (`.github/workflows/qa-automation.yml`).
+- Use cross-platform paths (`path.join`); avoid Windows-only assumptions in shared code.
+- Run before opening PRs:
+
+```bash
+npm run typecheck
+```
+
+Changes that touch tests must also run the relevant test command and fix failures before finishing.

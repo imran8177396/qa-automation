@@ -11,9 +11,8 @@ export function generateEnvFile(config: QaConfig): void {
     `QA_WEBSITE_URL=${config.urls.website}`,
     `QA_API_URL=${config.urls.api}`,
     `QA_LOGIN_URL=${config.urls.login}`,
-    `QA_INVENTORY_URL=${config.urls.inventory ?? config.urls.website + '/inventory.html'}`,
-    `QA_CHECKOUT_URL=${config.urls.checkout ?? config.urls.website + '/checkout-step-one.html'}`,
-    `QA_DASHBOARD_URL=${config.urls.inventory ?? config.urls.website + '/inventory.html'}`,
+    `QA_CONTACT_LIST_URL=${config.urls.contactList ?? `${config.urls.website}/contactList`}`,
+    `QA_SIGNUP_URL=${config.urls.signup ?? `${config.urls.website}/addUser`}`,
     `QA_USERNAME=${config.credentials.username}`,
     `QA_PASSWORD=${config.credentials.password}`,
     `QA_PLAYWRIGHT_BASE_URL=${config.playwright.baseURL}`,
@@ -92,6 +91,7 @@ export function generatePostmanFiles(config: QaConfig): void {
 
   fs.mkdirSync(path.dirname(PATHS.postmanExport), { recursive: true });
   fs.writeFileSync(PATHS.postmanExport, collectionJson, 'utf8');
+  fs.writeFileSync(PATHS.postmanExportEnvironment, environmentJson, 'utf8');
 }
 
 export function generateReportsFolders(): void {

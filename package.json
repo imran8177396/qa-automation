@@ -10,7 +10,6 @@
     "test:api": "postman collection run tests/api/postman/collection.json -e tests/api/postman/environment.json -r cli,json --reporter-json-export reports/postman/report.json",
     "test:performance": "tsx scripts/run-jmeter.ts",
     "test:all": "tsx scripts/run-all.ts",
-    "test:all:chain": "npm run test:e2e && npm run test:api && npm run test:performance",
     "qa": "tsx scripts/run-qa.ts",
     "qa:sync": "tsx scripts/sync-from-config.ts",
     "qa:api": "tsx scripts/run-qa.ts --step=api",
@@ -20,7 +19,7 @@
     "docs:generate": "tsx scripts/txt-to-docx.ts",
     "docs:sample": "tsx scripts/txt-to-docx.ts --input=docs/input/sample-report.txt",
     "docs:qa-report": "tsx scripts/generate-qa-report.ts",
-    "test:report": "npm run test:all"
+    "rules:sync": "tsx scripts/sync-cursor-rules.ts"
   },
   "keywords": [],
   "author": "",

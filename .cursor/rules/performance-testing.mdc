@@ -1,0 +1,50 @@
+---
+description: Performance testing — JMeter load plans, thresholds, CI-safe execution
+globs: tests/performance/**,scripts/runners/jmeter.ts,scripts/run-jmeter.ts,qa.config.json
+alwaysApply: false
+---
+
+# Performance Testing
+
+Apply when editing JMeter plans, performance runners, or `qa.config.json` jmeter section.
+
+## Source of truth
+
+- Configure load in **`qa.config.json`** → `jmeter` (threads, ramp-up, loop count, path).
+- Run **`npm run qa:sync`** to update `tests/performance/load-test.jmx`.
+- Prefer editing config + sync over manual JMX-only changes.
+
+## Performance considerations
+
+Before raising load, assess:
+
+- **Target environment** — never load-test production without explicit approval.
+- **Thread count & ramp-up** — start conservative; increase incrementally.
+- **Assertions** — response code, response time thresholds, error rate limits.
+- **Side effects** — read-heavy vs write-heavy endpoints; auth/session impact on shared envs.
+
+Document expected baseline (threads, avg response time, error rate) in test comments or `qa.config.json` notes when non-obvious.
+
+## Test types
+
+| Type | Purpose |
+| --- | --- |
+| **Smoke load** | Small thread count validates endpoint under light concurrency |
+| **Regression** | Re-run prior scenario after infra or API changes |
+| **Boundary** | Ramp to configured max threads; watch for degradation |
+
+## Execution
+
+```bash
+npm run test:performance
+```
+
+Reports: `reports/jmeter/results.jtl`, `reports/jmeter/html/index.html`.
+
+## Failure triage
+
+- **Product/infra defect**: sustained high latency, 5xx, timeouts under expected load.
+- **Automation defect**: wrong host/path, JMeter not installed, malformed JMX — fix config or runner.
+- Never hide failures by removing listeners or assertions to make runs pass.
+
+Keep plans **CI/CD-ready** — non-GUI mode, deterministic paths, no local-only hardcoded directories.

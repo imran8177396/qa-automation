@@ -1,0 +1,48 @@
+---
+description: API testing standards — Postman CLI, response validation, test types
+globs: tests/api/**,postman/**,qa.config.json
+alwaysApply: false
+---
+
+# API Testing
+
+Apply when editing Postman collections, API config, or `qa.config.json` postman section.
+
+## Source of truth
+
+- Define requests and assertions in **`qa.config.json`** → `postman.requests`.
+- Run **`npm run qa:sync`** to regenerate `tests/api/postman/collection.json` and environment.
+- Do not hand-edit generated files without syncing back to config.
+
+## Response validation
+
+Every request must assert:
+
+- **Status code** (from `postman.assertions.statusCode` or per-request override)
+- **Response time** within reasonable bounds for smoke tests
+- **Body checks** — JSON schema/fields when `expectJson: true`; content-type or key substrings for HTML/text
+- **Headers** when security or caching behavior matters
+
+Use Postman Tests tab logic (generated from config) — never leave requests without assertions.
+
+## Test types
+
+| Type | Examples |
+| --- | --- |
+| **Positive** | Valid GET/POST returns 200/201 with expected payload |
+| **Negative** | Invalid auth, missing params, wrong method → 4xx |
+| **Boundary** | Empty body, max payload, special characters in query |
+| **Regression** | Endpoints tied to past incidents or critical integrations |
+
+## Secrets & environment
+
+- Base URLs from `qa.config.json` / environment — never hardcode tokens or passwords.
+- Use `tests/api/postman/environment.json` (generated) for runtime values.
+
+## After changes
+
+```bash
+npm run qa:sync && npm run test:api
+```
+
+Review `reports/postman/report.json`. Distinguish API/product failures from collection or env misconfiguration.

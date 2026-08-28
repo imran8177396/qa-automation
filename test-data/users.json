@@ -1,15 +1,18 @@
 {
   "validUser": {
-    "username": "standard_user",
-    "password": "secret_sauce"
+    "firstName": "QA",
+    "lastName": "Automation",
+    "username": "qa.test@example.com",
+    "password": "Password123!"
   },
-  "lockedOutUser": {
-    "username": "locked_out_user",
-    "password": "secret_sauce"
+  "invalidUser": {
+    "username": "not-a-real-user@example.com",
+    "password": "WrongPassword999!"
   },
-  "shipping": {
-    "firstName": "Muhammad",
-    "lastName": "Test",
-    "postalCode": "54000"
+  "boundaryUser": {
+    "firstName": "",
+    "lastName": "",
+    "username": "",
+    "password": ""
   }
 }

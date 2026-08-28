@@ -1,0 +1,53 @@
+---
+description: Playwright E2E standards — POM, locators, test types, TypeScript
+globs: tests/e2e/**,pages/**,fixtures/**,playwright.config.ts
+alwaysApply: false
+---
+
+# Playwright E2E Testing
+
+Apply when editing UI tests, page objects, fixtures, or `playwright.config.ts`.
+
+## Architecture
+
+- **Page Object Model only** — locators and page actions live in `pages/`; specs in `tests/e2e/` orchestrate flows.
+- **TypeScript** for all test and page code.
+- Read existing page objects and specs before adding new ones; extend, do not duplicate.
+
+## Locators
+
+Prefer stable, user-facing selectors in this order:
+
+1. `getByRole`, `getByLabel`, `getByPlaceholder`, `getByTestId`
+2. `getByText` for unique visible text
+3. CSS/XPath only when no semantic locator exists
+
+Avoid brittle selectors: auto-generated IDs, deep DOM chains, index-only locators.
+
+## Test coverage (required mix)
+
+For each feature or flow, include:
+
+| Type | Purpose |
+| --- | --- |
+| **Positive** | Happy path with valid data |
+| **Negative** | Invalid input, auth failure, error states |
+| **Boundary** | Min/max lengths, empty values, edge inputs |
+| **Regression** | Previously broken or high-risk paths |
+
+Use data from `test-data/` and `fixtures/` — never hardcode secrets or production credentials.
+
+## Implementation rules
+
+- URLs and credentials from `process.env`, `.env`, or `config/generated.env` (via `qa.config.json`).
+- Use Playwright auto-waiting; add explicit waits only when necessary.
+- One clear assertion per behavior; descriptive test titles.
+- Keep specs independent — no order dependency between tests.
+
+## After changes
+
+```bash
+npm run test:e2e
+```
+
+Investigate failures in `reports/playwright/`. Fix automation issues before filing product bugs.

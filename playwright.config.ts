@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import {
+  resolvePlaywrightBrowsers,
+  type PlaywrightBrowser,
+  type PlaywrightConfig,
+} from './scripts/lib/playwright-browsers';
 
 const rootDir = __dirname;
 const generatedEnvPath = path.join(rootDir, 'config', 'generated.env');
@@ -10,13 +15,9 @@ if (fs.existsSync(generatedEnvPath)) {
   dotenv.config({ path: generatedEnvPath });
 }
 
-type PlaywrightBrowser = 'chromium' | 'firefox' | 'webkit';
-
 let qaConfig: {
-  playwright?: {
+  playwright?: Partial<PlaywrightConfig> & {
     baseURL?: string;
-    browser?: PlaywrightBrowser;
-    browsers?: PlaywrightBrowser[];
     headless?: boolean;
   };
 } = {};
@@ -26,21 +27,18 @@ if (fs.existsSync(qaConfigPath)) {
   qaConfig = JSON.parse(fs.readFileSync(qaConfigPath, 'utf8'));
 }
 
-function resolveBrowsers(): PlaywrightBrowser[] {
-  const pw = qaConfig.playwright;
-  if (pw?.browsers?.length) {
-    return pw.browsers;
-  }
-  if (pw?.browser) {
-    return [pw.browser];
-  }
-  return ['chromium'];
-}
+const playwrightConfig: PlaywrightConfig = {
+  enabled: true,
+  baseURL: qaConfig.playwright?.baseURL ?? 'http://localhost',
+  browser: qaConfig.playwright?.browser as PlaywrightBrowser | undefined,
+  browsers: qaConfig.playwright?.browsers as PlaywrightBrowser[] | undefined,
+  headless: qaConfig.playwright?.headless ?? true,
+};
 
 const headless =
   process.env.QA_PLAYWRIGHT_HEADLESS !== undefined
     ? process.env.QA_PLAYWRIGHT_HEADLESS === 'true'
-    : qaConfig.playwright?.headless ?? true;
+    : playwrightConfig.headless;
 
 const browserProjects = {
   chromium: {
@@ -57,7 +55,7 @@ const browserProjects = {
   },
 } as const;
 
-const projects = resolveBrowsers().map(
+const projects = resolvePlaywrightBrowsers(playwrightConfig).map(
   (browser) => browserProjects[browser] ?? browserProjects.chromium
 );
 
@@ -67,9 +65,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: [['html', { outputFolder: 'reports/playwright' }]],
+  reporter: [
+    ['html', { outputFolder: 'reports/playwright' }],
+    ['json', { outputFile: 'reports/playwright/results.json' }],
+  ],
   use: {
-    baseURL: process.env.QA_PLAYWRIGHT_BASE_URL ?? qaConfig.playwright?.baseURL,
+    baseURL: process.env.QA_PLAYWRIGHT_BASE_URL ?? playwrightConfig.baseURL,
     headless,
     trace: 'on-first-retry',
   },

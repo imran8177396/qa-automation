@@ -26,3 +26,4 @@ dist/
 
 # Generated Word documents
 docs/output/
+docs/input/qa-test-results/

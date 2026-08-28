@@ -16,6 +16,34 @@ import {
   WidthType,
 } from 'docx';
 import type { DocBlock, DocsConfig, ParsedDocument } from './types';
+import { sanitizeDocxText } from './sanitize-text';
+
+function normalizeTable(block: Extract<DocBlock, { type: 'table' }>): {
+  headers: string[];
+  rows: string[][];
+} {
+  const headers = block.headers.map(sanitizeDocxText);
+  const colCount = headers.length;
+
+  const rows = block.rows.map((row) => {
+    const normalized = row.map(sanitizeDocxText);
+    while (normalized.length < colCount) {
+      normalized.push('');
+    }
+    return normalized.slice(0, colCount);
+  });
+
+  return { headers, rows };
+}
+
+function textRun(text: string, config: DocsConfig['document'], options: { bold?: boolean; size?: number } = {}) {
+  return new TextRun({
+    text: sanitizeDocxText(text),
+    font: config.font,
+    size: options.size ?? config.fontSize,
+    bold: options.bold,
+  });
+}
 
 function blockToContent(
   block: DocBlock,
@@ -29,7 +57,7 @@ function blockToContent(
           spacing: { before: 240, after: 120 },
           children: [
             new TextRun({
-              text: block.text,
+              text: sanitizeDocxText(block.text),
               bold: true,
               color: config.headingColor,
               font: config.font,
@@ -44,7 +72,7 @@ function blockToContent(
           spacing: { before: 240, after: 120 },
           children: [
             new TextRun({
-              text: block.text,
+              text: sanitizeDocxText(block.text),
               bold: true,
               color: config.headingColor,
               font: config.font,
@@ -59,7 +87,7 @@ function blockToContent(
           spacing: { before: 240, after: 120 },
           children: [
             new TextRun({
-              text: block.text,
+              text: sanitizeDocxText(block.text),
               bold: true,
               color: config.headingColor,
               font: config.font,
@@ -73,7 +101,7 @@ function blockToContent(
           spacing: { after: 180, line: 276 },
           children: [
             new TextRun({
-              text: block.text,
+              text: sanitizeDocxText(block.text),
               font: config.font,
               size: config.fontSize,
             }),
@@ -88,32 +116,33 @@ function blockToContent(
             spacing: { after: 80 },
             children: [
               new TextRun({
-                text: item,
+                text: sanitizeDocxText(item),
                 font: config.font,
                 size: config.fontSize,
               }),
             ],
           })
       );
-    case 'table':
+    case 'table': {
+      const table = normalizeTable(block);
       return [
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              children: block.headers.map(
+              children: table.headers.map(
                 (header) =>
                   new TableCell({
                     shading: { fill: 'D9E2F3' },
                     children: [
                       new Paragraph({
-                        children: [new TextRun({ text: header, bold: true, font: config.font })],
+                        children: [textRun(header, config, { bold: true })],
                       }),
                     ],
                   })
               ),
             }),
-            ...block.rows.map(
+            ...table.rows.map(
               (row) =>
                 new TableRow({
                   children: row.map(
@@ -121,9 +150,7 @@ function blockToContent(
                       new TableCell({
                         children: [
                           new Paragraph({
-                            children: [
-                              new TextRun({ text: cell, font: config.font, size: config.fontSize }),
-                            ],
+                            children: [textRun(cell, config)],
                           }),
                         ],
                       })
@@ -132,8 +159,9 @@ function blockToContent(
             ),
           ],
         }),
-        new Paragraph({ text: '' }),
+        new Paragraph({ children: [new TextRun({ text: '' })] }),
       ] as Array<Paragraph | Table>;
+    }
     default:
       return [];
   }
@@ -152,7 +180,7 @@ export async function generateWordDocument(
       alignment: AlignmentType.CENTER,
       children: [
         new TextRun({
-          text: title,
+          text: sanitizeDocxText(title),
           bold: true,
           size: 48,
           color: docConfig.headingColor,
@@ -165,7 +193,7 @@ export async function generateWordDocument(
       spacing: { before: 240 },
       children: [
         new TextRun({
-          text: `Author: ${parsed.meta.author}`,
+          text: sanitizeDocxText(`Author: ${parsed.meta.author}`),
           size: 24,
           font: docConfig.font,
         }),
@@ -176,7 +204,7 @@ export async function generateWordDocument(
       spacing: { after: 400 },
       children: [
         new TextRun({
-          text: `Date: ${parsed.meta.date}`,
+          text: sanitizeDocxText(`Date: ${parsed.meta.date}`),
           size: 24,
           font: docConfig.font,
         }),
@@ -192,8 +220,11 @@ export async function generateWordDocument(
 
   const doc = new Document({
     creator: parsed.meta.author,
-    title,
-    description: `Generated by npm-docs from plain text`,
+    title: sanitizeDocxText(title),
+    description: 'Generated by npm-docs from plain text',
+    compatibility: {
+      version: 15,
+    },
     sections: [
       {
         properties: {
@@ -208,7 +239,7 @@ export async function generateWordDocument(
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: title,
+                    text: sanitizeDocxText(title),
                     italics: true,
                     size: 18,
                     color: '666666',
@@ -255,6 +286,10 @@ export async function writeWordDocument(
 ): Promise<string> {
   const buffer = await generateWordDocument(parsed, config);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, buffer);
+
+  const tempPath = `${outputPath}.tmp`;
+  fs.writeFileSync(tempPath, buffer);
+  fs.renameSync(tempPath, outputPath);
+
   return outputPath;
 }

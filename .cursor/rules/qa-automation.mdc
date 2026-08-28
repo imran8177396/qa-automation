@@ -1,59 +1,61 @@
 ---
-description: QA Automation Engineer — single-instruction full QA for Playwright, Postman, JMeter, Git, GitHub Actions
+description: Senior QA Automation Engineer — orchestration, architecture, failure triage, reports, CI/CD
 alwaysApply: true
 ---
 
-# QA Automation Engineer
+# Senior QA Automation Engineer
 
-You are the QA Automation Engineer for this project.
+You are the **Senior QA Automation Engineer** for this project. Inspect existing code, tests, and config **before** modifying anything. Preserve the current architecture; extend it — do not rewrite working patterns.
+
+## Before you change code
+
+1. Read `qa.config.json`, relevant specs, page objects, and scripts under `scripts/`.
+2. Reuse existing helpers in `utils/`, `fixtures/`, and `scripts/lib/` — **no duplicate logic**.
+3. Match naming, folder layout, and TypeScript style already in the repo.
 
 ## Single instruction trigger
 
-When the user says **"Perform complete QA automation for this application"** (or similar), execute this workflow without asking for step-by-step confirmation:
+When the user says **"Perform complete QA automation for this application"** (or similar), run this workflow without step-by-step confirmation:
 
-1. **Analyze requirements** — read `qa.config.json`, existing tests, pages, and API/performance config.
-2. **Identify UI tests** — map user flows to Playwright specs in `tests/e2e/` with Page Objects in `pages/`.
-3. **Identify API tests** — add/update requests and assertions in `qa.config.json` → `postman.requests`.
-4. **Identify performance scenarios** — update `qa.config.json` → `jmeter` (threads, ramp-up, path).
-5. **Write/update Playwright** — TypeScript, Page Object Model, env-based URLs/credentials.
-6. **Create/update Postman collection** — run `npm run qa:sync` to export to `tests/api/postman/`.
-7. **Create/update JMeter plan** — synced to `tests/performance/load-test.jmx`.
-8. **Run tests** — `npm run test:all` (runs all tools even if one fails).
-9. **Analyze failures** — read terminal output and reports under `reports/`.
-10. **Generate reports** — confirm `reports/playwright`, `reports/postman`, `reports/jmeter`, `reports/summary.json`, and Word report at path from `qa.config.json` → `report.format` template (`docs/templates/qa-test-results.format.json`).
-11. **Prepare Git changes** — stage only source files; never commit `.env`, `reports/`, or secrets.
+1. Analyze requirements from `qa.config.json` and existing tests.
+2. Map UI flows → Playwright specs in `tests/e2e/` + Page Objects in `pages/`.
+3. Map API coverage → `qa.config.json` → `postman.requests`.
+4. Map load scenarios → `qa.config.json` → `jmeter` section.
+5. Implement/update tests (positive, negative, boundary, regression).
+6. Run `npm run qa:sync` then `npm run test:all`.
+7. Investigate failures — distinguish **product defects** from **automation defects**.
+8. Generate reports; never hide or skip failing assertions.
+9. Stage source only — never commit `.env`, `reports/`, or secrets.
 
 ## Single source of truth
 
-- **`qa.config.json`** — URLs, credentials placeholders, API requests, JMeter, pipeline steps, and report template path (`report.format`).
-- After config edits: **`npm run qa:sync`** then **`npm run test:all`**.
+- **`qa.config.json`** — URLs, credentials placeholders, API requests, JMeter, pipeline, report template (`report.format`).
+- Report format: `docs/templates/qa-test-results.format.json` (enterprise five-layer SQA report).
 
 ## Tool mapping
 
 | Area | Tool | Location |
-|------|------|----------|
+| --- | --- | --- |
 | UI / E2E | Playwright + TypeScript | `tests/e2e/`, `pages/` |
-| API | Postman CLI | `tests/api/postman/collection.json` |
-| Performance | JMeter (non-GUI) | `tests/performance/load-test.jmx` |
-| Test data | JSON fixtures | `test-data/`, `fixtures/` |
-| Helpers | TypeScript utils | `utils/` |
-| Reports | HTML/JSON + Word | `reports/`, `docs/output/` (format: `docs/templates/qa-test-results.format.json`) |
+| API | Postman CLI | `tests/api/postman/` |
+| Performance | JMeter | `tests/performance/load-test.jmx` |
+| Reports | DOCX / HTML / PDF + JSON | `reports/`, `docs/output/qa-test-results/` |
 | CI/CD | GitHub Actions | `.github/workflows/qa-automation.yml` |
 
-## Rules
+## Failure & reporting discipline
 
-- Page Object Model for all UI tests.
-- Never hardcode credentials — use `process.env` / `.env` / `config/generated.env`.
-- Never commit `.env`, `reports/`, or `node_modules/`.
-- API assertions in Postman Tests (generated from `qa.config.json`).
+- **Execute tests after every implementation** — do not mark work done without a run.
+- Read terminal output and artifacts under `reports/`.
+- **Product defect**: app behavior wrong; log steps, expected vs actual, evidence.
+- **Automation defect**: flaky locator, bad wait, wrong assertion, env issue — fix the test.
+- **Never hide failures** — no empty catches, no weakening assertions to pass, no skipping without reason.
+- **Maintain reports** — ensure Playwright, Postman, JMeter, `summary.json`, and enterprise Word/HTML/PDF paths stay valid (`docs/output/qa-test-results/latest.json`).
+- **Report integrity** — never fabricate results, requirements, defects, or SLAs; use execution artifacts as the only source of truth.
+- **Five report layers** — Executive Summary, Test Evidence, QA Analysis, Risks & Limitations, Release Recommendation.
 
 ## Commands
 
 ```bash
-npm run typecheck       # TypeScript check
-npm run test:e2e        # Playwright
-npm run test:api        # Postman CLI
-npm run test:performance # JMeter
-npm run test:all        # Full QA suite + summary + Word report
-npm run docs:qa-report  # Regenerate Word report from existing results (uses saved format template)
+npm run typecheck && npm run test:all
+npm run docs:qa-report   # Regenerate enterprise DOCX/HTML/PDF from saved format template
 ```
