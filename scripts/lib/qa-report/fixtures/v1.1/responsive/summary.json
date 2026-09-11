@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-09-09T10:10:00.000Z",
+  "target": "http://127.0.0.1:4173",
+  "targetOrigin": "http://127.0.0.1:4173",
+  "configuredBaseUrl": "https://example.com",
+  "originStatus": "INVALID",
+  "passed": true,
+  "failureCount": 0,
+  "notApplicableCount": 0,
+  "resultsFile": "reports/playwright/responsive/results.json"
+}

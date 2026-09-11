@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-09-09T10:10:00.000Z",
+  "suiteName": "responsive",
+  "targetOrigin": "http://127.0.0.1:4173",
+  "configuredBaseUrl": "https://example.com",
+  "originStatus": "INVALID",
+  "passed": true,
+  "executed": true,
+  "resultsFile": "reports/playwright/responsive/results.json",
+  "browsers": [
+    {
+      "browser": "chromium",
+      "status": "EXECUTED",
+      "reason": "",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "engineCaveats": [
+    "WebKit is not iOS Safari.",
+    "Chromium is not Android Chrome."
+  ],
+  "failureDetails": null
+}

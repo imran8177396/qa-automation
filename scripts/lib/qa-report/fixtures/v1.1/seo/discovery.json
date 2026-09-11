@@ -1,0 +1,20 @@
+{
+  "analyzedAt": "2026-09-09T10:04:00.000Z",
+  "pagesAnalyzed": 2,
+  "findings": [
+    {
+      "id": "SEO-D-0001",
+      "rule": "missing-title",
+      "severity": "high",
+      "page": "https://example.com/",
+      "detail": "Page has no <title>."
+    },
+    {
+      "id": "SEO-D-0002",
+      "rule": "missing-h1",
+      "severity": "medium",
+      "page": "https://example.com/about",
+      "detail": "Page has no <h1>."
+    }
+  ]
+}

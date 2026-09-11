@@ -1,0 +1,6 @@
+{
+  "rates": [
+    { "scope": "uiExecutionPassRate", "passed": 5, "failed": 4, "skipped": 1 },
+    { "scope": "uiExecutionPassRate", "passed": 5, "failed": 5, "skipped": 0 }
+  ]
+}

@@ -11,7 +11,7 @@ Apply when editing Postman collections, API config, or `qa.config.json` postman 
 ## Source of truth
 
 - Define requests and assertions in **`qa.config.json`** → `postman.requests`.
-- Run **`npm run qa:sync`** to regenerate `tests/api/postman/collection.json` and environment.
+- Run **`npm run qa:sync`** to regenerate `tests/api/postman/collections/qa-automation-api.json` and environment.
 - Do not hand-edit generated files without syncing back to config.
 
 ## Response validation
@@ -37,7 +37,7 @@ Use Postman Tests tab logic (generated from config) — never leave requests wit
 ## Secrets & environment
 
 - Base URLs from `qa.config.json` / environment — never hardcode tokens or passwords.
-- Use `tests/api/postman/environment.json` (generated) for runtime values.
+- Use `tests/api/postman/environments/local.json` (generated) for runtime values.
 
 ## After changes
 

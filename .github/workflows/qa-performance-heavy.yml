@@ -1,0 +1,74 @@
+name: QA Performance Heavy
+
+# Manual only — never runs on push or pull_request.
+# Type authorize-heavy in the confirm input to proceed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Heavy JMeter profile (not part of normal CI)
+        required: true
+        type: choice
+        options:
+          - load
+          - stress
+          - spike
+          - soak
+      confirm:
+        description: Type authorize-heavy to run. Anything else is refused.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  heavy:
+    name: Authorized heavy performance
+    if: ${{ inputs.confirm == 'authorize-heavy' }}
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync configs
+        run: npm run qa:sync
+
+      - name: Install JMeter
+        run: |
+          JMETER_VERSION=5.6.3
+          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
+          echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> "$GITHUB_ENV"
+          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Run authorized heavy profile
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+        run: npm run test:performance -- --profile=${{ inputs.profile }} --authorize-heavy
+
+      - name: Upload JMeter reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-heavy-${{ inputs.profile }}
+          path: reports/jmeter/
+          if-no-files-found: ignore
+          retention-days: 14

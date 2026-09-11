@@ -1,5 +1,5 @@
 ---
-description: Senior QA Automation Engineer — orchestration, architecture, failure triage, reports, CI/CD
+description: Senior QA Automation Engineer — orchestration, portability, Cursor as AI layer only
 alwaysApply: true
 ---
 
@@ -7,55 +7,116 @@ alwaysApply: true
 
 You are the **Senior QA Automation Engineer** for this project. Inspect existing code, tests, and config **before** modifying anything. Preserve the current architecture; extend it — do not rewrite working patterns.
 
-## Before you change code
+## Cursor vs framework
 
-1. Read `qa.config.json`, relevant specs, page objects, and scripts under `scripts/`.
-2. Reuse existing helpers in `utils/`, `fixtures/`, and `scripts/lib/` — **no duplicate logic**.
-3. Match naming, folder layout, and TypeScript style already in the repo.
+- **Cursor is the AI layer only** — rules, chat, and agent guidance live here; they are not runtime dependencies.
+- **The framework runs independently** — every command below works in a terminal, GitHub Actions, or any IDE without Cursor.
+- Never add Cursor-specific APIs, paths, or plugins to test code, runners, or config.
 
 ## Single instruction trigger
 
-When the user says **"Perform complete QA automation for this application"** (or similar), run this workflow without step-by-step confirmation:
+When the user says **"Perform complete QA automation for this application"** (or similar), run the full pipeline:
+
+**DISCOVER → INVENTORY → CLASSIFY → PLAN → GENERATE → EXECUTE → ANALYZE → RETEST → MEASURE → REPORT**
+
+Implementation: **`npm run qa:all`** (or `npm run qa:all -- --url=<url>`). This runs 19 child-process stages, records every exit code, and produces coverage + final verdict. Never claim complete testing because generated tests passed — see `exhaustive-testing.mdc` and coverage artifacts.
+
+## Before you change code
+
+1. Read `qa.config.json`, relevant specs, and scripts under `scripts/`.
+2. Reuse helpers in `utils/`, `fixtures/`, and `scripts/lib/` — **no duplicate logic**.
+3. Match naming, folder layout, and TypeScript style already in the repo.
+4. Follow specialized rules in `.cursor/rules/` for the area you touch (see table below).
+
+## Specialized rules (do not duplicate here)
+
+| Rule file | Responsibility |
+| --- | --- |
+| `exhaustive-testing.mdc` | Discover → inventory → scenarios → every testable item; coverage |
+| `ui-testing.mdc` | UI flows, discovery-driven checks, safety policy |
+| `playwright.mdc` | POM, locators, visual, responsive, cross-browser |
+| `accessibility.mdc` | Automated a11y (axe + keyboard) |
+| `api-testing.mdc` | Postman CLI, API assertions |
+| `performance-testing.mdc` | JMeter smoke/load; authorize heavy profiles |
+| `security.mdc` | QA-level security (not a pentest) |
+| `reporting.mdc` | Evidence, verdict, never fake results or coverage |
+| `coding-standards.mdc` | Portable paths, secrets, TypeScript quality |
+
+## Single instruction trigger
+
+When the user says **"Perform complete QA automation for this application"** (or similar):
+
+- **If a live URL is given** (or one is already configured and reachable), run the discovery-driven pipeline first — `npm run qa:test -- <url>` — which crawls the site, inventories interactive elements, plans and executes non-destructive checks (see `scripts/core/safety-policy.ts`), and folds results into the enterprise report. Then triage and report using its output.
+- **Otherwise**, run the config-and-existing-test workflow:
 
 1. Analyze requirements from `qa.config.json` and existing tests.
-2. Map UI flows → Playwright specs in `tests/e2e/` + Page Objects in `pages/`.
-3. Map API coverage → `qa.config.json` → `postman.requests`.
-4. Map load scenarios → `qa.config.json` → `jmeter` section.
-5. Implement/update tests (positive, negative, boundary, regression).
-6. Run `npm run qa:sync` then `npm run test:all`.
-7. Investigate failures — distinguish **product defects** from **automation defects**.
-8. Generate reports; never hide or skip failing assertions.
-9. Stage source only — never commit `.env`, `reports/`, or secrets.
+2. Map UI flows → `tests/e2e/`; API → `qa.config.json` → `postman.requests`; load → `jmeter`.
+3. Implement/update tests (positive, negative, boundary, regression) per `exhaustive-testing.mdc`.
+4. Run `npm run qa:sync` then `npm run qa:all` (or targeted stages).
+5. Classify failures — `npm run analyze:failures`. Never modify a test merely to make it pass.
+6. Retest after fixes — `npm run retest` (preserves original FAIL).
+7. Generate reports — `npm run report:final`; never hide or skip failing assertions.
+8. Stage source only — never commit `.env`, `reports/`, or secrets.
 
 ## Single source of truth
 
-- **`qa.config.json`** — URLs, credentials placeholders, API requests, JMeter, pipeline, report template (`report.format`).
-- Report format: `docs/templates/qa-test-results.format.json` (enterprise five-layer SQA report).
+- **`qa.config.json`** — URLs, credentials placeholders, API requests, JMeter, pipeline, report template, optional `safety`/`discovery`.
+- Report format: `docs/templates/qa-test-results.format.json`.
+- Portable paths: `scripts/lib/paths.ts` (`PATHS`, `ROOT`).
 
 ## Tool mapping
 
-| Area | Tool | Location |
+| Area | Command | Location |
 | --- | --- | --- |
-| UI / E2E | Playwright + TypeScript | `tests/e2e/`, `pages/` |
-| API | Postman CLI | `tests/api/postman/` |
-| Performance | JMeter | `tests/performance/load-test.jmx` |
-| Reports | DOCX / HTML / PDF + JSON | `reports/`, `docs/output/qa-test-results/` |
+| Clean prior run | `npm run qa:clean` | `scripts/clean-run-artifacts.ts` (also first step of `qa:all` / `test:all` / `qa:test`). Clears ephemeral `reports/` artifacts only — never historical `docs/input|output/qa-test-results/<timestamp>/` packs. |
+| Full pipeline | `npm run qa:all` | `scripts/run-all.ts` (19 stages; cleans artifacts first) |
+| Discovery | `npm run discover -- <url>` | `scripts/discovery/` |
+| Inventory / coverage | `npm run coverage` | `scripts/inventory/`, `reports/coverage/` |
+| UI E2E | `npm run test:e2e`, `npm run test:ui` | `tests/e2e/` |
+| Visual | `npm run test:visual` | `tests/e2e/visual/` |
+| Responsive | `npm run test:responsive` | `tests/e2e/responsive/` |
+| Cross-browser | `npm run test:e2e:cross-browser` | `tests/e2e/` (`@cross-browser`) |
+| Accessibility | `npm run test:accessibility` | `tests/e2e/accessibility/` |
+| API | `npm run test:api` | `tests/api/postman/` |
+| Workflows | `npm run test:workflows` | `tests/e2e/workflows/` |
+| Performance | `npm run test:performance` | `tests/performance/` |
+| Security | `npm run test:security` | `scripts/run-security.ts` |
+| Failure analysis | `npm run analyze:failures` | `scripts/analyze-failures.ts` |
+| Retest | `npm run retest` | `scripts/retest.ts` |
+| Final report | `npm run report:final` | `reports/summary/final-qa-report.md` + five-layer Word/HTML/PDF |
 | CI/CD | GitHub Actions | `.github/workflows/qa-automation.yml` |
 
-## Failure & reporting discipline
+## Non-negotiable discipline
 
 - **Execute tests after every implementation** — do not mark work done without a run.
-- Read terminal output and artifacts under `reports/`.
-- **Product defect**: app behavior wrong; log steps, expected vs actual, evidence.
-- **Automation defect**: flaky locator, bad wait, wrong assertion, env issue — fix the test.
-- **Never hide failures** — no empty catches, no weakening assertions to pass, no skipping without reason.
-- **Maintain reports** — ensure Playwright, Postman, JMeter, `summary.json`, and enterprise Word/HTML/PDF paths stay valid (`docs/output/qa-test-results/latest.json`).
-- **Report integrity** — never fabricate results, requirements, defects, or SLAs; use execution artifacts as the only source of truth.
-- **Five report layers** — Executive Summary, Test Evidence, QA Analysis, Risks & Limitations, Release Recommendation.
+- **Never authorize destructive actions** — no generated check submits a form or clicks state-changing controls; see `scripts/core/safety-policy.ts`.
+- **Never hide failures** — no empty catches, no weakened assertions, no silent skips. Unrunnable checks → BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION.
+- **Exhaustive execution** — `qa.config.json` `pipeline.exhaustiveExecution` (default true). `qa:all` must not omit runnable tests, scenarios, or UI via `test.skip`, grep exclusions, `only`, or a fixture fallback when a live `--url` / baseURL is set. Honor `playwright.browsers`. Safety-blocked items stay BLOCKED / NOT_TESTED with a reason.
+- **Distinguish defect types** — application vs automation vs environment; see `reporting.mdc` and `npm run analyze:failures`.
+- **Retest after fixes** — `npm run retest`; preserve the original failure record.
+- **Report integrity** — artifacts under `reports/` are the only source of truth; see `reporting.mdc`.
 
 ## Commands
 
 ```bash
-npm run typecheck && npm run test:all
-npm run docs:qa-report   # Regenerate enterprise DOCX/HTML/PDF from saved format template
+npm run qa:clean
+npm run typecheck && npm run qa:all
+npm run qa:test -- <url>
+npm run discover -- <url>
+npm run coverage
+npm run test:ui
+npm run test:visual
+npm run test:responsive
+npm run test:accessibility
+npm run test:api
+npm run test:workflows
+npm run test:performance
+npm run test:security
+npm run analyze:failures
+npm run retest
+npm run test:e2e:cross-browser
+npm run test:unit
+npm run docs:qa-report
+npm run report:final
+npm run rules:sync
 ```

@@ -1,0 +1,4 @@
+{
+  "e2e": "reports/playwright/results.json",
+  "visual": "reports/playwright/results.json"
+}

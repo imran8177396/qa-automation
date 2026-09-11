@@ -1,0 +1,74 @@
+---
+description: Professional QA reporting — evidence-based coverage, verdict, never fake results
+globs: scripts/reporting/**,scripts/lib/qa-report/**,reports/summary/**,docs/output/qa-test-results/**,docs/templates/**
+alwaysApply: false
+---
+
+# QA Reporting
+
+Apply when generating, editing, or interpreting test reports.
+
+## Fresh run artifacts
+
+Full test commands (`qa:all`, `test:all`, `qa:test`, and a default `qa` pipeline) delete **ephemeral** runtime artifacts (`reports/`, discovery JSON, Playwright result folders) **before** the new run. Use `--keep-artifacts` to skip that clean. Manual: `npm run qa:clean`.
+
+`qa:clean` must **never** delete historical professional packs under `docs/input/qa-test-results/` or `docs/output/qa-test-results/` (including older timestamp folders and leftover flat files). Those are retained as evidence.
+
+## Historical professional reports (retention)
+
+- Each new `report:final` / Stage 19 run writes a **new** date-time folder `docs/input|output/qa-test-results/YYYY-MM-DD_HH-MM-SS/`.
+- Never `rm -rf` the parent `qa-test-results` tree. Never overwrite an existing timestamp folder — if the same second is already taken, append `-2`, `-3`, …
+- `docs/output/qa-test-results/latest.json` may be **updated** to point at the newest pack. That is not deletion of older folders.
+- Documented in `qa.config.json` → `report.retention` and `docs/templates/qa-test-results.format.json`.
+
+## Professional reports
+
+- **Final unified report** — `npm run report:final` (and `qa:all` stage 19) writes `reports/summary/final-qa-report.md` + `.json`, then the five-layer professional SQA Word/HTML/PDF under a **new** date-time folder `docs/input|output/qa-test-results/YYYY-MM-DD_HH-MM-SS/`. Previous timestamp folders stay on disk. Stage 19 always runs at the end of `qa:all`, including after earlier FAIL stages and after `--fail-fast` stops. Tautological / observed-status API assertions are recorded as report-quality warnings and do **not** abort Word/HTML/PDF generation.
+- **Enterprise formats on demand** — `npm run docs:qa-report` regenerates DOCX/HTML/PDF from the same artifacts.
+- **Raw tool artifacts** — stay in `reports/<tool>/`; index via `reports/summary/raw-index.md`, do not overwrite them.
+
+## Five report layers
+
+1. Executive Summary  
+2. Test Evidence  
+3. QA Analysis  
+4. Risks & Limitations  
+5. Release Recommendation  
+
+## Verdict rules
+
+| Verdict | When |
+| --- | --- |
+| **PASS** | No P0/P1 application blockers; critical paths tested |
+| **PASS WITH OBSERVATIONS** | P2/P3 issues or gaps documented |
+| **FAIL** | P0/P1 application defects or critical path failures |
+| **BLOCKED** | Required env, credentials, or target unavailable |
+
+Never **PASS** while a P0 or P1 application blocker remains open.
+
+## Evidence-based coverage
+
+- Coverage in reports comes from **`npm run coverage`** and inventory artifacts — testable items with recorded outcomes ÷ total testable items.
+- **Never fake coverage** — partial runs, skipped stages, and BLOCKED items must reduce stated coverage.
+- **Never claim 100%** without `reports/coverage/coverage.json` and inventory evidence.
+- List **uncovered functionality** in report sections and `docs/uncovered-test-items.md`.
+
+## Defect classification
+
+Use `npm run analyze:failures` before retest. Classes:
+
+- **APPLICATION DEFECT** — wrong product behavior; do not weaken the test.
+- **AUTOMATION DEFECT** — flaky locator, bad wait, wrong assertion — fix harness only.
+- **ENVIRONMENT / CONFIG / TEST DATA / NETWORK / BROWSER** — fix env or document as BLOCKED.
+
+## Integrity (non-negotiable)
+
+- **Never fake results** — only write statuses backed by execution artifacts.
+- **Never weaken assertions** to achieve PASS.
+- **Never omit failures** from summary or verdict.
+- State the exhaustive-execution / no-silent-skip policy. List remaining BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION items with reasons.
+- Severity: P0–P3 via `scripts/reporting/severity.ts`; broken links and auth failures are typically P1.
+
+## Retest
+
+After fixes, run **`npm run retest`** — preserves original FAIL records. Update final report only after retest evidence exists.

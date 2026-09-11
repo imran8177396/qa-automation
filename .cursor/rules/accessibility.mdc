@@ -1,0 +1,46 @@
+---
+description: Accessibility testing — automated axe + keyboard checks, not a complete WCAG audit
+globs: tests/e2e/accessibility/**,playwright.accessibility.config.ts,pages/AccessibilityPage.ts
+alwaysApply: false
+---
+
+# Accessibility Testing
+
+Apply when editing accessibility specs, axe integration, or keyboard/structure checks.
+
+## Scope
+
+This is **automated accessibility testing** — `@axe-core/playwright` plus keyboard navigation and structural checks.
+
+It is **not** a complete manual WCAG audit. Never claim full WCAG conformance from a passing run.
+
+## What to test
+
+- Run axe rules on key pages from discovery inventory or `qa.config.json` targets.
+- Keyboard focus order and visible focus indicators on interactive elements.
+- Landmarks, headings hierarchy, form labels, and image alt text where detectable automatically.
+- Document violations with rule ID, impact, element, and page URL in reports.
+
+## Execution
+
+```bash
+npm run test:accessibility
+```
+
+Config: `playwright.accessibility.config.ts`  
+Reports: `reports/accessibility/findings.json`, `reports/accessibility/findings.md`
+
+## Scenario mix
+
+| Type | Examples |
+| --- | --- |
+| **Positive** | Page loads with no critical axe violations |
+| **Negative** | Known fixture pages with deliberate a11y defects must FAIL |
+| **Boundary** | Empty states, modals, dynamic content after interaction (non-destructive) |
+
+## Integrity
+
+- Report real axe violations — do not suppress rules to achieve PASS.
+- Distinguish **application defects** (missing labels, contrast) from **automation defects** (wrong page, timeout).
+- Include accessibility findings in final report severity (see `reporting.mdc`).
+- Retest after fixes with `npm run retest --source accessibility` when applicable.

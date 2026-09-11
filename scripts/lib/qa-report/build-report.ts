@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { loadConfig } from '../load-config';
-import { PATHS } from '../paths';
 import {
   loadReportFormat,
   resolveReportOutputPaths,
@@ -12,6 +11,8 @@ import { buildEnterpriseReportModel, type EnterpriseReportModel } from './enterp
 import { generateEnterpriseDocx } from './enterprise-docx';
 import { writeEnterpriseHtml } from './enterprise-html';
 import { writeEnterprisePdf } from './enterprise-pdf';
+import { SectionRegistry } from './section-manifest';
+import { TableAudit } from './empty-table';
 
 function renderEnterpriseText(model: EnterpriseReportModel): string {
   const lines: string[] = [
@@ -27,13 +28,18 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
     '',
     '## LAYER 1 — Executive Summary',
     ...model.executiveSummary.map((line) => `- ${line}`),
+    '- Exhaustive execution: no silent skip of runnable tests, scenarios, or UI. BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION items are listed with reasons.',
+    `- Passed stages: ${model.suiteGroups.passed.join(', ') || 'none'}`,
+    `- Failed stages: ${model.suiteGroups.failed.join(', ') || 'none'}`,
+    `- Not-executed stages: ${model.suiteGroups.notExecuted.join(', ') || 'none'}`,
     '',
     '## KPI Dashboard',
     `- Total UI Executions: ${model.kpi.totalUiExecutions}`,
     `- Passed: ${model.kpi.passed}`,
     `- Failed: ${model.kpi.failed}`,
     `- Skipped: ${model.kpi.skipped}`,
-    `- Pass Rate: ${model.kpi.passRate}`,
+    `- UI execution pass rate: ${model.passRates.uiFormatted}`,
+    `- Assertion pass rate: ${model.passRates.assertionFormatted}`,
     `- Unique UI Scenarios: ${model.kpi.uniqueUiScenarios}`,
     `- Browser Coverage: ${model.kpi.browserCoverage}`,
     `- API Requests: ${model.kpi.apiRequests}`,
@@ -51,6 +57,21 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
     );
   }
 
+  lines.push('', '### Discovery-Generated Check Coverage Breakdown');
+  if (model.coverageBreakdown.items.length > 0) {
+    lines.push(
+      `- BLOCKED: ${model.coverageBreakdown.blocked}`,
+      `- REQUIRES_CONFIGURATION: ${model.coverageBreakdown.requiresConfiguration}`,
+      `- NOT_TESTED: ${model.coverageBreakdown.notTested}`,
+      `- Other skipped: ${model.coverageBreakdown.otherSkipped}`
+    );
+    for (const item of model.coverageBreakdown.items) {
+      lines.push(`- ${item.testCaseId} | ${item.scenario} | ${item.category} | ${item.reason}`);
+    }
+  } else {
+    lines.push('- No discovery-generated checks were skipped in this execution.');
+  }
+
   lines.push('', '### API Requests');
   for (const row of model.api.requests) {
     lines.push(
@@ -58,13 +79,73 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
     );
   }
 
-  lines.push('', '### Performance Note', model.performance.slaNote);
+  lines.push(
+    '',
+    '### Performance Note',
+    model.performance.slaNote,
+    `- Profile: ${model.performance.profile}`,
+    `- Run status: ${model.performance.runStatus}`,
+    `- p50/p90/p95/p99: ${model.performance.p50Ms}/${model.performance.p90Ms}/${model.performance.p95Ms}/${model.performance.p99Ms}`,
+    `- TTFB: ${model.performance.ttfbMs}`,
+    `- Throughput: ${model.performance.throughputPerSec}`,
+    `- Sample URL: ${model.performance.sampleUrl}`
+  );
+  lines.push(
+    '',
+    '### Core Web Vitals (Lighthouse) — not JMeter',
+    `- Status: ${model.lighthouse.status}`,
+    `- Reason: ${model.lighthouse.skipReason}`,
+    `- Source: ${model.lighthouse.source}`
+  );
+
+  lines.push('', '### Discovery & Element Inventory Evidence');
+  if (model.discovery.available) {
+    lines.push(
+      `- Seed URL: ${model.discovery.seedUrl}`,
+      `- Pages discovered (raw): ${model.discovery.pagesDiscoveredRaw}`,
+      `- Pages discovered (unique): ${model.discovery.pagesDiscoveredUnique}`,
+      `- Pages discovered (reported): ${model.discovery.pagesDiscovered}`,
+      `- Pages With Errors: ${model.discovery.pagesWithErrors}`,
+      `- Broken Links: ${model.discovery.brokenLinks}`,
+      `- Console Errors Observed: ${model.discovery.totalConsoleErrors}`,
+      `- Crawl Truncated: ${model.discovery.truncated ? 'Yes' : 'No'}`,
+      `- Interactive Elements Inventoried: ${model.inventory.totalElements}`
+    );
+    for (const row of model.inventory.byType) lines.push(`  - Type: ${row.label} — ${row.count}`);
+    for (const row of model.inventory.byRisk) lines.push(`  - Risk: ${row.label} — ${row.count}`);
+  } else {
+    lines.push('- No discovery run is associated with this execution.');
+  }
+
+  lines.push('', '### SEO Analysis');
+  if (model.seo.available) {
+    lines.push(
+      `- Pages Analyzed: ${model.seo.pagesAnalyzed}`,
+      `- Findings: ${model.seo.uniqueFindingCount}`,
+      `- High Severity: ${model.seo.high}`,
+      `- Medium Severity: ${model.seo.medium}`,
+      `- Low Severity: ${model.seo.low}`
+    );
+    for (const f of model.seo.findings) lines.push(`  - [${f.severity}] ${f.rule} | ${f.page} | ${f.detail}`);
+  } else {
+    lines.push('- No SEO analysis is associated with this execution.');
+  }
+
   lines.push('', '## LAYER 3 — QA Analysis');
   for (const item of model.qaAnalysis) lines.push(`- ${item}`);
   lines.push('', '### Defects', model.defects.note);
   lines.push('', '### Quality Checks');
   for (const check of model.qualityChecks) lines.push(`- ${check}`);
   lines.push('', '## LAYER 4 — Risks & Limitations');
+  lines.push('', '### Accessibility / Security / Content / Visual / Failure / Retest');
+  lines.push(
+    `- Accessibility: ${model.accessibility.status} (${model.accessibility.pagesAnalyzed}/${model.accessibility.uniquePageCount} pages)`,
+    `- Security: ${model.security.status}`,
+    `- Content: ${model.content.status}`,
+    `- Visual: ${model.visual.status}`,
+    `- Failure analysis: ${model.failureAnalysis.available ? String(model.failureAnalysis.analyzed) : model.failureAnalysis.status}`,
+    `- Retest: ${model.retest.status}${model.retest.status === 'NOT_EXECUTED' ? ` — ${model.retest.reason}` : ''}`
+  );
   for (const risk of model.risks) lines.push(`- ${risk}`);
   lines.push(
     '',
@@ -79,8 +160,7 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
   return lines.join('\n');
 }
 
-export function buildQaReportText(format?: ReportFormat): string {
-  void format;
+export function buildQaReportText(): string {
   const model = buildEnterpriseReportModel();
   return renderEnterpriseText(model);
 }
@@ -102,18 +182,21 @@ export async function generateQaReportDocx(format?: ReportFormat): Promise<{
 
   const reportFormat = format ?? loadReportFormat();
   const model = buildEnterpriseReportModel();
-  const generatedAt = new Date().toISOString();
+  const generatedAt = model.meta.generatedAt;
   const outputPaths = resolveReportOutputPaths(reportFormat, generatedAt);
+  const registry = new SectionRegistry();
+  const audit = new TableAudit();
 
   const reportText = renderEnterpriseText(model);
   fs.mkdirSync(path.dirname(outputPaths.txtPath), { recursive: true });
   fs.writeFileSync(outputPaths.txtPath, reportText, 'utf8');
 
-  await generateEnterpriseDocx(model, outputPaths.docxPath);
-
   if (outputPaths.htmlPath) {
-    writeEnterpriseHtml(model, outputPaths.htmlPath);
+    writeEnterpriseHtml(model, outputPaths.htmlPath, registry, audit);
   }
+
+  await generateEnterpriseDocx(model, outputPaths.docxPath, registry, audit);
+  registry.assertEveryReferenceResolves();
 
   let pdfPath = outputPaths.pdfPath;
   if (pdfPath && outputPaths.htmlPath) {
@@ -138,7 +221,6 @@ export async function generateQaReportDocx(format?: ReportFormat): Promise<{
     }
   );
 
-  void PATHS;
   return {
     timestamp: outputPaths.timestamp,
     txtPath: outputPaths.txtPath,

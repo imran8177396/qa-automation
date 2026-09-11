@@ -1,33 +1,95 @@
-import fs from 'fs';
-import path from 'path';
-import { PATHS } from '../lib/paths';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
-import { resolvePlaywrightBrowsers } from '../lib/playwright-browsers';
+import { isPlaywrightBrowserInstalled, resolvePlaywrightBrowsers, type PlaywrightBrowser } from '../lib/playwright-browsers';
 import { runLocalBin } from '../lib/run-command';
+import {
+  ALL_PLAYWRIGHT_ENGINES,
+  QA_PLAYWRIGHT_SUITE_ENV,
+  type PlaywrightSuiteName,
+} from '../lib/playwright-suites';
+import { completePlaywrightSuite, preparePlaywrightSuite } from '../lib/playwright-suite-summary';
 import type { QaConfig } from '../types';
 
-export async function runPlaywright(config: QaConfig): Promise<boolean> {
+export interface RunPlaywrightOptions {
+  /** Passed through as `--grep`, e.g. '@generated' to run only discovery-generated checks. */
+  grep?: string;
+  grepInvert?: string;
+  suiteName?: PlaywrightSuiteName;
+  browsers?: PlaywrightBrowser[];
+}
+
+function skipReasonForBrowser(
+  browser: PlaywrightBrowser,
+  requested: readonly PlaywrightBrowser[],
+  missing: readonly PlaywrightBrowser[]
+): string | null {
+  if (missing.includes(browser)) {
+    return `Playwright browser binary not installed (${browser})`;
+  }
+  if (!requested.includes(browser)) {
+    return 'not listed in qa.config.json playwright.browsers';
+  }
+  return null;
+}
+
+export async function runPlaywright(config: QaConfig, options?: RunPlaywrightOptions): Promise<boolean> {
   if (!config.playwright.enabled) {
     logWarn('Playwright step skipped (disabled in qa.config.json).');
     return true;
   }
 
-  const browsers = resolvePlaywrightBrowsers(config.playwright);
+  const suiteName: PlaywrightSuiteName =
+    options?.suiteName ?? (options?.grep === '@generated' ? 'generated-check' : 'e2e');
+  const requestedBrowsers = options?.browsers ?? resolvePlaywrightBrowsers(config.playwright);
+
   const headed = process.argv.includes('--headed');
+  const debug = process.argv.includes('--debug');
 
-  logStep(`E2E tests (Playwright) — ${browsers.join(', ')}`);
+  const started = preparePlaywrightSuite({
+    suiteName,
+    targetUrl: process.env.QA_PLAYWRIGHT_BASE_URL || config.playwright.baseURL,
+    configuredBaseUrl: config.playwright.baseURL,
+  });
 
-  fs.mkdirSync(PATHS.reports.playwright, { recursive: true });
+  logStep(`E2E tests (Playwright) — suite ${suiteName} — ${requestedBrowsers.join(', ')}`);
 
-  runLocalBin('playwright', ['install', ...browsers]);
+  runLocalBin('playwright', ['install', ...requestedBrowsers]);
 
-  const args = ['test', '--reporter=html', '--reporter=json'];
+  const missing = requestedBrowsers.filter((browser) => !isPlaywrightBrowserInstalled(browser));
+  const executableBrowsers = requestedBrowsers.filter((browser) => !missing.includes(browser));
+  const skippedBrowsers = ALL_PLAYWRIGHT_ENGINES.flatMap((browser) => {
+    const reason = skipReasonForBrowser(browser, requestedBrowsers, missing);
+    return reason ? [{ browser, reason }] : [];
+  });
+
+  if (executableBrowsers.length === 0) {
+    completePlaywrightSuite(started, {
+      passed: false,
+      executedBrowsers: [],
+      skippedBrowsers,
+    });
+    logWarn(`No Playwright browsers were available for suite ${suiteName}.`);
+    return false;
+  }
+
+  const args = ['test'];
 
   if (headed) {
     args.push('--headed');
   }
 
-  for (const browser of browsers) {
+  if (debug) {
+    args.push('--debug');
+  }
+
+  if (options?.grep) {
+    args.push('--grep', options.grep);
+  }
+
+  if (options?.grepInvert) {
+    args.push('--grep-invert', options.grepInvert);
+  }
+
+  for (const browser of executableBrowsers) {
     args.push(`--project=${browser}`);
   }
 
@@ -35,14 +97,36 @@ export async function runPlaywright(config: QaConfig): Promise<boolean> {
     env: {
       ...process.env,
       QA_PLAYWRIGHT_HEADLESS: headed ? 'false' : String(config.playwright.headless),
-      PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(PATHS.reports.playwright, 'results.json'),
+      [QA_PLAYWRIGHT_SUITE_ENV]: suiteName,
     },
   });
 
+  completePlaywrightSuite(started, {
+    passed: result.status === 0,
+    executedBrowsers: executableBrowsers,
+    skippedBrowsers,
+  });
+
   if (result.status === 0) {
-    logSuccess(`Playwright E2E tests passed on: ${browsers.join(', ')}`);
+    logSuccess(`Playwright suite ${suiteName} passed on: ${executableBrowsers.join(', ')}`);
     return true;
   }
 
   return false;
+}
+
+export async function runGeneratedCheckSuite(config: QaConfig): Promise<boolean> {
+  return runPlaywright(config, {
+    suiteName: 'generated-check',
+    grep: '@generated',
+  });
+}
+
+export async function runE2eAndGeneratedCheck(config: QaConfig): Promise<boolean> {
+  const e2ePassed = await runPlaywright(config, {
+    suiteName: 'e2e',
+    grepInvert: '@generated',
+  });
+  const generatedPassed = await runGeneratedCheckSuite(config);
+  return e2ePassed && generatedPassed;
 }

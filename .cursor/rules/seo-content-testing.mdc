@@ -1,0 +1,37 @@
+---
+description: Technical SEO and structural content QA — not ranking audits or fact-checking
+globs: scripts/seo/**,scripts/content/**,scripts/run-seo.ts,scripts/run-content.ts,qa.config.json
+alwaysApply: false
+---
+
+# SEO and Content QA
+
+Apply when editing `scripts/seo/`, `scripts/content/`, `scripts/run-seo.ts`, `scripts/run-content.ts`, or the `seo` / `content` sections of `qa.config.json`.
+
+## Technical SEO is not a ranking audit
+
+`npm run test:seo` observes metadata and GET behavior: title, meta description, canonical, Open Graph, image alt, robots.txt, sitemap.xml, URL consistency, duplicate-URL indicators, 404, and redirects.
+
+Do **not**:
+
+- Invent a preferred trailing-slash, www, or scheme policy
+- Judge a redirect destination correct unless `qa.config.json` (or the local fixture probe) names it
+- Treat a passing run as “the site will rank”
+- Replace discovery `analyzeSeo` — extend it; keep Layer 2.11 honest
+
+## Content QA is not fact-checking
+
+`npm run test:content` finds missing headings, missing/empty content, empty sections, obvious placeholders (`lorem ipsum`, `TODO`, `TBD`, `FIXME`, “your text here”), missing alt, and broken same-origin images/links.
+
+Do **not** mark marketing copy, prices, or “best/leading” claims true or false unless `content.expectedValues` provides an authoritative expected string.
+
+## Execution
+
+```bash
+npm run test:seo
+npm run test:content
+```
+
+Reports: `reports/seo/`, `reports/content/`. Enterprise report sections 2.11 and 2.15.
+
+Never hide failures. A fixture missing meta/canonical/OG or planted content issues is a real observation.

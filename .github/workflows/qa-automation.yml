@@ -9,11 +9,19 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   qa-automation:
-    timeout-minutes: 60
+    timeout-minutes: 90
     runs-on: ubuntu-latest
+
+    env:
+      QA_PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      QA_WEBSITE_URL: http://127.0.0.1:4173/
 
     steps:
       - name: Checkout code
@@ -35,23 +43,65 @@ jobs:
         run: npm run qa:sync
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps chromium
+
+      - name: Start fixture site
+        run: |
+          npx tsx scripts/testing/serve-fixture-site.ts 4173 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4173/index.html > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Fixture did not become ready" >&2
+          exit 1
+
+      - name: Discovery
+        run: npm run discover -- http://127.0.0.1:4173/
 
       - name: Run Playwright E2E tests
         run: npm run test:e2e
 
       - name: Run Postman API tests
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
         run: npm run test:api
+
+      - name: Run accessibility tests
+        run: npm run test:accessibility
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Install JMeter
         run: |
           JMETER_VERSION=5.6.3
           curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
-          echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> $GITHUB_ENV
-          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> $GITHUB_PATH
+          echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> "$GITHUB_ENV"
+          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
 
-      - name: Run JMeter performance tests
-        run: npm run test:performance
+      - name: Run JMeter liveness performance tests
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+        run: npm run test:performance -- --profile=liveness
+
+      - name: Generate final QA report
+        if: always()
+        run: npm run report:final
 
       - name: Upload Playwright report
         if: always()
@@ -59,7 +109,26 @@ jobs:
         with:
           name: playwright-report
           path: reports/playwright/
+          if-no-files-found: ignore
           retention-days: 30
+
+      - name: Upload Playwright screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Postman report
         if: always()
@@ -67,6 +136,7 @@ jobs:
         with:
           name: postman-report
           path: reports/postman/
+          if-no-files-found: ignore
           retention-days: 30
 
       - name: Upload JMeter report
@@ -75,4 +145,26 @@ jobs:
         with:
           name: jmeter-report
           path: reports/jmeter/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: reports/lighthouse/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload final QA summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-final-summary
+          path: |
+            reports/summary/
+            reports/orchestrator/
+            reports/coverage/
+          if-no-files-found: ignore
           retention-days: 30

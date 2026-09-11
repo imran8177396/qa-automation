@@ -2,63 +2,133 @@ import fs from 'fs';
 import path from 'path';
 import { PATHS } from '../lib/paths';
 import { resolvePlaywrightBrowsers } from '../lib/playwright-browsers';
-import type { QaConfig } from '../types';
+import type { PostmanRequestConfig, QaConfig } from '../types';
+import { readExistingSeedUrl, isLoopbackUrl } from '../orchestrator/resolve-url';
 import { buildPostmanTestScript, resolveAssertions } from './postman-tests';
 
+export { generateGithubWorkflow } from './github-workflow';
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function resolveWebsiteUrl(config: QaConfig): string {
+  const seed = readExistingSeedUrl();
+  if (seed) return seed.endsWith('/') ? seed : `${seed}/`;
+  if (config.playwright.baseURL && isLoopbackUrl(config.playwright.baseURL)) {
+    const base = config.playwright.baseURL.replace(/\/+$/, '');
+    return `${base}/`;
+  }
+  return config.urls.website;
+}
+
+function resolvePlaywrightBaseUrl(config: QaConfig): string {
+  const seed = readExistingSeedUrl();
+  if (seed) return seed.replace(/\/+$/, '');
+  return config.playwright.baseURL.replace(/\/+$/, '');
+}
+
 export function generateEnvFile(config: QaConfig): void {
+  const websiteUrl = resolveWebsiteUrl(config);
   const lines = [
     `QA_PROJECT_NAME=${config.project.name}`,
-    `QA_WEBSITE_URL=${config.urls.website}`,
+    `QA_WEBSITE_URL=${websiteUrl}`,
     `QA_API_URL=${config.urls.api}`,
-    `QA_LOGIN_URL=${config.urls.login}`,
-    `QA_CONTACT_LIST_URL=${config.urls.contactList ?? `${config.urls.website}/contactList`}`,
-    `QA_SIGNUP_URL=${config.urls.signup ?? `${config.urls.website}/addUser`}`,
-    `QA_USERNAME=${config.credentials.username}`,
-    `QA_PASSWORD=${config.credentials.password}`,
-    `QA_PLAYWRIGHT_BASE_URL=${config.playwright.baseURL}`,
-    `QA_PLAYWRIGHT_BROWSERS=${resolvePlaywrightBrowsers(config.playwright).join(',')}`,
-    `QA_PLAYWRIGHT_HEADLESS=${config.playwright.headless}`,
   ];
+
+  if (config.urls.login) {
+    lines.push(`QA_LOGIN_URL=${config.urls.login}`);
+  }
+  if (config.credentials) {
+    lines.push(`QA_USERNAME=${config.credentials.username}`);
+    lines.push(`QA_PASSWORD=${config.credentials.password}`);
+  }
+
+  lines.push(
+    `QA_PLAYWRIGHT_BASE_URL=${resolvePlaywrightBaseUrl(config)}`,
+    `QA_PLAYWRIGHT_BROWSERS=${resolvePlaywrightBrowsers(config.playwright).join(',')}`,
+    `QA_PLAYWRIGHT_HEADLESS=${config.playwright.headless}`
+  );
 
   fs.mkdirSync(path.dirname(PATHS.generatedEnv), { recursive: true });
   fs.writeFileSync(PATHS.generatedEnv, `${lines.join('\n')}\n`, 'utf8');
 }
 
+function requestDescription(request: PostmanRequestConfig): string {
+  const parts = [
+    `${request.method} ${request.path}${request.kind ? ` (${request.kind})` : ''}`,
+    `expectedStatus=${request.expectedStatus ?? (request.reachableFromNavigation ? '200 (nav default)' : 'UNVERIFIED')}`,
+  ];
+  if (request.assertionFlags?.length) {
+    for (const flag of request.assertionFlags) {
+      parts.push(`FLAG ${flag.assertion}: ${flag.flags.join(', ')} — ${flag.note}`);
+    }
+  }
+  if (request.skipReason) parts.push(request.skipReason);
+  return parts.join('\n');
+}
+
 export function generatePostmanFiles(config: QaConfig): void {
+  const activeRequests = config.postman.requests.filter((request) => request.enabled !== false);
+
   const collection = {
     info: {
       _postman_id: 'qa-automation-api-collection',
       name: config.postman.collectionName,
-      description: `Auto-generated from qa.config.json for ${config.project.name}.`,
+      description: `Auto-generated from qa.config.json for ${config.project.name}. Authentication/authorization are recorded as NOT_EXECUTED when QA_API_TOKEN is absent — they are not duplicate GET / collection items.`,
       schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
     },
-    item: config.postman.requests.map((request) => {
-      const assertions = resolveAssertions(request, config.postman.assertions);
+    item: [
+      ...activeRequests.map((request) => {
+        const assertions = resolveAssertions(request, config.postman.assertions);
+        const headers = Object.entries(request.headers ?? {}).map(([key, value]) => ({ key, value }));
+        const query = Object.entries(request.query ?? {}).map(([key, value]) => ({ key, value }));
+        const querySuffix =
+          query.length > 0 ? `?${query.map((entry) => `${entry.key}=${entry.value}`).join('&')}` : '';
 
-      return {
-        name: request.name,
-        event: [
-          {
-            listen: 'test',
-            script: {
-              exec: buildPostmanTestScript(assertions),
-              type: 'text/javascript',
+        return {
+          name: request.name,
+          event: [
+            {
+              listen: 'test',
+              script: {
+                exec: buildPostmanTestScript(assertions, {
+                  method: request.method,
+                  path: request.path,
+                  assertionFlags: request.assertionFlags,
+                }),
+                type: 'text/javascript',
+              },
             },
+          ],
+          request: {
+            method: request.method,
+            header: headers,
+            body:
+              request.body != null
+                ? {
+                    mode: 'raw',
+                    raw: JSON.stringify(request.body, null, 2),
+                    options: { raw: { language: 'json' } },
+                  }
+                : undefined,
+            url: {
+              raw: `{{baseUrl}}${request.path}${querySuffix}`,
+              host: ['{{baseUrl}}'],
+              path: request.path.replace(/^\//, '').split('/'),
+              query,
+            },
+            description: requestDescription(request),
           },
-        ],
-        request: {
-          method: request.method,
-          header: [],
-          url: {
-            raw: `{{baseUrl}}${request.path}`,
-            host: ['{{baseUrl}}'],
-            path: request.path.replace(/^\//, '').split('/'),
-          },
-          description: `${request.method} ${request.path}`,
-        },
-        response: [],
-      };
-    }),
+          response: [],
+        };
+      }),
+    ],
     variable: [
       {
         key: 'baseUrl',
@@ -114,7 +184,7 @@ export function generateJmeterPlan(config: QaConfig): void {
   const jmx = `<?xml version="1.0" encoding="UTF-8"?>
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="${config.project.name} Load Test" enabled="true">
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="${escapeXml(config.project.name)} Load Test" enabled="true">
       <stringProp name="TestPlan.comments">Auto-generated from qa.config.json</stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
@@ -133,21 +203,21 @@ export function generateJmeterPlan(config: QaConfig): void {
         <boolProp name="ThreadGroup.delayedStart">false</boolProp>
       </ThreadGroup>
       <hashTree>
-        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET ${pathValue}" enabled="true">
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="GET ${escapeXml(pathValue)}" enabled="true">
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.domain">${host}</stringProp>
+          <stringProp name="HTTPSampler.domain">${escapeXml(host)}</stringProp>
           <stringProp name="HTTPSampler.port"></stringProp>
-          <stringProp name="HTTPSampler.protocol">${protocol}</stringProp>
-          <stringProp name="HTTPSampler.path">${pathValue}</stringProp>
+          <stringProp name="HTTPSampler.protocol">${escapeXml(protocol)}</stringProp>
+          <stringProp name="HTTPSampler.path">${escapeXml(pathValue)}</stringProp>
           <stringProp name="HTTPSampler.method">GET</stringProp>
           <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
           <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Response Assertion" enabled="true">
-            <collectionProp name="Asserion.test_strings">
+            <collectionProp name="Assertion.test_strings">
               <stringProp name="49586">200</stringProp>
             </collectionProp>
             <stringProp name="Assertion.custom_message"></stringProp>
@@ -204,92 +274,3 @@ export function generateJmeterPlan(config: QaConfig): void {
   fs.writeFileSync(PATHS.jmeterPlan, jmx, 'utf8');
 }
 
-export function generateGithubWorkflow(config: QaConfig): void {
-  const branches = config.github.branches.map((branch) => `      - ${branch}`).join('\n');
-  const prTrigger = config.github.runOnPullRequest
-    ? `  pull_request:
-    branches:
-${branches}`
-    : '';
-  const browsers = resolvePlaywrightBrowsers(config.playwright).join(' ');
-
-  const workflow = `name: QA Automation
-
-on:
-  push:
-    branches:
-${branches}
-${prTrigger}
-
-jobs:
-  qa-automation:
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: TypeScript check
-        run: npm run typecheck
-
-      - name: Sync configs from qa.config.json
-        run: npm run qa:sync
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps ${browsers}
-
-      - name: Run Playwright E2E tests
-        run: npm run test:e2e
-
-      - name: Run Postman API tests
-        run: npm run test:api
-
-      - name: Install JMeter
-        run: |
-          JMETER_VERSION=5.6.3
-          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-\${JMETER_VERSION}.tgz" | tar xz
-          echo "JMETER_HOME=$PWD/apache-jmeter-\${JMETER_VERSION}" >> $GITHUB_ENV
-          echo "$PWD/apache-jmeter-\${JMETER_VERSION}/bin" >> $GITHUB_PATH
-
-      - name: Run JMeter performance tests
-        run: npm run test:performance
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: reports/playwright/
-          retention-days: 30
-
-      - name: Upload Postman report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: postman-report
-          path: reports/postman/
-          retention-days: 30
-
-      - name: Upload JMeter report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jmeter-report
-          path: reports/jmeter/
-          retention-days: 30
-`;
-
-  const workflowPath = path.join(PATHS.root, '.github', 'workflows', 'qa-automation.yml');
-  fs.mkdirSync(path.dirname(workflowPath), { recursive: true });
-  fs.writeFileSync(workflowPath, workflow, 'utf8');
-}

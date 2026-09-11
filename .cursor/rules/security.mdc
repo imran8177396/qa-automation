@@ -1,0 +1,47 @@
+---
+description: QA-level security validation — preserve security, observational only, not a pentest
+globs: scripts/security/**,scripts/run-security.ts,qa.config.json
+alwaysApply: false
+---
+
+# Security Testing (QA-level)
+
+Apply when editing `scripts/security/`, `scripts/run-security.ts`, or security-related config.
+
+## Preserve security
+
+- Never introduce vulnerabilities while building tests (hardcoded secrets, disabled TLS verification in production paths, logging tokens).
+- Never expose secrets in reports, logs, or committed files — redact sensitive values.
+- Use env vars and `utils/env` for credentials; never commit `.env`.
+
+## This is not a pentest
+
+The suite is **QA-level security validation**. It observes HTTPS, headers, cookies, and exposure indicators.
+
+Do **not**:
+
+- Send XSS, SQL injection, path-traversal, or other attack payloads
+- Brute-force credentials or flood an origin to test rate limits
+- Submit forms, strip CSRF tokens, or attempt auth bypass
+- Recursively brute-force directories or write exploit PoCs
+- Treat a passing run as "the application is secure"
+
+## What is in scope
+
+- HTTPS (NOT_APPLICABLE on loopback HTTP fixtures)
+- HSTS, CSP, X-Content-Type-Options, clickjacking, Referrer-Policy, Permissions-Policy
+- Cookie Secure / HttpOnly / SameSite when cookies are observed
+- Sensitive-source patterns in HTML (values are not copied into reports)
+- One GET per path in the fixed `WELL_KNOWN_PATHS` list
+- CSRF and HTML5 type *indicators* on observed forms (forms are never submitted)
+- Rate-limit *headers* on those GETs — missing headers are NOTE, never a flood test
+
+## Execution
+
+```bash
+npm run test:security
+```
+
+Reports: `reports/security/summary.json`, `reports/security/findings.md`.
+
+Never hide failures. A local fixture without security headers is a real observation, not a reason to weaken the check.

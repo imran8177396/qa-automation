@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-09-09T10:00:00.000Z",
+  "target": "http://127.0.0.1:4173",
+  "targetOrigin": "http://127.0.0.1:4173",
+  "originStatus": "INVALID",
+  "passed": true,
+  "workflows": [],
+  "note": "No correlated workflows configured."
+}

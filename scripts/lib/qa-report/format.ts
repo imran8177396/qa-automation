@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { PATHS } from '../paths';
+import { PATHS, qaTestResultsStampDirs } from '../paths';
 import { loadConfig } from '../load-config';
 
 export interface ReportFormatSection {
@@ -23,6 +23,11 @@ export interface ReportFormat {
     html?: string;
     pdf?: string;
     latestManifest?: string;
+  };
+  /** Policy: keep sibling timestamp folders; latest.json may update in place. */
+  retention?: {
+    keepHistoricalTimestampFolders?: boolean;
+    updateLatestManifest?: boolean;
   };
   sections: ReportFormatSection[];
 }
@@ -53,6 +58,8 @@ export function loadReportFormat(formatPath?: string): ReportFormat {
   return JSON.parse(fs.readFileSync(absolutePath, 'utf8')) as ReportFormat;
 }
 
+export const MAX_REPORT_STAMP_SUFFIX = 999;
+
 /** Filesystem-safe, sortable timestamp folder/file prefix: 2026-08-27_17-39-46 */
 export function formatReportTimestamp(isoDate: string): string {
   const date = new Date(isoDate);
@@ -64,13 +71,37 @@ export function formatReportTimestamp(isoDate: string): string {
   ].join('_');
 }
 
+export function reportStampOccupied(timestamp: string): boolean {
+  const dirs = qaTestResultsStampDirs(timestamp);
+  return fs.existsSync(dirs.input) || fs.existsSync(dirs.output);
+}
+
+/**
+ * New run = new folder. If YYYY-MM-DD_HH-MM-SS already exists on input or output,
+ * append -2, -3, … rather than overwriting.
+ */
+export function allocateUniqueReportTimestamp(
+  isoDate: string,
+  occupied: (stamp: string) => boolean = reportStampOccupied
+): string {
+  const base = formatReportTimestamp(isoDate);
+  if (!occupied(base)) return base;
+  for (let suffix = 2; suffix <= MAX_REPORT_STAMP_SUFFIX; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!occupied(candidate)) return candidate;
+  }
+  throw new Error(
+    `Could not allocate a unique QA report folder for ${base} under docs/input|output/qa-test-results/`
+  );
+}
+
 function resolveOutputTarget(target: string, timestamp: string): string {
   const relativePath = target.replaceAll(REPORT_TIMESTAMP_TOKEN, timestamp);
   return path.isAbsolute(relativePath) ? relativePath : path.join(PATHS.root, relativePath);
 }
 
 export function resolveReportOutputPaths(format: ReportFormat, ranAt: string): ReportOutputPaths {
-  const timestamp = formatReportTimestamp(ranAt);
+  const timestamp = allocateUniqueReportTimestamp(ranAt);
 
   return {
     timestamp,

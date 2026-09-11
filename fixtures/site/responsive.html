@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fixture Site — Responsive showcase</title>
+  <link rel="stylesheet" href="/fixture.css" />
+</head>
+<body>
+  <header class="site-header" data-qa="header">
+    <img src="/logo.svg" alt="Fixture logo" width="64" height="64" />
+    <button type="button" class="menu-toggle" data-qa="menu-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+    <nav id="site-nav" class="site-nav" data-qa="nav">
+      <a href="/index.html">Home</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/responsive.html">Responsive</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" data-qa="hero">
+      <h1>Responsive showcase</h1>
+      <p>Stable layout used to exercise viewport emulation. This is not a live product page.</p>
+      <img src="/logo.svg" alt="Hero mark" width="128" height="128" />
+    </section>
+
+    <section data-qa="cards" aria-label="Cards">
+      <h2>Cards</h2>
+      <div class="card-grid">
+        <article class="card"><h3>Card one</h3><p>Short copy so wrapping stays predictable.</p></article>
+        <article class="card"><h3>Card two</h3><p>Short copy so wrapping stays predictable.</p></article>
+        <article class="card"><h3>Card three</h3><p>Short copy so wrapping stays predictable.</p></article>
+      </div>
+    </section>
+
+    <section data-qa="grid" aria-label="Feature grid">
+      <h2>Grid</h2>
+      <div class="feature-grid">
+        <div class="feature">Alpha</div>
+        <div class="feature">Beta</div>
+        <div class="feature">Gamma</div>
+      </div>
+    </section>
+
+    <section aria-label="Table">
+      <h2>Status table</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Owner</th><th>State</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Home</td><td>QA</td><td>Stable</td></tr>
+            <tr><td>Contact</td><td>QA</td><td>Stable</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-label="Inquiry form">
+      <h2>Inquiry</h2>
+      <form method="POST" action="/contact-submit">
+        <label for="showcase-name">Name</label>
+        <input id="showcase-name" name="name" type="text" required />
+
+        <label for="topic">Topic</label>
+        <select id="topic" name="topic" data-qa="dropdown">
+          <option value="general">General</option>
+          <option value="billing">Billing</option>
+        </select>
+
+        <button type="submit">Send inquiry</button>
+      </form>
+      <p>
+        <button type="button" data-qa="modal-open">Open help</button>
+      </p>
+      <dialog data-qa="modal" id="help-dialog">
+        <p>Help dialog. Close it without submitting anything.</p>
+        <button type="button" data-qa="modal-close">Close</button>
+      </dialog>
+    </section>
+  </main>
+
+  <footer class="site-footer" data-qa="footer">
+    <p>Fixture footer</p>
+  </footer>
+
+  <script>
+    (function () {
+      var toggle = document.querySelector('[data-qa="menu-toggle"]');
+      var nav = document.getElementById('site-nav');
+      if (toggle && nav) {
+        toggle.addEventListener('click', function () {
+          var open = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', String(!open));
+          nav.classList.toggle('is-open', !open);
+        });
+      }
+      var dialog = document.getElementById('help-dialog');
+      var openBtn = document.querySelector('[data-qa="modal-open"]');
+      var closeBtn = document.querySelector('[data-qa="modal-close"]');
+      if (dialog && openBtn && closeBtn && typeof dialog.showModal === 'function') {
+        openBtn.addEventListener('click', function () { dialog.showModal(); });
+        closeBtn.addEventListener('click', function () { dialog.close(); });
+      }
+    })();
+  </script>
+</body>
+</html>

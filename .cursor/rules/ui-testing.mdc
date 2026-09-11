@@ -1,0 +1,54 @@
+---
+description: UI automation — hand-written and discovery-driven functional checks, safety policy
+globs: tests/e2e/**,pages/**,fixtures/**,fixtures/site/**
+alwaysApply: false
+---
+
+# UI Testing
+
+Apply when writing or running **functional UI automation** (not visual, responsive, or cross-browser — see `playwright.mdc`).
+
+## UI automation scope
+
+- **Hand-written flows** — critical business paths in `tests/e2e/` with Page Objects in `pages/` when flows warrant them.
+- **Discovery-driven checks** — generated specs in `tests/e2e/generated/` from crawl inventory (`npm run test:ui`).
+- **Combined UI+API** — documented pairs only in `tests/e2e/workflows/` (`npm run test:workflows`).
+
+## Before adding UI tests
+
+1. Confirm the flow exists in discovery inventory or `qa.config.json` — discover first when unsure.
+2. Reuse existing page objects and fixtures; extend, do not duplicate.
+3. Plan positive, negative, and boundary cases per `exhaustive-testing.mdc`.
+
+## Safety policy (non-destructive)
+
+From `scripts/core/safety-policy.ts`:
+
+- Generated checks **never submit forms** or click controls that trigger state-changing requests (delete, purchase, logout-with-side-effects, etc.).
+- Hand-written tests may submit only when explicitly documented and using test/sandbox data.
+- When a check cannot run safely → report **BLOCKED**, not PASS.
+
+## Page Object Model
+
+- Locators and page actions live in `pages/`; specs orchestrate flows.
+- URLs and credentials from env / `qa.config.json` — never hardcode secrets.
+- Prefer semantic locators (`getByRole`, `getByLabel`, `getByTestId`) — details in `playwright.mdc`.
+
+## Scenario requirements
+
+Each UI flow or discovered control should include where applicable:
+
+| Type | UI examples |
+| --- | --- |
+| **Positive** | Valid login, successful navigation, form fill without submit (generated) |
+| **Negative** | Invalid credentials, required-field errors, 404 pages |
+| **Boundary** | Max-length inputs, empty search, special characters |
+
+## After changes
+
+```bash
+npm run test:e2e
+npm run test:ui
+```
+
+Investigate failures in `reports/playwright/` with traces and screenshots. Classify application vs automation defects — never weaken assertions to pass.

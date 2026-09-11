@@ -7,7 +7,23 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "rootDir": "."
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": ".",
+    "types": ["node"]
   },
-  "include": ["scripts/**/*.ts", "npm-docs/**/*.ts", "playwright.config.ts", "tests/**/*.ts", "pages/**/*.ts", "utils/**/*.ts", "fixtures/**/*.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "npm-docs/**/*.ts",
+    "playwright.config.ts",
+    "playwright.visual.config.ts",
+    "playwright.responsive.config.ts",
+    "playwright.accessibility.config.ts",
+    "playwright.workflows.config.ts",
+    "tests/**/*.ts",
+    "pages/**/*.ts",
+    "components/**/*.ts",
+    "utils/**/*.ts",
+    "fixtures/**/*.ts",
+    "config/**/*.ts"
+  ]
 }

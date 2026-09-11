@@ -1,53 +1,71 @@
 ---
-description: Playwright E2E standards — POM, locators, test types, TypeScript
-globs: tests/e2e/**,pages/**,fixtures/**,playwright.config.ts
+description: Playwright engine standards — POM, locators, visual, responsive, cross-browser
+globs: tests/e2e/**,pages/**,fixtures/**,playwright.config.ts,playwright.visual.config.ts,playwright.responsive.config.ts,playwright.accessibility.config.ts,playwright.workflows.config.ts
 alwaysApply: false
 ---
 
-# Playwright E2E Testing
+# Playwright Testing
 
-Apply when editing UI tests, page objects, fixtures, or `playwright.config.ts`.
+Apply when editing Playwright specs, page objects, fixtures, or config files. Functional UI flows → see `ui-testing.mdc`. Accessibility → see `accessibility.mdc`.
 
 ## Architecture
 
-- **Page Object Model only** — locators and page actions live in `pages/`; specs in `tests/e2e/` orchestrate flows.
+- **Page Object Model** — locators and actions in `pages/`; specs orchestrate.
 - **TypeScript** for all test and page code.
-- Read existing page objects and specs before adding new ones; extend, do not duplicate.
+- Read existing code before adding; extend, do not duplicate.
 
 ## Locators
 
-Prefer stable, user-facing selectors in this order:
+Prefer stable, user-facing selectors:
 
 1. `getByRole`, `getByLabel`, `getByPlaceholder`, `getByTestId`
 2. `getByText` for unique visible text
 3. CSS/XPath only when no semantic locator exists
 
-Avoid brittle selectors: auto-generated IDs, deep DOM chains, index-only locators.
+Avoid auto-generated IDs, deep DOM chains, index-only locators.
 
-## Test coverage (required mix)
+## Visual automation
 
-For each feature or flow, include:
+- Specs: `tests/e2e/visual/` — config: `playwright.visual.config.ts`.
+- Target is `QA_PLAYWRIGHT_BASE_URL` or `qa.config.json` `playwright.baseURL`. Do not silently run only the local fixture when a live origin is set.
+- Excluded from `npm run test:e2e`. Do not put `toHaveScreenshot` in functional specs.
+- Mismatch = failure. Update baselines **only** via `npm run test:visual:update`.
+- Reports: `reports/visual/`.
 
-| Type | Purpose |
-| --- | --- |
-| **Positive** | Happy path with valid data |
-| **Negative** | Invalid input, auth failure, error states |
-| **Boundary** | Min/max lengths, empty values, edge inputs |
-| **Regression** | Previously broken or high-risk paths |
+## Responsive testing
 
-Use data from `test-data/` and `fixtures/` — never hardcode secrets or production credentials.
+- Specs: `tests/e2e/responsive/` — config: `playwright.responsive.config.ts`.
+- Viewport matrix on Chromium emulation — **not** real devices or Mobile Safari.
+- Reports: `reports/responsive/`.
+
+## Cross-browser testing
+
+- Tag representative specs `@cross-browser`.
+- Run: `npm run test:e2e:cross-browser` (Chromium, Firefox, WebKit).
+- WebKit ≠ iOS Safari; Chromium ≠ Android Chrome.
+- Reports: `reports/cross-browser/matrix.md`.
+
+## Combined UI+API workflows
+
+- `tests/e2e/workflows/` + `playwright.workflows.config.ts`.
+- Correlate only documented `qa.config.json` workflow pairs.
+- Do not re-run Postman from the browser in ordinary UI specs.
 
 ## Implementation rules
 
-- URLs and credentials from `process.env`, `.env`, or `config/generated.env` (via `qa.config.json`).
-- Use Playwright auto-waiting; add explicit waits only when necessary.
-- One clear assertion per behavior; descriptive test titles.
-- Keep specs independent — no order dependency between tests.
+- URLs/credentials from env or `qa.config.json` — never hardcode secrets.
+- Use Playwright auto-waiting; explicit waits only when necessary.
+- Independent specs — no order dependency.
+- Positive, negative, boundary mix per `exhaustive-testing.mdc`.
 
 ## After changes
 
 ```bash
 npm run test:e2e
+npm run test:visual
+npm run test:responsive
+npm run test:e2e:cross-browser
+npm run test:workflows
 ```
 
-Investigate failures in `reports/playwright/`. Fix automation issues before filing product bugs.
+Distinguish application defects from automation defects. Never weaken assertions to pass.

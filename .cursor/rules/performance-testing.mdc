@@ -10,7 +10,10 @@ Apply when editing JMeter plans, performance runners, or `qa.config.json` jmeter
 
 ## Source of truth
 
-- Configure load in **`qa.config.json`** → `jmeter` (threads, ramp-up, loop count, path).
+- Configure load in **`qa.config.json`** → `jmeter` (threads, ramp-up, loop count, path, profile).
+- The default profile is **`liveness`**. It records measurements as **RECORDED**, never PASS. `smoke` is an alias of liveness.
+- Threshold keys (`jmeter.thresholds.maxP95Ms`, `jmeter.thresholds.maxErrorRatePercent`) may be null. Do not invent numeric SLAs.
+- Core Web Vitals live in **`qa.config.json`** → `lighthouse` and `reports/lighthouse/`. Do not merge them into JMeter findings.
 - Run **`npm run qa:sync`** to update `tests/performance/load-test.jmx`.
 - Prefer editing config + sync over manual JMX-only changes.
 

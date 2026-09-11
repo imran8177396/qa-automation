@@ -1,0 +1,10 @@
+{
+  "pageCount": 61,
+  "pagePrefix": "https://example.com/p/",
+  "template": {
+    "rule": "missing-title",
+    "severity": "high",
+    "detail": "Page has no <title>."
+  },
+  "note": "v1.1 defect: concatenating suite + discovery without dedupe reported 122 findings (61 unique × 2 sources)."
+}

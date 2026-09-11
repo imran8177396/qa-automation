@@ -4,6 +4,8 @@ node_modules/
 
 # Playwright
 test-results/
+visual-baselines/**/*-actual.png
+visual-baselines/**/*-diff.png
 blob-report/
 playwright/.cache/
 playwright/.auth/
@@ -24,6 +26,13 @@ config/generated.env
 # Build output
 dist/
 
+# JMeter / tool scratch
+temp/
+
 # Generated Word documents
 docs/output/
 docs/input/qa-test-results/
+
+# Generated application discovery inventories
+discovery/*.json
+

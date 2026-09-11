@@ -1,0 +1,57 @@
+---
+description: Discovery-driven exhaustive testing — inventory, scenarios, coverage, uncovered items
+globs: scripts/discovery/**,scripts/inventory/**,scripts/planning/**,scripts/core/**,tests/e2e/generated/**,docs/coverage-matrix.md,docs/uncovered-test-items.md,docs/test-inventory.md
+alwaysApply: false
+---
+
+# Exhaustive Testing
+
+Apply when crawling, inventorying, planning checks, or measuring coverage. This rule defines **what must be tested**, not how each tool implements it.
+
+## Mandatory workflow
+
+1. **Discover before testing** — crawl the application (`npm run discover -- <url>`) or read `qa.config.json` + existing specs. Do not invent flows without evidence.
+2. **Build an inventory** — record pages, links, forms, buttons, inputs, APIs, and workflows. Outputs: `reports/discovery/`, `docs/test-inventory.md`.
+3. **Determine applicable scenarios** — map each inventory item to check types (functional, visual, a11y, API, etc.) via `scripts/planning/`. Respect `scripts/core/safety-policy.ts`.
+4. **Test every discovered testable item** — each item gets a status: PASS, FAIL, BLOCKED, NOT_TESTED, or REQUIRES_CONFIGURATION. Never omit silently.
+
+## Scenario mix (required per feature or item)
+
+| Type | Purpose |
+| --- | --- |
+| **Positive** | Happy path with valid data and expected success |
+| **Negative** | Invalid input, missing auth, error states, 4xx responses |
+| **Boundary** | Min/max lengths, empty values, edge inputs, limits |
+| **Regression** | Previously broken or high-risk paths |
+
+Generated discovery checks are **non-destructive only** — they observe and fill fields but never submit forms or click destructive controls.
+
+## Evidence-based coverage
+
+- Run **`npm run coverage`** after discovery and test execution.
+- Coverage = testable items with a recorded outcome ÷ total testable items — **not** pass rate.
+- Source artifacts: `reports/coverage/coverage.json`, `docs/coverage-matrix.md`.
+- **Never claim 100% coverage** without inventory evidence. Partial runs must show lower percentages honestly.
+
+## Uncovered functionality
+
+- Maintain **`docs/uncovered-test-items.md`** — list items with no test, BLOCKED, or REQUIRES_CONFIGURATION.
+- When adding tests, update inventory and coverage docs in the same change.
+- Uncovered items are findings, not failures to hide.
+
+## Execution paths
+
+```bash
+npm run qa:test -- <url>   # Full discovery → inventory → plan → execute → report
+npm run discover -- <url>  # Inventory only
+npm run test:ui            # Discovery-driven functional UI checks
+npm run coverage           # Coverage matrix from inventory + results
+```
+
+## Integrity
+
+- Never fake results or coverage — if something was not run, say so.
+- Never weaken assertions to achieve PASS.
+- Items that cannot run safely → BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION with reason, not omitted.
+- Do not use Playwright `test.skip`, `test.only`, or grep filters to drop planned runnable checks. Gated items are recorded in `reports/discovery/gated-check-outcomes.json`, not skipped silently.
+- Visual / responsive / accessibility / workflows execute against the resolved target URL. The local fixture is not a substitute when a live origin is configured.

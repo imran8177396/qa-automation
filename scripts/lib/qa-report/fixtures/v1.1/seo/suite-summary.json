@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-09-09T10:05:00.000Z",
+  "target": "https://example.com",
+  "passed": false,
+  "failCount": 2,
+  "pagesAnalyzed": 2,
+  "rawFindingCount": 2,
+  "uniqueFindingCount": 2,
+  "findings": [
+    {
+      "id": "SEO-0001",
+      "rule": "missing-title",
+      "severity": "high",
+      "page": "https://example.com/",
+      "detail": "Page has no <title>."
+    },
+    {
+      "id": "SEO-0002",
+      "rule": "missing-h1",
+      "severity": "medium",
+      "page": "https://example.com/about",
+      "detail": "Page has no <h1>."
+    }
+  ]
+}

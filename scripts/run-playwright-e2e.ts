@@ -1,7 +1,7 @@
 import { loadConfig } from './lib/load-config';
-import { runPlaywright } from './runners/playwright';
+import { runE2eAndGeneratedCheck } from './runners/playwright';
 
-runPlaywright(loadConfig())
+runE2eAndGeneratedCheck(loadConfig())
   .then((passed) => process.exit(passed ? 0 : 1))
   .catch((error: unknown) => {
     console.error(error);

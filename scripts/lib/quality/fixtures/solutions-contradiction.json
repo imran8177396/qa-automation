@@ -1,0 +1,45 @@
+{
+  "discovery": {
+    "pages": [
+      {
+        "url": "https://example.com/",
+        "status": 200,
+        "ok": true
+      },
+      {
+        "url": "https://example.com/solutions",
+        "status": 404,
+        "ok": false
+      }
+    ]
+  },
+  "api": {
+    "requests": [
+      {
+        "endpoint": "https://example.com/",
+        "path": "/",
+        "statusCode": 200,
+        "result": "PASS",
+        "expectedStatus": 200
+      },
+      {
+        "endpoint": "https://example.com/solutions",
+        "path": "/solutions",
+        "statusCode": 404,
+        "result": "PASS",
+        "expectedStatus": 404
+      }
+    ]
+  },
+  "ui": {
+    "executions": [
+      {
+        "scenario": "/solutions should load with expected title",
+        "status": "FAIL"
+      }
+    ]
+  },
+  "seo": {
+    "findings": []
+  }
+}

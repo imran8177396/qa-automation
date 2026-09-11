@@ -1,0 +1,34 @@
+{
+  "discovery": {
+    "pages": [
+      {
+        "url": "https://example.com/",
+        "status": 404,
+        "ok": false
+      }
+    ]
+  },
+  "api": {
+    "requests": [
+      {
+        "endpoint": "https://example.com/",
+        "path": "/",
+        "statusCode": 200,
+        "result": "PASS",
+        "expectedStatus": 200
+      }
+    ]
+  },
+  "ui": {
+    "executions": [
+      {
+        "url": "https://example.com/",
+        "scenario": "/ should load with expected title",
+        "status": "FAIL"
+      }
+    ]
+  },
+  "seo": {
+    "findings": []
+  }
+}

@@ -13,6 +13,10 @@
     "pdf": "docs/output/qa-test-results/{timestamp}/qa-test-results.pdf",
     "latestManifest": "docs/output/qa-test-results/latest.json"
   },
+  "retention": {
+    "keepHistoricalTimestampFolders": true,
+    "updateLatestManifest": true
+  },
   "sections": [
     { "id": "cover", "heading": "Cover Page", "enabled": true },
     { "id": "layer-map", "heading": "Report Structure — Five QA Layers", "enabled": true },

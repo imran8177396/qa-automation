@@ -2,8 +2,10 @@ import { runSync } from './sync-from-config';
 import { runPostman } from './runners/postman';
 import { runPlaywright } from './runners/playwright';
 import { runJmeter } from './runners/jmeter';
+import { runLighthouse } from './lighthouse/run';
 import { loadConfig } from './lib/load-config';
-import { logError, logStep, logSuccess } from './lib/logger';
+import { logError, logStep, logSuccess, logWarn } from './lib/logger';
+import { cleanRunArtifacts, shouldKeepArtifacts } from './lib/clean-run-artifacts';
 import type { PipelineStep } from './types';
 
 function parseRequestedSteps(): PipelineStep[] | null {
@@ -29,8 +31,11 @@ async function runStep(step: PipelineStep, config: ReturnType<typeof loadConfig>
       return runPostman(config);
     case 'e2e':
       return runPlaywright(config);
-    case 'load':
-      return runJmeter(config);
+    case 'load': {
+      const jmeterOk = await runJmeter(config);
+      const lighthouseOk = await runLighthouse(config);
+      return jmeterOk && lighthouseOk;
+    }
     default:
       return false;
   }
@@ -43,13 +48,35 @@ async function main(): Promise<void> {
 
   logStep(`${config.project.name} — starting pipeline`);
   console.log(`Steps: ${steps.join(' → ')}`);
+  if (!requestedSteps) {
+    if (shouldKeepArtifacts()) {
+      logWarn('Keeping previous run artifacts (--keep-artifacts)');
+    } else {
+      logStep('Cleaning previous test artifacts and cache');
+      const { removed } = cleanRunArtifacts();
+      logSuccess(
+        removed.length === 0
+          ? 'No previous run artifacts were present'
+          : `Removed ${removed.length} previous artifact path(s)`
+      );
+    }
+  }
 
+  let anyFailed = false;
   for (const step of steps) {
     const passed = await runStep(step, config);
-    if (!passed && config.pipeline.failFast) {
-      logError(`Pipeline failed at step: ${step}`);
-      process.exit(1);
+    if (!passed) {
+      anyFailed = true;
+      if (config.pipeline.failFast) {
+        logError(`Pipeline failed at step: ${step}`);
+        process.exit(1);
+      }
     }
+  }
+
+  if (anyFailed) {
+    logError('Pipeline finished with failures');
+    process.exit(1);
   }
 
   logSuccess('Pipeline finished');

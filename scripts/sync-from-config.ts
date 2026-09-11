@@ -16,11 +16,11 @@ export async function runSync(): Promise<void> {
   logSuccess('Generated config/generated.env');
 
   generateReportsFolders();
-  logSuccess('Created reports/playwright, reports/postman, reports/jmeter');
+  logSuccess('Created reports/ folders');
 
   if (config.postman.enabled) {
     generatePostmanFiles(config);
-    logSuccess('Exported Postman collection to tests/api/postman/collection.json');
+    logSuccess('Exported Postman collection to tests/api/postman/collections/qa-automation-api.json');
   }
 
   if (config.jmeter.enabled) {
@@ -30,6 +30,7 @@ export async function runSync(): Promise<void> {
 
   generateGithubWorkflow(config);
   logSuccess('Generated .github/workflows/qa-automation.yml');
+  logSuccess('Generated .github/workflows/qa-performance-heavy.yml');
 }
 
 if (require.main === module) {

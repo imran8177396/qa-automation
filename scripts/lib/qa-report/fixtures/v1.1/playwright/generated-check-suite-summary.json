@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-09-09T10:08:00.000Z",
+  "suiteName": "generated-check",
+  "targetOrigin": "http://127.0.0.1:4173",
+  "configuredBaseUrl": "https://example.com",
+  "originStatus": "INVALID",
+  "passed": true,
+  "executed": true,
+  "resultsFile": "reports/playwright/generated-check/results.json",
+  "browsers": [
+    {
+      "browser": "chromium",
+      "status": "EXECUTED",
+      "reason": "",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "engineCaveats": [
+    "WebKit is not iOS Safari.",
+    "Chromium is not Android Chrome."
+  ],
+  "failureDetails": null
+}

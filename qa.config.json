@@ -1,62 +1,224 @@
 {
   "project": {
-    "name": "Contact List App QA Automation"
+    "name": "QA Automation"
   },
   "urls": {
-    "website": "https://thinking-tester-contact-list.herokuapp.com",
-    "api": "https://thinking-tester-contact-list.herokuapp.com",
-    "login": "https://thinking-tester-contact-list.herokuapp.com/",
-    "contactList": "https://thinking-tester-contact-list.herokuapp.com/contactList",
-    "signup": "https://thinking-tester-contact-list.herokuapp.com/addUser"
-  },
-  "credentials": {
-    "username": "qa.test@example.com",
-    "password": "Password123!"
+    "website": "https://example.com/",
+    "api": "https://jsonplaceholder.typicode.com"
   },
   "pipeline": {
     "steps": ["sync", "api", "e2e", "load"],
-    "failFast": true
+    "failFast": false,
+    "exhaustiveExecution": true,
+    "noSilentSkip": true
   },
   "postman": {
     "enabled": true,
-    "collectionName": "Contact List API Smoke",
+    "collectionName": "QA Automation API",
+    "auth": {
+      "type": "none"
+    },
+    "expectationPolicy": {
+      "navReachableDefault": 200,
+      "undocumented": "UNVERIFIED",
+      "note": "expectedStatus is the documented intended status. Nav-reachable routes default to 200 only when expectedStatus is omitted; an explicit value (including documented 404) overrides that default. assertions.statusCode is the collection assertion and is never auto-flipped. UNVERIFIED requests are excluded from the pass count."
+    },
     "assertions": {
       "statusCode": 200,
-      "expectJson": false
+      "expectJson": true,
+      "maxResponseTimeMs": 15000
     },
     "requests": [
       {
-        "name": "GET homepage",
+        "name": "GET /posts — list resources",
         "method": "GET",
-        "path": "/"
+        "path": "/posts",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "array"
+        }
       },
       {
-        "name": "GET contact list page",
+        "name": "GET /posts/1 — single resource",
         "method": "GET",
-        "path": "/contactList"
+        "path": "/posts/1",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "object",
+          "requiredFields": ["userId", "id", "title", "body"]
+        }
+      },
+      {
+        "name": "GET /posts/999999 — missing resource",
+        "method": "GET",
+        "path": "/posts/999999",
+        "kind": "invalid",
+        "expectedStatus": 404,
+        "assertions": {
+          "statusCode": 404,
+          "expectJson": false
+        }
+      },
+      {
+        "name": "GET /unknown-route — undocumented",
+        "method": "GET",
+        "path": "/unknown-route",
+        "kind": "invalid",
+        "expectedStatus": "UNVERIFIED",
+        "assertions": {
+          "expectJson": false
+        }
+      },
+      {
+        "name": "PUT / — unsupported method on API root",
+        "method": "PUT",
+        "path": "/",
+        "kind": "invalid",
+        "expectedStatus": "UNVERIFIED",
+        "assertions": {
+          "expectJson": false
+        }
+      },
+      {
+        "name": "GET /posts — malformed query percent-encoding",
+        "method": "GET",
+        "path": "/posts",
+        "kind": "invalid-parameter",
+        "expectedStatus": "UNVERIFIED",
+        "query": {
+          "q": "%ZZ"
+        },
+        "assertions": {
+          "expectJson": false
+        }
       }
     ]
   },
   "playwright": {
     "enabled": true,
-    "baseURL": "https://thinking-tester-contact-list.herokuapp.com",
-    "browsers": ["chromium", "firefox", "webkit"],
-    "headless": true
+    "baseURL": "https://example.com",
+    "browsers": ["chromium"],
+    "headless": true,
+    "workers": 2
   },
   "jmeter": {
     "enabled": true,
+    "path": "/posts",
     "threads": 5,
     "rampUpSeconds": 5,
     "loopCount": 1,
-    "path": "/"
+    "defaultProfile": "liveness",
+    "thresholds": {
+      "maxP95Ms": null,
+      "maxErrorRatePercent": null
+    },
+    "allowHeavyAgainst": [],
+    "profiles": {
+      "liveness": { "threads": 5, "rampUpSeconds": 5, "loopCount": 1 },
+      "load": { "threads": 20, "rampUpSeconds": 20, "loopCount": 5 },
+      "stress": { "threads": 50, "rampUpSeconds": 10, "loopCount": 10 },
+      "spike": { "threads": 40, "rampUpSeconds": 1, "loopCount": 3 },
+      "soak": { "threads": 10, "rampUpSeconds": 30, "loopCount": -1, "durationSeconds": 300 }
+    }
+  },
+  "lighthouse": {
+    "enabled": true,
+    "thresholds": {
+      "lcpMs": null,
+      "cls": null,
+      "inpMs": null,
+      "tbtMs": null,
+      "performanceScore": null,
+      "accessibilityScore": null,
+      "bestPracticesScore": null,
+      "seoScore": null
+    }
   },
   "github": {
     "branches": ["main", "master"],
     "runOnPullRequest": true
   },
+  "workflows": {
+    "correlated": []
+  },
+  "discovery": {
+    "enabled": true,
+    "maxPages": 20,
+    "maxDepth": 3,
+    "sameOriginOnly": true,
+    "respectRobotsTxt": true,
+    "useSitemap": true,
+    "excludePatterns": []
+  },
+  "security": {
+    "enabled": true
+  },
+  "dependencies": {
+    "enabled": true,
+    "failOnSeverity": "high"
+  },
+  "seo": {
+    "enabled": true
+  },
+  "content": {
+    "enabled": true
+  },
+  "failureAnalysis": {
+    "enabled": true
+  },
+  "retest": {
+    "enabled": true
+  },
   "report": {
     "enabled": true,
     "format": "docs/templates/qa-test-results.format.json",
-    "autoGenerateAfterTests": true
+    "autoGenerateAfterTests": true,
+    "retention": {
+      "keepHistoricalTimestampFolders": true,
+      "updateLatestManifest": true,
+      "note": "Previous dated packs under docs/input|output/qa-test-results/ are retained. Each run writes a new YYYY-MM-DD_HH-MM-SS folder (suffix -2, -3, … on collision). latest.json may be updated to point at the newest pack."
+    },
+    "signOff": {
+      "preparerName": "",
+      "preparerRole": "Senior QA Automation Engineer",
+      "reviewerName": "",
+      "reviewerRole": "",
+      "approvalDate": "",
+      "distribution": "",
+      "confidentiality": ""
+    },
+    "revisionHistory": [
+      {
+        "version": "1.1",
+        "date": "NOT_AVAILABLE",
+        "author": "NOT_AVAILABLE",
+        "summary": "Five-layer enterprise QA report format already used by this generator."
+      }
+    ],
+    "criteria": {
+      "entry": [
+        "Target URL is configured in qa.config.json and reachable, or the run is explicitly fixture-scoped.",
+        "Required tools (Playwright, Postman CLI, JMeter when enabled) are present or the stage is recorded NOT_EXECUTED.",
+        "Discovery inventory exists before generated UI checks execute."
+      ],
+      "exit": [
+        "No open P0 or P1 application blockers remain (reporting.mdc: never PASS while a P0 or P1 application blocker remains open).",
+        "Critical-path checks that ran have a recorded outcome (PASS, FAIL, BLOCKED, NOT_TESTED, or REQUIRES_CONFIGURATION).",
+        "Coverage, failures, and untested items are disclosed from reports/ artifacts — never fabricated."
+      ],
+      "severity": {
+        "P0": "Release-blocking application defect on a critical path (reporting.mdc FAIL).",
+        "P1": "High-severity application defect or broken critical path (reporting.mdc FAIL; broken links and auth failures are typically P1).",
+        "P2": "Medium issue or documented gap (reporting.mdc PASS WITH OBSERVATIONS).",
+        "P3": "Low issue or observation (reporting.mdc PASS WITH OBSERVATIONS)."
+      },
+      "releaseBlocking": ["P0", "P1"]
+    }
   }
 }

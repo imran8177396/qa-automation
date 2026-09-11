@@ -13,6 +13,8 @@ export interface SummaryToolResult {
 export interface SummaryFile {
   ranAt: string;
   results: SummaryToolResult[];
+  provenance?: unknown;
+  timezone?: string;
 }
 
 interface PlaywrightJsonReport {
@@ -120,7 +122,6 @@ function defaultToolResults(config: QaConfig): SummaryToolResult[] {
 }
 
 function resolvePassed(
-  tool: string,
   summaryValue: boolean | undefined,
   artifactValue: boolean | null
 ): boolean {
@@ -151,19 +152,19 @@ export function reconcileSummary(
       case 'Playwright':
         return {
           ...item,
-          passed: resolvePassed(item.tool, item.passed, playwrightArtifact),
+          passed: resolvePassed(item.passed, playwrightArtifact),
           report: item.report ?? PATHS.reports.playwright,
         };
       case 'Postman CLI':
         return {
           ...item,
-          passed: resolvePassed(item.tool, item.passed, postmanArtifact),
+          passed: resolvePassed(item.passed, postmanArtifact),
           report: item.report ?? path.join(PATHS.reports.postman, 'report.json'),
         };
       case 'JMeter':
         return {
           ...item,
-          passed: resolvePassed(item.tool, item.passed, jmeterArtifact),
+          passed: resolvePassed(item.passed, jmeterArtifact),
           report: item.report ?? path.join(PATHS.reports.jmeter, 'html'),
         };
       default:

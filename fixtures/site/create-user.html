@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Site — Create user</title>
+  <link rel="stylesheet" href="/fixture.css" />
+</head>
+<body>
+  <main>
+    <h1>Create user</h1>
+    <nav><a href="/index.html">Home</a></nav>
+    <p data-qa="create-user-note">Non-destructive workflow fixture — form is not submitted by automated checks.</p>
+    <form method="POST" action="/users" data-qa="create-user-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" required />
+
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+
+      <button type="submit">Create user</button>
+    </form>
+  </main>
+</body>
+</html>
