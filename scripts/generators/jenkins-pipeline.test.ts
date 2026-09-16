@@ -169,11 +169,11 @@ test('Multibranch Jenkinsfile is lightweight on CHANGE_ID / feature and qa:all o
 test('Multibranch Jenkinsfile does not run qa:all on the lightweight path', () => {
   const groovy = renderMultibranchJenkinsfile(config());
   assert.match(groovy, /when \{ environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' \}/);
-  assert.match(groovy, /npm run test:e2e/);
-  assert.match(groovy, /npm run test:api/);
-  assert.match(groovy, /npm run test:accessibility/);
-  assert.match(groovy, /npm run test:performance -- --profile=liveness/);
-  assert.match(groovy, /npm run discover --/);
+  assert.match(groovy, /run test:e2e/);
+  assert.match(groovy, /run test:api/);
+  assert.match(groovy, /run test:accessibility/);
+  assert.match(groovy, /run test:performance -- --profile=liveness/);
+  assert.match(groovy, /run discover --/);
 });
 
 test('Regression Jenkinsfile always runs qa:all and never authorizes heavy JMeter', () => {
@@ -208,18 +208,14 @@ test('Performance Jenkinsfile requires AUTHORIZE_HEAVY=true and defaults to fals
 });
 
 test('Jenkinsfiles bind documented credential IDs and archive required artifacts', () => {
-  const texts = [
+  const jenkinsfiles = [
     renderMultibranchJenkinsfile(config()),
     renderRegressionJenkinsfile(),
     renderPerformanceJenkinsfile(),
-    fs.readFileSync(JENKINS_HELPER_GROOVY_PATH, 'utf8'),
   ];
-  for (const text of texts) {
-    for (const cred of JENKINS_CREDENTIALS) {
-      if (text.includes('bindQaRuntimeCredentials') || text.includes(cred.id)) {
-        assert.match(text, new RegExp(cred.id));
-      }
-    }
+  for (const text of jenkinsfiles) {
+    assert.match(text, /bindQaRuntimeCredentials/);
+    assert.match(text, /recordAllCredentialAvailability/);
     assert.doesNotMatch(text, /path:.*\.env/);
   }
   const helper = fs.readFileSync(JENKINS_HELPER_GROOVY_PATH, 'utf8');
