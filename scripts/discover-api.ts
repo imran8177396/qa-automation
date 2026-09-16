@@ -4,8 +4,8 @@ import { loadOrDiscoverPageMap, runUiAndApiDiscovery } from './discovery/run-dis
 
 async function main(): Promise<void> {
   const { url, maxPages } = resolveDiscoverUrl();
-  const pageMap = await loadOrDiscoverPageMap(url, maxPages);
-  const { api } = await runUiAndApiDiscovery(pageMap);
+  const { pageMap, auth } = await loadOrDiscoverPageMap(url, maxPages);
+  const { api } = await runUiAndApiDiscovery(pageMap, auth);
   console.log(`Wrote ${api.calls.length} observed API call(s) to ${PATHS.apiInventoryFile}`);
 }
 

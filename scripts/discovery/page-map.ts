@@ -1,16 +1,30 @@
 import { isInScope, normalizeUrl, resolveScopeAnchor } from '../core/scope';
 import { applicableTestTypes, potentialAction } from './test-types';
 import { rollupCategory, type CategoryStatus } from './categories';
-import type { DiscoveryResult } from './types';
+import type {
+  DiscoveryResult,
+  NavigationRegion,
+  PageAccess,
+  PageHeading,
+} from './types';
+import type { AuthAttempt } from './auth-session';
+import type { RedirectHop } from './redirects';
 
 export interface PageMapEntry {
   url: string;
+  finalUrl?: string;
   route: string;
   title: string;
   status: number | null;
   ok: boolean;
   depth: number;
+  headings?: PageHeading[];
   h1s: string[];
+  redirects?: RedirectHop[];
+  canonicalUrl?: string | null;
+  internalLinks?: string[];
+  access?: PageAccess;
+  gatedReason?: string;
   error?: string;
   applicableTestTypes: ReturnType<typeof applicableTestTypes>;
   isAutoindex?: boolean;
@@ -40,10 +54,12 @@ export interface PageMap {
   pages: PageMapEntry[];
   routes: RouteEntry[];
   navigation: NavigationEntry[];
+  navigationRegions?: NavigationRegion[];
   skippedByScope: string[];
   skippedByExclude?: string[];
   pagesDiscoveredRaw?: number;
   pagesDiscoveredUnique?: number;
+  auth?: AuthAttempt;
   categoryStatus: CategoryStatus[];
 }
 
@@ -56,21 +72,50 @@ function routeOf(url: string): string {
   }
 }
 
+function headingsOf(page: DiscoveryResult['pages'][number]): PageHeading[] {
+  if (page.headings && page.headings.length > 0) return page.headings;
+  return page.h1s.filter(Boolean).map((text) => ({ level: 'h1' as const, text }));
+}
+
 export function buildPageMap(discovery: DiscoveryResult): PageMap {
   const anchor = resolveScopeAnchor(discovery.seedUrl);
 
-  const pages: PageMapEntry[] = discovery.pages.map((page) => ({
-    url: page.url,
-    route: routeOf(page.url),
-    title: page.title,
-    status: page.status,
-    ok: page.ok,
-    depth: page.depth,
-    h1s: page.h1s,
-    error: page.error,
-    applicableTestTypes: applicableTestTypes('pages'),
-    isAutoindex: page.isAutoindex,
-  }));
+  const pages: PageMapEntry[] = discovery.pages.map((page) => {
+    const internalLinks: string[] = [];
+    const seenLinks = new Set<string>();
+    for (const link of page.outboundLinks ?? []) {
+      let normalized = link.href;
+      try {
+        normalized = normalizeUrl(link.href);
+      } catch {
+        continue;
+      }
+      if (!isInScope(normalized, anchor, true)) continue;
+      if (seenLinks.has(normalized)) continue;
+      seenLinks.add(normalized);
+      internalLinks.push(normalized);
+    }
+
+    return {
+      url: page.url,
+      finalUrl: page.finalUrl ?? page.url,
+      route: routeOf(page.finalUrl ?? page.url),
+      title: page.title,
+      status: page.status,
+      ok: page.ok,
+      depth: page.depth,
+      headings: headingsOf(page),
+      h1s: page.h1s,
+      redirects: page.redirects ?? [],
+      canonicalUrl: page.canonicalUrl,
+      internalLinks,
+      access: page.access ?? (page.error ? 'error' : 'public'),
+      gatedReason: page.gatedReason,
+      error: page.error,
+      applicableTestTypes: applicableTestTypes('pages'),
+      isAutoindex: page.isAutoindex,
+    };
+  });
 
   const routes: RouteEntry[] = [];
   const seenRoutes = new Set<string>();
@@ -101,7 +146,9 @@ export function buildPageMap(discovery: DiscoveryResult): PageMap {
     }
   }
 
+  const navigationRegions = discovery.pages.flatMap((page) => page.navigationRegions ?? []);
   const inScopeNav = navigation.filter((item) => item.inScope).length;
+  const gatedCount = pages.filter((page) => page.access === 'gated').length;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -111,12 +158,14 @@ export function buildPageMap(discovery: DiscoveryResult): PageMap {
     pages,
     routes,
     navigation,
+    navigationRegions,
     skippedByScope: discovery.skippedByScope,
     skippedByExclude: discovery.skippedByExclude,
     pagesDiscoveredRaw: discovery.pagesDiscoveredRaw,
     pagesDiscoveredUnique: discovery.pagesDiscoveredUnique,
+    auth: discovery.auth,
     categoryStatus: [
-      rollupCategory('pages', pages.length, 0, 'No pages were crawled'),
+      rollupCategory('pages', pages.filter((page) => page.access !== 'gated').length, gatedCount, 'No pages were crawled'),
       rollupCategory('routes', routes.length, 0, 'No routes were derived from crawled URLs'),
       rollupCategory(
         'navigation',

@@ -180,7 +180,7 @@ export function firstRepoStackFrame(stack: string, root = ROOT): string {
   return NOT_AVAILABLE;
 }
 
-function attachmentPath(
+export function attachmentPath(
   attachments: PlaywrightJsonAttachment[] | undefined,
   kind: 'screenshot' | 'trace' | 'video'
 ): string {
@@ -253,7 +253,7 @@ export function parseFailedExecutionsFromFile(
   return parseFailedExecutions(loadPlaywrightJsonReport(resultsFile), suiteName, resultsFile);
 }
 
-function projectToEngine(projectName: string | undefined): PlaywrightBrowser | null {
+export function projectToEngine(projectName: string | undefined): PlaywrightBrowser | null {
   const lower = (projectName ?? '').toLowerCase();
   if (lower === 'chromium' || lower.includes('chromium') || lower.includes('chrome')) return 'chromium';
   if (lower === 'firefox' || lower.includes('firefox')) return 'firefox';

@@ -8,6 +8,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnusedLabels": false,
     "rootDir": ".",
     "types": ["node"]
   },
@@ -19,6 +23,7 @@
     "playwright.responsive.config.ts",
     "playwright.accessibility.config.ts",
     "playwright.workflows.config.ts",
+    "playwright.performance.config.ts",
     "tests/**/*.ts",
     "pages/**/*.ts",
     "components/**/*.ts",

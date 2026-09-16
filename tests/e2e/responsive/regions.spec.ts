@@ -4,7 +4,8 @@ import { resolveResponsivePages } from '../../../scripts/responsive/pages';
 const RESPONSIVE_PAGES = resolveResponsivePages();
 
 /**
- * Region presence + layout sanity. Missing chrome on a simple page is NOT_APPLICABLE, not a fail.
+ * Region presence + layout sanity at each emulated viewport.
+ * Missing chrome on the discovered login page is NOT_APPLICABLE, not a fail.
  */
 test.describe('responsive regions @responsive', () => {
   for (const pageDef of RESPONSIVE_PAGES) {
@@ -21,6 +22,9 @@ test.describe('responsive regions @responsive', () => {
       await page.expectImagesLoadedAndContained();
       await page.expectButtonsUsable();
       await page.expectReadableTypography();
+      await page.expectMobileMenuBehavior();
+      await page.expectModalOpenClose();
+      await page.expectDropdownChange();
     });
   }
 });

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { writeJson } from '../discovery/write-json';
 import {
+  ALL_PLAYWRIGHT_ENGINES,
   PLAYWRIGHT_ENGINE_CAVEATS,
   assertUniquePlaywrightSuitePaths,
   playwrightSuiteDir,
@@ -32,6 +33,8 @@ export interface PlaywrightSuiteSummary {
   originStatus: SuiteOriginComparison;
   passed: boolean;
   executed: boolean;
+  /** Present when the suite did not run checks (empty/missing plan, etc.). */
+  skipReason?: string;
   resultsFile: string;
   browsers: PlaywrightBrowserSuiteStats[];
   engineCaveats: string[];
@@ -112,6 +115,35 @@ export function finishPlaywrightSuiteSummary(
     executed: true,
     browsers: update.browsers,
     failureDetails: update.failureDetails,
+  };
+  writeJson(playwrightSuiteSummaryPath(started.suiteName), summary);
+  return summary;
+}
+
+/**
+ * Honest empty/missing generated-check plan: 0 checks, executed=false.
+ * Process success (passed=true) so test:e2e does not FAIL a suite that never ran.
+ */
+export function recordPlaywrightSuiteNotExecuted(
+  started: PlaywrightSuiteSummary,
+  input: { reason: string }
+): PlaywrightSuiteSummary {
+  const skippedBrowsers = ALL_PLAYWRIGHT_ENGINES.map((browser) => ({
+    browser,
+    reason: input.reason,
+  }));
+  const summary: PlaywrightSuiteSummary = {
+    ...started,
+    generatedAt: new Date().toISOString(),
+    passed: true,
+    executed: false,
+    skipReason: input.reason,
+    browsers: buildBrowserSuiteStats({
+      report: null,
+      executedBrowsers: [],
+      skippedBrowsers,
+    }),
+    failureDetails: null,
   };
   writeJson(playwrightSuiteSummaryPath(started.suiteName), summary);
   return summary;

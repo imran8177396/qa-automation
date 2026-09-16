@@ -177,6 +177,8 @@ function titleSuggestsScenario(title: string, scenarioId: AssignedScenario['id']
       return /unicode/i.test(title);
     case 'editability':
       return /editab|read-only|readonly/i.test(title);
+    case 'required-state':
+      return /required-state|required\/optional|optional/i.test(title);
     case 'accessible-name':
       return /accessible name/i.test(title);
     case 'validation-state':

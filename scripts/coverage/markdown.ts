@@ -1,4 +1,6 @@
-import type { AssignedScenario, CoverageReport, CoverageRecord } from './types';
+import { REQUIRED_TRACKED_TYPES, displayCoverageStatus } from './project-status';
+import { percent } from './status';
+import type { AssignedScenario, CoverageReport, CoverageRecord, CoverageStatus } from './types';
 
 function cell(value: string | number | boolean | null | undefined): string {
   return String(value ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
@@ -34,8 +36,10 @@ export function renderTestInventory(report: CoverageReport): string {
     `- Playwright baseURL: ${report.playwrightBaseUrl}`,
     '',
     'Every discovered, configured, or capability item is listed. Nothing is silently omitted.',
-    'Status is TESTED / FAILED / BLOCKED / SKIPPED / NOT APPLICABLE / UNTESTABLE / UNCOVERED.',
-    'Coverage is tested ÷ testable. A FAILED item still counts as covered.',
+    'Status is TESTED / FAILED / BLOCKED / SKIPPED WITH REASON / NOT APPLICABLE / UNTESTABLE / UNCOVERED.',
+    'Engine status SKIPPED is printed as SKIPPED WITH REASON (a reason is always recorded).',
+    'Coverage is covered (TESTED + FAILED) ÷ testable. A FAILED item still counts as covered. Pass rate is not coverage.',
+    'NOT_DISCOVERED categories (tables, dropdowns, …) are listed as NOT APPLICABLE with reason “not observed in discovery” — they are not invented product rows.',
     '',
   ];
 
@@ -53,7 +57,7 @@ export function renderTestInventory(report: CoverageReport): string {
             record?.page ?? item.page ?? item.route ?? item.source,
             record?.element ?? item.name,
             record?.type ?? item.elementType ?? item.kind,
-            record?.status ?? 'UNCOVERED',
+            displayCoverageStatus((record?.status ?? 'UNCOVERED') as CoverageStatus),
             record?.reason ?? '',
             record?.recommendedTest ?? '',
             scenarioSummary(item.applicableScenarios),
@@ -86,8 +90,14 @@ export function renderCoverageMatrix(report: CoverageReport): string {
         ['Discovered items (from discovery inventories)', t.discoveredItems],
         ['Testable items (have ≥1 executable scenario)', t.testableItems],
         ['Covered items (TESTED + FAILED)', t.testedItems],
+        ['TESTED count (executed, did not fail)', t.testedCount],
+        ['FAILED count (executed — still covered)', t.failedCount],
+        ['BLOCKED count (never treated as TESTED)', t.blockedCount],
         ['UNCOVERED (testable, no evidence)', t.uncoveredItems],
-        ['Item coverage (covered ÷ testable)', formatPercent(t.itemCoveragePercent)],
+        ['Item coverage (covered ÷ testable — existing formula)', formatPercent(t.itemCoveragePercent)],
+        ['Scope items (testable + BLOCKED)', t.scopeItems],
+        ['Scope coverage (covered ÷ testable+BLOCKED)', formatPercent(t.scopeCoveragePercent)],
+        ['Complete (not login-only; no BLOCKED/UNCOVERED residual)', t.complete ? 'yes' : 'no'],
         ['Executable scenarios', t.executableScenarios],
         ['Scenarios actually tested', t.testedScenarios],
         ['Scenario coverage (tested ÷ executable)', formatPercent(t.scenarioCoveragePercent)],
@@ -106,6 +116,8 @@ export function renderCoverageMatrix(report: CoverageReport): string {
     report.formula.testableItemDefinition,
     '',
     report.formula.coverageDefinition,
+    '',
+    report.formula.scopeDefinition,
     '',
     `**Warning:** ${report.formula.warning}`,
     '',
@@ -147,7 +159,46 @@ export function renderCoverageMatrix(report: CoverageReport): string {
     '',
     table(
       ['Status', 'Count'],
-      Object.entries(t.byStatus).map(([label, count]) => [label, count])
+      Object.entries(t.byStatus).map(([label, count]) => [
+        displayCoverageStatus(label as CoverageStatus),
+        count,
+      ])
+    ),
+    '',
+    '## Project status mapping',
+    '',
+    'Discovery and suite statuses are mapped onto the coverage engine. Nothing is dropped.',
+    '',
+    table(
+      ['Project status', 'Coverage status', 'When'],
+      [
+        ['NOT_TESTED', 'BLOCKED', 'Safety-blocked action (form submit is never auto-authorized)'],
+        ['REQUIRES_CONFIGURATION', 'BLOCKED', 'Credentials, auth contract, or heavy-profile authorization missing'],
+        ['NOT_EXECUTED', 'SKIPPED WITH REASON or UNCOVERED', 'Suite or engine did not run; reason is recorded'],
+        ['NOT_DISCOVERED', 'NOT APPLICABLE', 'Category not observed in discovery — not an invented product item'],
+      ]
+    ),
+    '',
+    '## Tracked types (discovery + configured suites)',
+    '',
+    'Only discovered items and configured/capability suites are counted. Absent UI types are NOT APPLICABLE, not invented.',
+    '',
+    table(
+      ['Type', 'Items', 'Testable', 'Covered', 'UNCOVERED', 'BLOCKED', 'N/A', 'Coverage'],
+      REQUIRED_TRACKED_TYPES.map((tracked) => {
+        const kinds = new Set<string>(tracked.kinds);
+        const rows = report.records.filter((row) => kinds.has(row.kind));
+        const items = report.items.filter((item) => kinds.has(item.kind));
+        const testable = items.filter((item) =>
+          item.applicableScenarios.some((scenario) => scenario.disposition === 'executable')
+        ).length;
+        const covered = rows.filter((row) => row.status === 'TESTED' || row.status === 'FAILED').length;
+        const uncovered = rows.filter((row) => row.status === 'UNCOVERED').length;
+        const blocked = rows.filter((row) => row.status === 'BLOCKED').length;
+        const notApplicable = rows.filter((row) => row.status === 'NOT APPLICABLE').length;
+        const coverage = testable === 0 ? 'n/a (not testable)' : formatPercent(percent(covered, testable));
+        return [tracked.label, rows.length, testable, covered, uncovered, blocked, notApplicable, coverage];
+      })
     ),
     '',
     '## Advanced dimensions',
@@ -155,7 +206,7 @@ export function renderCoverageMatrix(report: CoverageReport): string {
     'Each row is discovered testable items for that dimension — not the number of passing tests.',
     '',
     table(
-      ['Dimension', 'Discovered', 'Testable', 'Covered', 'Uncovered', 'Coverage', 'TESTED', 'FAILED', 'BLOCKED', 'SKIPPED', 'N/A', 'UNTESTABLE'],
+      ['Dimension', 'Discovered', 'Testable', 'Covered', 'Uncovered', 'Coverage', 'TESTED', 'FAILED', 'BLOCKED', 'SKIPPED WITH REASON', 'N/A', 'UNTESTABLE'],
       report.dimensions.map((row) => [
         row.label,
         row.discovered,
@@ -189,6 +240,24 @@ export function renderCoverageMatrix(report: CoverageReport): string {
     '',
   ];
 
+  lines.push(
+    '## Risk areas',
+    '',
+    'High-uncovered, blocked, and failed clusters from inventory + evidence. Pages, APIs, and routes are not invented.',
+    ''
+  );
+  if (report.riskAreas.length === 0) {
+    lines.push('No clustered risk areas were derived from the current inventory.', '');
+  } else {
+    lines.push(
+      table(
+        ['Severity', 'Category', 'Area', 'Items', 'Reason'],
+        report.riskAreas.map((row) => [row.severity, row.category, row.title, row.itemCount, row.reason])
+      ),
+      ''
+    );
+  }
+
   if (report.targetMismatch) {
     lines.push(
       '## Target mismatch',
@@ -215,7 +284,7 @@ export function renderUncovered(report: CoverageReport): string {
     'Generated by `npm run coverage`. Every item that is not TESTED is listed with page, element, type, reason, recommended test, and status. Nothing is silently omitted.',
     '',
     `- Generated at: ${report.generatedAt}`,
-    `- Items not TESTED: ${listed.length} (UNCOVERED ${report.totals.uncoveredItems}; others are FAILED / BLOCKED / SKIPPED / NOT APPLICABLE / UNTESTABLE)`,
+    `- Items not TESTED: ${listed.length} (UNCOVERED ${report.totals.uncoveredItems}; others are FAILED / BLOCKED / SKIPPED WITH REASON / NOT APPLICABLE / UNTESTABLE)`,
     '',
   ];
 
@@ -228,14 +297,61 @@ export function renderUncovered(report: CoverageReport): string {
   const statuses = [...new Set(listed.map((row) => row.status))];
   for (const status of statuses) {
     const rows = listed.filter((row) => row.status === status);
-    lines.push(`## ${status} (${rows.length})`, '');
+    lines.push(`## ${displayCoverageStatus(status)} (${rows.length})`, '');
     lines.push(
       table(
         ['ID', 'Page', 'Element', 'Type', 'Status', 'Reason', 'Recommended test'],
-        rows.map((row) => [row.id, row.page, row.element, row.type, row.status, row.reason, row.recommendedTest])
+        rows.map((row) => [
+          row.id,
+          row.page,
+          row.element,
+          row.type,
+          displayCoverageStatus(row.status),
+          row.reason,
+          row.recommendedTest,
+        ])
       ),
       ''
     );
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+export function renderCoverageFindings(report: CoverageReport): string {
+  const t = report.totals;
+  const lines = [
+    '# Coverage Findings',
+    '',
+    'Generated by `npm run coverage`. Coverage is **not** pass rate. FAILED items stay covered. BLOCKED is never TESTED.',
+    '',
+    `- Generated at: ${report.generatedAt}`,
+    `- Discovery seed: ${report.seedUrl ?? 'not available'}`,
+    `- Formula: ${report.formula.coverageDefinition}`,
+    `- Item coverage: ${t.testedItems}/${t.testableItems} = ${t.itemCoveragePercent}% (testable-only formula)`,
+    `- Scope coverage: ${t.testedItems}/${t.scopeItems} = ${t.scopeCoveragePercent}% (testable + BLOCKED)`,
+    `- TESTED ${t.testedCount} · FAILED ${t.failedCount} · BLOCKED ${t.blockedCount} · UNCOVERED ${t.uncoveredItems}`,
+    `- Complete: ${t.complete ? 'yes' : 'no'}${
+      t.complete
+        ? ''
+        : ' — do not claim 100% product coverage. Item coverage is executable items only; BLOCKED residual and a login-only crawl keep complete=false.'
+    }`,
+    '',
+    '## Risk areas',
+    '',
+  ];
+
+  if (report.riskAreas.length === 0) {
+    lines.push('No clustered risk areas were derived from the current inventory.', '');
+  } else {
+    for (const row of report.riskAreas) {
+      lines.push(`### ${row.title}`, '');
+      lines.push(`- Severity: ${row.severity}`);
+      lines.push(`- Category: ${row.category}`);
+      lines.push(`- Items: ${row.itemCount} (${row.itemIds.join(', ') || 'none'})`);
+      lines.push(`- Reason: ${row.reason}`);
+      lines.push('');
+    }
   }
 
   return `${lines.join('\n')}\n`;

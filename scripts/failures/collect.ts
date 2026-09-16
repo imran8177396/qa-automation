@@ -9,9 +9,18 @@ import {
   type PlaywrightJsonAttachment,
   type PlaywrightJsonReport,
 } from '../lib/playwright-results';
-import { PLAYWRIGHT_SUITE_OUTPUT_PATHS } from '../lib/playwright-suites';
+import { PLAYWRIGHT_SUITE_OUTPUT_PATHS, toPosixRelative } from '../lib/playwright-suites';
 import { NOT_AVAILABLE } from '../lib/suite-origin';
-import type { FailureEvidence } from './types';
+import { collectFindingFailures, type FindingSourceSpec } from './collect-findings';
+import {
+  buildEvidenceRefs,
+  extractBrowserLogs,
+  extractNetworkExcerpt,
+  nearbyErrorContext,
+  resolveExistingArtifact,
+  stripOrUnavailable,
+} from './evidence';
+import type { EvidenceSourceScan, FailureEvidence } from './types';
 
 function isFailedStatus(status: string | undefined): boolean {
   const upper = (status ?? '').toUpperCase();
@@ -24,24 +33,30 @@ function isFailedStatus(status: string | undefined): boolean {
   );
 }
 
-function attachmentPath(
+function attachmentMatch(
   attachments: PlaywrightJsonAttachment[] | undefined,
-  kind: 'screenshot' | 'trace' | 'video'
-): string | null {
-  if (!attachments?.length) return null;
-  const match = attachments.find((row) => {
+  kind: 'screenshot' | 'trace' | 'video' | 'log'
+): PlaywrightJsonAttachment | undefined {
+  if (!attachments?.length) return undefined;
+  return attachments.find((row) => {
     const name = (row.name ?? '').toLowerCase();
     const type = (row.contentType ?? '').toLowerCase();
     if (kind === 'screenshot') return type.startsWith('image/') || name.includes('screenshot');
     if (kind === 'trace') return name === 'trace' || type.includes('zip') || name.includes('trace');
-    return type.startsWith('video/') || name.includes('video');
+    if (kind === 'video') return type.startsWith('video/') || name.includes('video');
+    return (
+      name === 'error-context' ||
+      name.includes('error-context') ||
+      name === 'stdout' ||
+      name === 'stderr' ||
+      type.includes('text/markdown') ||
+      type.includes('text/plain')
+    );
   });
-  return match?.path ?? null;
 }
 
-function textOrUnavailable(value: string): string {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : NOT_AVAILABLE;
+function attachmentRecordedPath(row: PlaywrightJsonAttachment | undefined): string | null {
+  return row?.path ? row.path : null;
 }
 
 interface PlaywrightSource {
@@ -49,7 +64,7 @@ interface PlaywrightSource {
   reportPath: string;
 }
 
-function playwrightSources(): PlaywrightSource[] {
+export function playwrightSources(): PlaywrightSource[] {
   const seen = new Set<string>();
   const rows: PlaywrightSource[] = [];
 
@@ -93,15 +108,26 @@ function collectPlaywright(reportPath: string, source: string): FailureEvidence[
 
       for (const result of results) {
         if (!isFailedStatus(result.status)) continue;
-        const errorMessage = textOrUnavailable(combinedErrorMessage(result));
-        const stackTrace = textOrUnavailable(combinedErrorStack(result));
-        const screenshot = attachmentPath(result.attachments, 'screenshot');
+        const errorMessage = stripOrUnavailable(combinedErrorMessage(result));
+        const stackTrace = stripOrUnavailable(combinedErrorStack(result));
+        const screenshotRaw = attachmentRecordedPath(attachmentMatch(result.attachments, 'screenshot'));
+        const traceRaw = attachmentRecordedPath(attachmentMatch(result.attachments, 'trace'));
+        const videoRaw = attachmentRecordedPath(attachmentMatch(result.attachments, 'video'));
+        const logRaw = attachmentRecordedPath(attachmentMatch(result.attachments, 'log'));
+        const screenshot = resolveExistingArtifact(screenshotRaw);
+        const trace = resolveExistingArtifact(traceRaw);
+        const video = resolveExistingArtifact(videoRaw);
+        const logAttach = resolveExistingArtifact(logRaw);
+        const nearbyLog = nearbyErrorContext(screenshot.recordedPath ?? trace.recordedPath);
+        const logPath = logAttach.present ? logAttach.recordedPath : nearbyLog;
+        const consoleLog = extractBrowserLogs(errorMessage);
+        const networkLog = extractNetworkExcerpt(`${errorMessage}\n${stackTrace}`);
         const durationMs =
           typeof result.duration === 'number' && Number.isFinite(result.duration)
             ? result.duration
             : NOT_AVAILABLE;
 
-        rows.push({
+        const row: FailureEvidence = {
           id: `${source.toUpperCase()}-${String(seq++).padStart(4, '0')}`,
           source,
           title,
@@ -113,29 +139,51 @@ function collectPlaywright(reportPath: string, source: string): FailureEvidence[
           durationMs,
           retryCount: result.retry ?? 0,
           attemptStatuses,
-          screenshotPath: screenshot,
-          screenshotPresent: Boolean(screenshot && fs.existsSync(screenshot)),
-          tracePath: attachmentPath(result.attachments, 'trace'),
-          videoPath: attachmentPath(result.attachments, 'video'),
-        });
+          screenshotPath: screenshot.recordedPath,
+          screenshotPresent: screenshot.present,
+          tracePath: trace.recordedPath,
+          videoPath: video.recordedPath,
+          videoPresent: video.present,
+          tracePresent: trace.present,
+          consoleLog,
+          networkLog,
+          logPath,
+          consolePresent: consoleLog !== NOT_AVAILABLE,
+          networkPresent: networkLog !== NOT_AVAILABLE,
+          logPresent: Boolean(logPath),
+          artifactSourcePath: toPosixRelative(path.resolve(reportPath)),
+        };
+        row.evidenceRefs = buildEvidenceRefs(row);
+        rows.push(row);
       }
     }
   }
   return rows;
 }
 
-function collectPostman(): FailureEvidence[] {
-  const postmanPath = path.join(PATHS.reports.postman, 'report.json');
-  if (!fs.existsSync(postmanPath)) return [];
-  const postman = JSON.parse(fs.readFileSync(postmanPath, 'utf8')) as {
+function collectPostman(postmanPath = path.join(PATHS.reports.postman, 'report.json')): {
+  evidence: FailureEvidence[];
+  scan: EvidenceSourceScan;
+} {
+  const resolved = path.resolve(postmanPath);
+  const present = fs.existsSync(resolved);
+  const scan: EvidenceSourceScan = {
+    source: 'postman',
+    path: toPosixRelative(resolved),
+    present,
+    failureCount: 0,
+  };
+  if (!present) return { evidence: [], scan };
+
+  const postman = JSON.parse(fs.readFileSync(resolved, 'utf8')) as {
     run?: { failures?: Array<{ error?: { message?: string }; source?: { name?: string } }> };
   };
-  const rows: FailureEvidence[] = [];
+  const evidence: FailureEvidence[] = [];
   let seq = 1;
   for (const failure of postman.run?.failures ?? []) {
     const title = failure.source?.name ?? NOT_AVAILABLE;
-    const errorMessage = textOrUnavailable(failure.error?.message ?? '');
-    rows.push({
+    const errorMessage = stripOrUnavailable(failure.error?.message ?? '');
+    const row: FailureEvidence = {
       id: `POSTMAN-${String(seq++).padStart(4, '0')}`,
       source: 'postman',
       title,
@@ -151,16 +199,63 @@ function collectPostman(): FailureEvidence[] {
       screenshotPresent: false,
       tracePath: null,
       videoPath: null,
-    });
+      videoPresent: false,
+      tracePresent: false,
+      consoleLog: NOT_AVAILABLE,
+      networkLog: NOT_AVAILABLE,
+      logPath: toPosixRelative(resolved),
+      consolePresent: false,
+      networkPresent: false,
+      logPresent: true,
+      artifactSourcePath: toPosixRelative(resolved),
+    };
+    row.evidenceRefs = buildEvidenceRefs(row);
+    evidence.push(row);
   }
-  return rows;
+  scan.failureCount = evidence.length;
+  return { evidence, scan };
 }
 
-export function collectFailures(): FailureEvidence[] {
-  const rows: FailureEvidence[] = [];
-  for (const { source, reportPath } of playwrightSources()) {
-    rows.push(...collectPlaywright(reportPath, source));
+export interface CollectFailuresResult {
+  evidence: FailureEvidence[];
+  scans: EvidenceSourceScan[];
+}
+
+export interface CollectFailuresOptions {
+  playwrightReports?: Array<{ source: string; reportPath: string }>;
+  postmanReportPath?: string;
+  findingSources?: FindingSourceSpec[];
+}
+
+export function collectFailuresWithScans(options: CollectFailuresOptions = {}): CollectFailuresResult {
+  const evidence: FailureEvidence[] = [];
+  const scans: EvidenceSourceScan[] = [];
+  const playwright = options.playwrightReports ?? playwrightSources();
+
+  for (const { source, reportPath } of playwright) {
+    const resolved = path.resolve(reportPath);
+    const present = fs.existsSync(resolved);
+    const rows = present ? collectPlaywright(reportPath, source) : [];
+    scans.push({
+      source,
+      path: toPosixRelative(resolved),
+      present,
+      failureCount: rows.length,
+    });
+    evidence.push(...rows);
   }
-  rows.push(...collectPostman());
-  return rows;
+
+  const postman = collectPostman(options.postmanReportPath);
+  scans.push(postman.scan);
+  evidence.push(...postman.evidence);
+
+  const findings = collectFindingFailures(options.findingSources);
+  scans.push(...findings.scans);
+  evidence.push(...findings.evidence);
+
+  return { evidence, scans };
+}
+
+export function collectFailures(options: CollectFailuresOptions = {}): FailureEvidence[] {
+  return collectFailuresWithScans(options).evidence;
 }

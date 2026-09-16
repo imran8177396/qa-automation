@@ -1,4 +1,4 @@
-import type { ExpectedHttpStatus, PostmanRequestConfig, QaConfig } from '../../types';
+import type { ExpectedHttpStatus, PostmanAuthConfig, PostmanRequestConfig, QaConfig } from '../../types';
 import { resolveExpectedStatus } from '../../generators/postman-tests';
 import type {
   ApiAuthStance,
@@ -9,8 +9,14 @@ import type {
   PostmanReportLike,
 } from './types';
 
-const AUTH_NOT_EXECUTED_REASON =
-  'QA_API_TOKEN is absent and no application auth contract is documented. Authentication and authorization are NOT_EXECUTED — they are not counted as passing GET / duplicates.';
+const AUTH_NO_CONTRACT =
+  'No authentication or authorization contract is documented (postman.auth.type is none). Authentication and authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION — they are not counted as passing GET / duplicates.';
+
+const AUTH_TOKEN_ABSENT =
+  'A documented auth contract exists but QA_API_TOKEN (or the documented credential env vars) is absent. Authentication and authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION.';
+
+const TERMINOLOGY =
+  'API automation via Postman CLI. Sauce Demo discovery found 0 xhr/fetch/websocket APIs; executed requests are documented in qa.config.json postman.requests, not invented from the login page. expectedStatus is the documented intended status; collection assertions.statusCode is never auto-flipped. UNVERIFIED requests are excluded from the pass count. Authentication/authorization are NOT_EXECUTED when the contract is undocumented or QA_API_TOKEN is absent.';
 
 export function normalizeApiResultStatus(status: string | undefined): 'PASS' | 'FAIL' {
   const upper = (status ?? '').toUpperCase();
@@ -57,20 +63,49 @@ function collectionTestsPassed(exec: PostmanExecutionLike): boolean {
   return tests.every((test) => normalizeApiResultStatus(test.status) === 'PASS');
 }
 
-export function resolveAuthStance(tokenPresent: boolean): ApiAuthStance {
-  if (tokenPresent) {
+export function documentedAuthContract(auth?: PostmanAuthConfig): boolean {
+  return Boolean(auth?.type && auth.type !== 'none');
+}
+
+export function resolveAuthStance(input: {
+  tokenPresent: boolean;
+  usernamePresent?: boolean;
+  passwordPresent?: boolean;
+  auth?: PostmanAuthConfig;
+}): ApiAuthStance {
+  const documented = documentedAuthContract(input.auth);
+  const credentialsPresent =
+    input.auth?.type === 'basic'
+      ? Boolean(input.usernamePresent && input.passwordPresent)
+      : input.tokenPresent;
+
+  if (!documented) {
     return {
-      authentication: 'EXECUTED',
-      authorization: 'EXECUTED',
-      reason: 'QA_API_TOKEN is present. Auth assertions run only when postman.auth.type is not none and the target documents the contract.',
-      tokenPresent: true,
+      authentication: 'NOT_EXECUTED',
+      authorization: 'NOT_EXECUTED',
+      reason: AUTH_NO_CONTRACT,
+      tokenPresent: input.tokenPresent,
+      documentedContract: false,
     };
   }
+
+  if (!credentialsPresent) {
+    return {
+      authentication: 'NOT_EXECUTED',
+      authorization: 'NOT_EXECUTED',
+      reason: AUTH_TOKEN_ABSENT,
+      tokenPresent: input.tokenPresent,
+      documentedContract: true,
+    };
+  }
+
   return {
-    authentication: 'NOT_EXECUTED',
-    authorization: 'NOT_EXECUTED',
-    reason: AUTH_NOT_EXECUTED_REASON,
-    tokenPresent: false,
+    authentication: 'EXECUTED',
+    authorization: 'EXECUTED',
+    reason:
+      'Documented postman.auth contract is present and credentials were provided. Auth assertions run only for that documented contract — tokens are not written to reports.',
+    tokenPresent: input.tokenPresent,
+    documentedContract: true,
   };
 }
 
@@ -112,14 +147,15 @@ function authRows(auth: ApiAuthStance, startIndex: number): ApiSection27Request[
       method: 'GET',
       endpoint: 'Not Provided',
       path: '/',
+      source: 'capability',
       statusCode: 'NOT_EXECUTED',
       expectedStatus: 'UNVERIFIED',
       collectionAssertedStatus: null,
       collectionAssertionResult: 'NOT_EXECUTED',
       responseTimeMs: 0,
-      assertion: 'Authentication contract — NOT_EXECUTED because QA_API_TOKEN is absent',
+      assertion: 'Authentication contract — NOT_EXECUTED / REQUIRES_CONFIGURATION',
       result: 'NOT_EXECUTED',
-      flags: ['NOT_EXECUTED', 'AUTH_TOKEN_ABSENT'],
+      flags: ['NOT_EXECUTED', 'REQUIRES_CONFIGURATION', auth.documentedContract ? 'AUTH_TOKEN_ABSENT' : 'AUTH_CONTRACT_ABSENT'],
       includedInPassCount: false,
       note: auth.reason,
     },
@@ -129,14 +165,15 @@ function authRows(auth: ApiAuthStance, startIndex: number): ApiSection27Request[
       method: 'GET',
       endpoint: 'Not Provided',
       path: '/',
+      source: 'capability',
       statusCode: 'NOT_EXECUTED',
       expectedStatus: 'UNVERIFIED',
       collectionAssertedStatus: null,
       collectionAssertionResult: 'NOT_EXECUTED',
       responseTimeMs: 0,
-      assertion: 'Authorization contract — NOT_EXECUTED because QA_API_TOKEN is absent',
+      assertion: 'Authorization contract — NOT_EXECUTED / REQUIRES_CONFIGURATION',
       result: 'NOT_EXECUTED',
-      flags: ['NOT_EXECUTED', 'AUTH_TOKEN_ABSENT'],
+      flags: ['NOT_EXECUTED', 'REQUIRES_CONFIGURATION', auth.documentedContract ? 'AUTH_TOKEN_ABSENT' : 'AUTH_CONTRACT_ABSENT'],
       includedInPassCount: false,
       note: auth.reason,
     },
@@ -147,12 +184,23 @@ export function parsePostmanReportForSection27(input: {
   report: PostmanReportLike | null;
   config: QaConfig;
   tokenPresent: boolean;
+  usernamePresent?: boolean;
+  passwordPresent?: boolean;
+  discoveryNote?: string;
   generatedAt?: string;
 }): ApiSection27Artifact {
   const navDefault = input.config.postman.expectationPolicy?.navReachableDefault ?? 200;
   const executions = input.report?.run?.executions ?? [];
-  const auth = resolveAuthStance(input.tokenPresent);
+  const auth = resolveAuthStance({
+    tokenPresent: input.tokenPresent,
+    usernamePresent: input.usernamePresent,
+    passwordPresent: input.passwordPresent,
+    auth: input.config.postman.auth,
+  });
   const flaggedAssertions = input.config.postman.requests.flatMap((request) => request.assertionFlags ?? []);
+  const discoveryNote =
+    input.discoveryNote ??
+    'Sauce Demo discovery found 0 xhr/fetch/websocket APIs. Executed requests are documented in qa.config.json, not invented from the login page.';
 
   const requests: ApiSection27Request[] = executions.map((exec, index) => {
     const matched = matchRequest(input.config, exec);
@@ -170,11 +218,7 @@ export function parsePostmanReportForSection27(input: {
         : 'Status not named in Postman report');
     const flags = [...(matched?.assertionFlags?.flatMap((flag) => flag.flags) ?? [])];
     if (expectedStatus === 'UNVERIFIED') flags.push('UNVERIFIED');
-    if (
-      typeof expectedStatus === 'number' &&
-      actualStatus != null &&
-      actualStatus !== expectedStatus
-    ) {
+    if (typeof expectedStatus === 'number' && actualStatus != null && actualStatus !== expectedStatus) {
       flags.push('EXPECTED_VS_ACTUAL_MISMATCH');
     }
 
@@ -184,6 +228,7 @@ export function parsePostmanReportForSection27(input: {
       method: exec.requestExecuted?.method ?? matched?.method ?? 'GET',
       endpoint: executionEndpoint(exec),
       path: matched ? normalizePath(matched.path) : executionPath(exec),
+      source: matched ? 'config' : 'discovery',
       statusCode: actualStatus == null ? 'Not Provided' : String(actualStatus),
       expectedStatus,
       collectionAssertedStatus: matched?.assertions?.statusCode ?? null,
@@ -209,8 +254,8 @@ export function parsePostmanReportForSection27(input: {
   return {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     collection: input.report?.run?.meta?.collectionName ?? input.config.postman.collectionName,
-    terminology:
-      'API automation via Postman CLI. expectedStatus is the documented intended status; collection assertions.statusCode is never auto-flipped. UNVERIFIED requests are excluded from the pass count. Authentication/authorization are NOT_EXECUTED when QA_API_TOKEN is absent.',
+    terminology: TERMINOLOGY,
+    discoveryNote,
     auth,
     requests,
     counts: {

@@ -38,6 +38,11 @@ describe('resolveSuiteStatus', () => {
     assert.equal(resolveSuiteStatus({ executedCount: 4, invalid: true }), 'INVALID');
   });
 
+  it('returns BLOCKED when marked blocked and never treats that as PASS', () => {
+    assert.equal(resolveSuiteStatus({ executedCount: 0, blocked: true }), 'BLOCKED');
+    assert.notEqual(resolveSuiteStatus({ executedCount: 1, passedCount: 1, blocked: true }), 'PASS');
+  });
+
   it('returns PASS only when items executed and none failed', () => {
     assert.equal(resolveSuiteStatus({ executedCount: 3, passedCount: 3, failedCount: 0 }), 'PASS');
   });
@@ -64,6 +69,13 @@ describe('rollupStageGroups', () => {
     assert.deepEqual(rollup.passed, ['Playwright UI/E2E']);
     assert.deepEqual(rollup.failed, ['API testing', 'SEO QA']);
     assert.deepEqual(rollup.notExecuted, ['Visual testing', 'Controlled retest', 'Failure analysis']);
+  });
+
+  it('never counts BLOCKED toward passed or failed stages', () => {
+    const rollup = rollupStageGroups([{ name: 'Allure report', status: 'BLOCKED' }]);
+    assert.deepEqual(rollup.passed, []);
+    assert.deepEqual(rollup.failed, []);
+    assert.deepEqual(rollup.notExecuted, ['Allure report']);
   });
 
   it('never counts NOT_EXECUTED toward passed stages', () => {

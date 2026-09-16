@@ -7,14 +7,21 @@ import { logStep, logSuccess, logWarn, logError } from './lib/logger';
 import { resolveDiscoveryConfig } from './core/scope';
 import { resolveSafetyConfig } from './core/safety-policy';
 import { crawl } from './discovery/crawler';
+import { loadRuntimeEnv } from './lib/load-runtime-env';
+import { discoveryCredentials } from './discovery/credentials';
 import { inventoryPage } from './inventory/element-inventory';
 import { classifyElements } from './inventory/classify-elements';
 import { generateChecks } from './planning/generate-checks';
+import { generateUiChecks } from './planning/generate-ui-checks';
+import { readJsonIfExists } from './discovery/write-json';
+import type { PageMap } from './discovery/page-map';
+import type { UiInventory } from './discovery/ui-scan';
 import { analyzeSeo, isSeoSkippedPage } from './seo/analyze-seo';
 import { runE2eAndGeneratedCheck, runPlaywright } from './runners/playwright';
 import { runPostman } from './runners/postman';
 import { runJmeter } from './runners/jmeter';
 import { runLighthouse } from './lighthouse/run';
+import { runUiPerformance } from './performance/run-ui';
 import type { DiscoveryResult } from './discovery/types';
 import type { InventoryResult } from './inventory/types';
 import type { SafetyConfigResolved } from './core/safety-policy';
@@ -76,6 +83,7 @@ async function inventorySite(
 }
 
 async function main(): Promise<void> {
+  loadRuntimeEnv();
   const { url, maxPages } = parseArgs();
   const config = loadConfig();
 
@@ -97,7 +105,7 @@ async function main(): Promise<void> {
   fs.mkdirSync(PATHS.reports.discovery, { recursive: true });
 
   logStep('Crawling site');
-  const discovery = await crawl(url, { ...discoveryOptions, safety });
+  const discovery = await crawl(url, { ...discoveryOptions, safety, credentials: discoveryCredentials() });
   fs.writeFileSync(PATHS.discoveryFile, `${JSON.stringify(discovery, null, 2)}\n`, 'utf8');
   logSuccess(
     `Discovered ${discovery.pages.length} page(s) from ${discovery.seedUrl} (truncated: ${discovery.truncated})`
@@ -109,9 +117,17 @@ async function main(): Promise<void> {
   logSuccess(`Inventoried ${inventory.elements.length} element(s) across ${inventory.pages} page(s)`);
 
   logStep('Planning checks');
-  const plannedChecks = generateChecks(discovery, inventory);
+  const pageMap = readJsonIfExists<PageMap>(PATHS.pageMapFile);
+  const uiInventory = readJsonIfExists<UiInventory>(PATHS.uiInventoryFile);
+  const plannedChecks =
+    pageMap && uiInventory
+      ? generateUiChecks(pageMap, uiInventory, safety)
+      : generateChecks(discovery, inventory);
   fs.mkdirSync(path.dirname(PATHS.plannedChecksFile), { recursive: true });
   fs.writeFileSync(PATHS.plannedChecksFile, `${JSON.stringify(plannedChecks, null, 2)}\n`, 'utf8');
+  if (pageMap && uiInventory) {
+    logSuccess('Planned checks from current discovery page-map + ui-inventory (generateUiChecks)');
+  }
   const gated = plannedChecks.filter((check) => check.status !== 'PLANNED').length;
   logSuccess(
     `Planned ${plannedChecks.length} check(s) — ${plannedChecks.length - gated} runnable, ${gated} blocked/not-tested/requires-configuration`
@@ -136,12 +152,14 @@ async function main(): Promise<void> {
     : await runPlaywright(config, { suiteName: 'generated-check', grep: '@generated' });
 
   let postmanPassed = true;
+  let uiPassed = true;
   let jmeterPassed = true;
   let lighthousePassed = true;
 
   if (originMatches) {
     logStep('Origin matches qa.config.json — running configured API/performance suites too');
     postmanPassed = await runPostman(config);
+    uiPassed = await runUiPerformance(config);
     jmeterPassed = await runJmeter(config);
     lighthousePassed = await runLighthouse(config);
   } else {
@@ -155,6 +173,7 @@ async function main(): Promise<void> {
   const results = [
     { name: 'Discovery E2E', tool: 'Playwright', passed: playwrightPassed, report: PATHS.reports.playwright },
     { name: 'API', tool: 'Postman CLI', passed: postmanPassed, report: path.join(PATHS.reports.postman, 'report.json') },
+    { name: 'UI performance', tool: 'Playwright', passed: uiPassed, report: PATHS.uiPerformanceSummary },
     { name: 'Performance', tool: 'JMeter', passed: jmeterPassed, report: path.join(PATHS.reports.jmeter, 'html') },
     { name: 'Core Web Vitals', tool: 'Lighthouse', passed: lighthousePassed, report: PATHS.lighthouseSummary },
   ];

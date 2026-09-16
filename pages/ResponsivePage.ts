@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { type Locator, type Page, type TestInfo, expect } from '@playwright/test';
 import { BasePage } from './BasePage';
+import { LoginForm } from '../components/LoginForm';
 import { collectLayout, type LayoutSnapshot } from '../scripts/responsive/collect-layout';
 import { formatFinding, slugFinding, type ResponsiveFinding } from '../scripts/responsive/findings';
 import {
@@ -11,10 +12,16 @@ import {
   documentHasHorizontalOverflow,
   isCollapsed,
 } from '../scripts/responsive/geometry';
+import { plannedNotApplicableReason } from '../scripts/responsive/applicability';
+import { sampleValues } from '../scripts/planning/sample-values';
 import { PATHS } from '../scripts/lib/paths';
 import type { ViewportProfile } from '../scripts/responsive/viewports';
 
+const ALIGNMENT_SLACK_PX = 24;
+
 export class ResponsivePage extends BasePage {
+  readonly loginForm: LoginForm;
+
   constructor(
     page: Page,
     private readonly profile: ViewportProfile,
@@ -22,10 +29,11 @@ export class ResponsivePage extends BasePage {
     private readonly pageName: string
   ) {
     super(page);
+    this.loginForm = new LoginForm(page);
   }
 
   get header(): Locator {
-    return this.page.locator('header, [data-qa="header"]');
+    return this.page.getByRole('banner').or(this.page.locator('header, [data-qa="header"]'));
   }
 
   get hero(): Locator {
@@ -41,15 +49,15 @@ export class ResponsivePage extends BasePage {
   }
 
   get form(): Locator {
-    return this.page.locator('form');
+    return this.loginForm.root.or(this.page.getByRole('form')).or(this.page.locator('form'));
   }
 
   get table(): Locator {
-    return this.page.locator('table');
+    return this.page.getByRole('table').or(this.page.locator('table'));
   }
 
   get footer(): Locator {
-    return this.page.locator('footer, [data-qa="footer"]');
+    return this.page.getByRole('contentinfo').or(this.page.locator('footer, [data-qa="footer"]'));
   }
 
   get menuToggle(): Locator {
@@ -57,15 +65,25 @@ export class ResponsivePage extends BasePage {
   }
 
   get siteNav(): Locator {
-    return this.page.locator('[data-qa="nav"], nav').first();
+    return this.page.getByRole('navigation').or(this.page.locator('[data-qa="nav"], nav')).first();
   }
 
   get modal(): Locator {
-    return this.page.locator('[data-qa="modal"]');
+    return this.page.getByRole('dialog').or(this.page.locator('[data-qa="modal"]'));
   }
 
   get dropdown(): Locator {
-    return this.page.locator('[data-qa="dropdown"]');
+    return this.page.locator('[data-qa="dropdown"]').or(this.page.locator('select'));
+  }
+
+  /** First heading of any level — Sauce Demo login has h4s, not an h1. */
+  get observedHeading(): Locator {
+    return this.page.getByRole('heading').first();
+  }
+
+  /** Visible brand text on the Sauce Demo login screen. */
+  get brand(): Locator {
+    return this.page.getByText('Swag Labs', { exact: true });
   }
 
   async open(targetPath: string): Promise<void> {
@@ -84,7 +102,7 @@ export class ResponsivePage extends BasePage {
     const overflow = documentHasHorizontalOverflow(snap.scrollWidth, snap.clientWidth);
     await this.assert(!overflow, {
       element: 'document',
-      expected: 'page scrollWidth stays within the layout viewport (no horizontal overflow)',
+      expected: 'page scrollWidth stays within the emulated viewport (no horizontal overflow)',
       actual: overflow
         ? `scrollWidth=${snap.scrollWidth} clientWidth=${snap.clientWidth} viewport=${snap.viewportWidth}`
         : 'no horizontal overflow',
@@ -99,7 +117,7 @@ export class ResponsivePage extends BasePage {
       const overflow = boxOverflowsViewport(landmark.box, snap.viewportWidth);
       await this.assert(!overflow, {
         element: landmark.name,
-        expected: `${landmark.name} stays within the ${this.profile.width}px layout viewport`,
+        expected: `${landmark.name} stays within the ${this.profile.width}px emulated viewport`,
         actual: overflow
           ? `box x=${landmark.box.x.toFixed(1)} width=${landmark.box.width.toFixed(1)} viewport=${snap.viewportWidth}`
           : 'within viewport',
@@ -137,6 +155,10 @@ export class ResponsivePage extends BasePage {
   async expectSiblingGroupsDoNotOverlap(): Promise<void> {
     const snap = await this.snapshot();
     for (const [group, boxes] of Object.entries(snap.siblingGroups)) {
+      if (boxes.length < 2) {
+        this.recordNotApplicable(group, this.absentReason(group, `${group} pattern is not present on ${this.pageName}`));
+        continue;
+      }
       for (let i = 0; i < boxes.length; i += 1) {
         for (let j = i + 1; j < boxes.length; j += 1) {
           const overlap = boxesOverlap(boxes[i], boxes[j]);
@@ -157,6 +179,10 @@ export class ResponsivePage extends BasePage {
     const a = snap.landmarks.find((row) => row.name === first);
     const b = snap.landmarks.find((row) => row.name === second);
     if (!a?.present || !b?.present || !a.visible || !b.visible || !a.box || !b.box) {
+      this.recordNotApplicable(
+        `${first} vs ${second}`,
+        this.absentReason(first, `${first} and/or ${second} are not present on ${this.pageName}`)
+      );
       return;
     }
     const overlap = boxesOverlap(a.box, b.box);
@@ -169,7 +195,13 @@ export class ResponsivePage extends BasePage {
 
   async expectImagesLoadedAndContained(): Promise<void> {
     const snap = await this.snapshot();
-    if (snap.images.length === 0) return;
+    if (snap.images.length === 0) {
+      this.recordNotApplicable(
+        'images',
+        this.absentReason('images', `no <img> is present on ${this.pageName}`)
+      );
+      return;
+    }
     for (const image of snap.images) {
       await this.assert(image.naturalWidth > 0, {
         element: `img:${image.name}`,
@@ -178,7 +210,7 @@ export class ResponsivePage extends BasePage {
       });
       await this.assert(!boxOverflowsViewport(image.box, snap.viewportWidth), {
         element: `img:${image.name}`,
-        expected: 'image stays within the layout viewport',
+        expected: 'image stays within the emulated viewport',
         actual: `x=${image.box.x.toFixed(1)} width=${image.box.width.toFixed(1)} viewport=${snap.viewportWidth}`,
       });
     }
@@ -187,11 +219,14 @@ export class ResponsivePage extends BasePage {
   async expectButtonsUsable(): Promise<void> {
     const snap = await this.snapshot();
     const visible = snap.buttons.filter((btn) => !isCollapsed(btn.box));
-    if (visible.length === 0) return;
+    if (visible.length === 0) {
+      this.recordNotApplicable('buttons', this.absentReason('buttons', `no visible button on ${this.pageName}`));
+      return;
+    }
     for (const button of visible) {
       await this.assert(!boxOverflowsViewport(button.box, snap.viewportWidth), {
         element: `button:${button.name}`,
-        expected: 'button remains within the layout viewport',
+        expected: 'button remains within the emulated viewport',
         actual: `x=${button.box.x.toFixed(1)} width=${button.box.width.toFixed(1)}`,
       });
     }
@@ -201,15 +236,35 @@ export class ResponsivePage extends BasePage {
     const snap = await this.snapshot();
     await this.assert(snap.bodyFontSize >= 14, {
       element: 'body typography',
-      expected: 'body font-size is at least 14px so text stays readable when the viewport shrinks',
+      expected: 'body font-size is at least 14px so text stays readable when the emulated viewport shrinks',
       actual: `font-size=${snap.bodyFontSize}px`,
     });
-    await expect(this.heading, this.message('h1', 'primary heading is visible', 'heading missing')).toBeVisible();
+
+    if ((await this.observedHeading.count()) > 0) {
+      await expect(
+        this.observedHeading,
+        this.message('heading', 'observed heading is visible', 'heading missing')
+      ).toBeVisible();
+      const headingSize = await this.observedHeading.evaluate((el) =>
+        Number.parseFloat(window.getComputedStyle(el).fontSize)
+      );
+      await this.assert(headingSize >= 14, {
+        element: 'heading typography',
+        expected: 'observed heading font-size is at least 14px',
+        actual: `font-size=${headingSize}px`,
+      });
+    } else {
+      this.recordNotApplicable('heading', this.absentReason('heading', `no heading on ${this.pageName}`));
+    }
+
+    if ((await this.brand.count()) > 0) {
+      await expect(this.brand.first(), this.message('brand', 'brand text is visible', 'brand missing')).toBeVisible();
+    }
   }
 
   async expectApplicableRegionVisible(name: string, locator: Locator): Promise<void> {
     if ((await locator.count()) === 0) {
-      this.recordNotApplicable(name, `${name} is not present on ${this.pageName}`);
+      this.recordNotApplicable(name, this.absentReason(name, `${name} is not present on ${this.pageName}`));
       return;
     }
     await expect(locator.first(), this.message(name, `${name} is visible`, 'not visible')).toBeVisible();
@@ -217,13 +272,13 @@ export class ResponsivePage extends BasePage {
 
   async expectNavigationChrome(): Promise<void> {
     if ((await this.siteNav.count()) === 0) {
-      this.recordNotApplicable('navigation', `navigation is not present on ${this.pageName}`);
+      this.recordNotApplicable('navigation', this.absentReason('navigation', `navigation is not present on ${this.pageName}`));
       return;
     }
     if (this.profile.compactChrome && (await this.menuToggle.count()) > 0) {
       await expect(
         this.menuToggle,
-        this.message('navigation', 'compact viewport exposes a menu toggle', 'toggle not visible')
+        this.message('navigation', 'compact emulated viewport exposes a menu toggle', 'toggle not visible')
       ).toBeVisible();
       return;
     }
@@ -254,29 +309,124 @@ export class ResponsivePage extends BasePage {
       await expect(this.page).toHaveURL(/index\.html|\/$/);
       return;
     }
-    this.recordNotApplicable('navigation', 'no in-scope Home/Contact link on this page');
+    this.recordNotApplicable(
+      'navigation',
+      this.absentReason('navigation', 'no in-scope Home/Contact link on this page')
+    );
   }
 
   async expectFormFillableWithoutSubmit(): Promise<void> {
-    const form = this.page.locator('form').first();
+    if ((await this.loginForm.username.count()) > 0) {
+      await this.expectLoginFormUsableWithoutSubmit();
+      return;
+    }
+
+    const form = this.page.getByRole('form').or(this.page.locator('form')).first();
     if ((await form.count()) === 0) {
-      this.recordNotApplicable('form', 'no form on this page');
+      this.recordNotApplicable('form', this.absentReason('form', 'no form on this page'));
       return;
     }
     await expect(form).toBeVisible();
-    const textField = form.locator('input:not([type="hidden"]):not([type="submit"]), textarea').first();
+    const textField = form.getByRole('textbox').or(form.locator('textarea')).first();
     if ((await textField.count()) === 0) {
       this.recordNotApplicable('form fields', 'form has no fillable text control');
       return;
     }
     await expect(textField).toBeVisible();
-    await textField.fill('Responsive tester');
-    await expect(textField).toHaveValue('Responsive tester');
+    const sample = sampleValues('text').valid;
+    await textField.fill(sample);
+    await expect(textField).toHaveValue(sample);
+  }
+
+  async expectLoginFormUsableWithoutSubmit(): Promise<void> {
+    await this.loginForm.expectFieldsPresent();
+    await this.expectLoginFormGeometry();
+    const username = sampleValues('text').valid;
+    const password = sampleValues('password').valid;
+    await this.loginForm.fillWithoutSubmit({ username, password });
+    await expect(this.loginForm.username).toHaveValue(username);
+    await expect(this.loginForm.password).toHaveValue(password);
+    await expect(this.loginForm.submitButton).toBeVisible();
+    await expect(this.loginForm.submitButton).toBeEnabled();
+  }
+
+  async expectLoginFormGeometry(): Promise<void> {
+    if ((await this.loginForm.username.count()) === 0) {
+      this.recordNotApplicable('login form geometry', 'No login username control on this page');
+      return;
+    }
+
+    const viewport = this.page.viewportSize();
+    expect(viewport, this.message('login form', 'emulated viewport is set', 'viewport missing')).not.toBeNull();
+
+    const formBox = await this.loginForm.root.boundingBox();
+    const user = await this.loginForm.username.boundingBox();
+    const pass = await this.loginForm.password.boundingBox();
+    const button = await this.loginForm.submitButton.boundingBox();
+
+    expect(formBox, this.message('login form', 'form has a rendered box', 'no box')).not.toBeNull();
+    expect(user, this.message('username', 'username has a rendered box', 'no box')).not.toBeNull();
+    expect(pass, this.message('password', 'password has a rendered box', 'no box')).not.toBeNull();
+    expect(button, this.message('login button', 'login button has a rendered box', 'no box')).not.toBeNull();
+
+    await this.assert(!isCollapsed(formBox!), {
+      element: 'login form',
+      expected: 'login form is not a collapsed container at this emulated viewport',
+      actual: `width=${formBox!.width} height=${formBox!.height}`,
+    });
+    await this.assert(!boxOverflowsViewport(formBox!, viewport!.width), {
+      element: 'login form',
+      expected: 'login form stays within the emulated viewport',
+      actual: `x=${formBox!.x.toFixed(1)} width=${formBox!.width.toFixed(1)} viewport=${viewport!.width}`,
+    });
+    await this.assert(!boxOverflowsViewport(user!, viewport!.width), {
+      element: 'username',
+      expected: 'username field stays within the emulated viewport',
+      actual: `x=${user!.x.toFixed(1)} width=${user!.width.toFixed(1)}`,
+    });
+    await this.assert(!boxOverflowsViewport(pass!, viewport!.width), {
+      element: 'password',
+      expected: 'password field stays within the emulated viewport',
+      actual: `x=${pass!.x.toFixed(1)} width=${pass!.width.toFixed(1)}`,
+    });
+    await this.assert(!boxOverflowsViewport(button!, viewport!.width), {
+      element: 'login button',
+      expected: 'login button stays visible within the emulated viewport',
+      actual: `x=${button!.x.toFixed(1)} width=${button!.width.toFixed(1)}`,
+    });
+    await this.assert(!boxesOverlap(user!, pass!), {
+      element: 'username vs password',
+      expected: 'username and password fields do not overlap',
+      actual: 'bounding boxes intersect',
+    });
+    await this.assert(!boxesOverlap(pass!, button!), {
+      element: 'password vs login button',
+      expected: 'password and login button do not overlap',
+      actual: 'bounding boxes intersect',
+    });
+    await this.assert(pass!.y > user!.y, {
+      element: 'login field stack',
+      expected: 'password sits below username at this emulated viewport',
+      actual: `username.y=${user!.y.toFixed(1)} password.y=${pass!.y.toFixed(1)}`,
+    });
+    await this.assert(button!.y > pass!.y, {
+      element: 'login button stack',
+      expected: 'login button sits below password at this emulated viewport',
+      actual: `password.y=${pass!.y.toFixed(1)} button.y=${button!.y.toFixed(1)}`,
+    });
+    await this.assert(Math.abs(user!.x - pass!.x) <= ALIGNMENT_SLACK_PX, {
+      element: 'login field alignment',
+      expected: `username/password horizontal alignment within ${ALIGNMENT_SLACK_PX}px`,
+      actual: `deltaX=${Math.abs(user!.x - pass!.x).toFixed(1)}`,
+    });
   }
 
   async expectMobileMenuBehavior(): Promise<void> {
     if ((await this.menuToggle.count()) === 0) {
-      this.recordNotApplicable('mobile menu', 'no menu toggle on this page');
+      this.recordNotApplicable(
+        'mobile menu',
+        this.absentReason('mobile menu', 'no menu toggle on this page')
+      );
       return;
     }
 
@@ -297,25 +447,29 @@ export class ResponsivePage extends BasePage {
   }
 
   async expectModalOpenClose(): Promise<void> {
-    const openBtn = this.page.locator('[data-qa="modal-open"]');
+    const openBtn = this.page.getByRole('button', { name: 'Open help' }).or(this.page.locator('[data-qa="modal-open"]'));
     if ((await openBtn.count()) === 0) {
-      this.recordNotApplicable('modal', 'no modal on this page');
+      this.recordNotApplicable('modal', this.absentReason('modal', 'no modal on this page'));
       return;
     }
     await openBtn.click();
     await expect(this.modal).toBeVisible();
-    await this.page.locator('[data-qa="modal-close"]').click();
+    await this.page.getByRole('button', { name: 'Close' }).or(this.page.locator('[data-qa="modal-close"]')).click();
     await expect(this.modal).toBeHidden();
   }
 
   async expectDropdownChange(): Promise<void> {
     if ((await this.dropdown.count()) === 0) {
-      this.recordNotApplicable('dropdown', 'no dropdown on this page');
+      this.recordNotApplicable('dropdown', this.absentReason('dropdown', 'no dropdown on this page'));
       return;
     }
     await expect(this.dropdown).toBeVisible();
     await this.dropdown.selectOption('billing');
     await expect(this.dropdown).toHaveValue('billing');
+  }
+
+  private absentReason(region: string, fallback: string): string {
+    return plannedNotApplicableReason(region) ?? fallback;
   }
 
   private message(element: string, expected: string, actual: string): string {

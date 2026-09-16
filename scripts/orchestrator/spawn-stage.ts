@@ -82,7 +82,9 @@ function finalizeStageResult(input: {
   const resolvedOutcome = resolveStageOutcome({ key: stage.key, processStatus, processFailed });
 
   if (resolvedOutcome.status === 'PASS') logSuccess(`${stage.name} exited 0`);
-  else if (
+  else if (resolvedOutcome.status === 'BLOCKED') {
+    logError(`${stage.name} BLOCKED — ${reason ?? 'required tool or configuration missing'}. Continuing.`);
+  } else if (
     resolvedOutcome.status === 'NOT_EXECUTED' ||
     resolvedOutcome.status === 'DRY_RUN' ||
     resolvedOutcome.status === 'RECORDED'

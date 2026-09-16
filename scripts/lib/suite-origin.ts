@@ -30,9 +30,14 @@ export function compareSuiteOriginToBaseUrl(suiteOrigin: string, baseURL: string
   return suite === configured ? 'VALID' : 'INVALID';
 }
 
+/**
+ * Expected Playwright origin: orchestrator `--url` / QA_PLAYWRIGHT_BASE_URL
+ * when set, otherwise `qa.config.json` playwright.baseURL.
+ */
 export function resolveConfiguredPlaywrightBaseUrl(): string {
-  const config = loadConfig();
-  return config.playwright.baseURL;
+  const fromEnv = process.env.QA_PLAYWRIGHT_BASE_URL?.trim();
+  if (fromEnv) return fromEnv;
+  return loadConfig().playwright.baseURL;
 }
 
 /** Resolved target the suite will actually hit (env override, then explicit, then config). */
@@ -42,10 +47,11 @@ export function resolveSuiteTargetOrigin(explicitUrl?: string): string {
 }
 
 /**
- * Fails the run early when a product suite's target does not match
- * `qa.config.json` playwright.baseURL. Visual / responsive / accessibility /
- * workflows are product suites — a live configured origin must not be replaced
- * by the local fixture.
+ * Fails the run early when a product suite's target does not match the
+ * resolved origin (`QA_PLAYWRIGHT_BASE_URL` / `--url`, else qa.config.json
+ * playwright.baseURL). Visual / responsive / accessibility / workflows are
+ * product suites — a live configured origin must not be replaced by the
+ * local fixture.
  */
 export function assertSuiteOriginMatchesBaseUrl(
   suiteName: PlaywrightSuiteName,
@@ -55,7 +61,7 @@ export function assertSuiteOriginMatchesBaseUrl(
   if (!suiteRequiresConfiguredOrigin(suiteName)) return;
   if (compareSuiteOriginToBaseUrl(suiteOrigin, baseURL) === 'INVALID') {
     throw new Error(
-      `Suite '${suiteName}' target origin (${suiteOrigin}) does not match qa.config.json playwright.baseURL (${baseURL}). Refusing to run against the wrong origin.`
+      `Suite '${suiteName}' target origin (${suiteOrigin}) does not match the resolved Playwright origin (${baseURL}). Refusing to run against the wrong origin.`
     );
   }
 }

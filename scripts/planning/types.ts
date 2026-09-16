@@ -44,6 +44,8 @@ export interface PlannedCheck {
   reason?: string;
   expect?: {
     requireH1?: boolean;
+    requireHeading?: boolean;
+    constraintInvalid?: boolean;
     locator?: string;
     visible?: boolean;
     enabled?: boolean;

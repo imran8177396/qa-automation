@@ -25,6 +25,15 @@ export function resolvePlaywrightBrowsers(playwright: PlaywrightConfig): Playwri
   return ['chromium'];
 }
 
+/**
+ * Dedicated cross-browser suite engines. Always Chromium + Firefox + WebKit,
+ * independent of `qa.config.json` `playwright.browsers` (that list stays for
+ * qa:all / e2e / generated-check). WebKit ≠ iOS Safari; Chromium ≠ Android Chrome.
+ */
+export function resolveCrossBrowserEngines(): PlaywrightBrowser[] {
+  return [...ALL_PLAYWRIGHT_BROWSERS];
+}
+
 export function isPlaywrightBrowserInstalled(browser: PlaywrightBrowser): boolean {
   try {
     // Lazy require so unit tests do not need a launched browser.

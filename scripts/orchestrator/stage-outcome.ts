@@ -1,7 +1,9 @@
+import fs from 'fs';
 import path from 'path';
 import { readJsonIfExists } from '../discovery/write-json';
 import { PATHS } from '../lib/paths';
 import { PLAYWRIGHT_SUITE_OUTPUT_PATHS } from '../lib/playwright-suites';
+import { allureResultsPresent, dirHasHtmlIndex, listPlaywrightHtmlReports } from '../lib/report-kinds';
 import { resolveSuiteStatus, type SuiteStatus } from '../lib/suite-status';
 import type { StageStatus } from './types';
 
@@ -27,13 +29,16 @@ interface CountHolder {
   pages?: unknown[] | number;
   elements?: unknown[];
   findings?: unknown[];
-  workflows?: unknown[];
+    workflows?: unknown[];
+  correlatedExecuted?: number;
+  correlationUsed?: boolean;
   checks?: unknown[];
   items?: unknown[];
   samples?: unknown[];
   requestCount?: number;
   failures?: number;
   successful?: number;
+  byFinalStatus?: { PASS?: number; FAIL?: number; NOT_EXECUTED?: number };
 }
 
 function playwrightCounts(filePath: string): ExecutedItemCounts | null {
@@ -71,6 +76,11 @@ export function readStageExecutedCounts(key: string): ExecutedItemCounts | null 
     case 'inventory': {
       const raw = readJsonIfExists<CountHolder>(PATHS.inventoryFile);
       const executedCount = arrayCount(raw?.elements);
+      return executedCount == null ? null : { executedCount, failedCount: 0, passedCount: executedCount };
+    }
+    case 'coverage-planning': {
+      const raw = readJsonIfExists<unknown[]>(PATHS.plannedChecksFile);
+      const executedCount = arrayCount(raw);
       return executedCount == null ? null : { executedCount, failedCount: 0, passedCount: executedCount };
     }
     case 'e2e': {
@@ -144,7 +154,18 @@ export function readStageExecutedCounts(key: string): ExecutedItemCounts | null 
     }
     case 'workflows': {
       const raw = readJsonIfExists<CountHolder>(path.join(PATHS.reports.workflows, 'summary.json'));
-      const executedCount = arrayCount(raw?.workflows);
+      if (!raw) return null;
+      const correlatedExecuted = numberCount(raw.correlatedExecuted);
+      if (correlatedExecuted != null) {
+        return {
+          executedCount: correlatedExecuted,
+          failedCount: 0,
+          passedCount: correlatedExecuted,
+          recorded: raw.correlationUsed === false && (arrayCount(raw.workflows) ?? 0) > 0,
+          selectedCount: arrayCount(raw.workflows) ?? 0,
+        };
+      }
+      const executedCount = arrayCount(raw.workflows);
       return executedCount == null ? null : { executedCount, failedCount: 0, passedCount: executedCount };
     }
     case 'analyze': {
@@ -158,8 +179,8 @@ export function readStageExecutedCounts(key: string): ExecutedItemCounts | null 
       if (!raw) return { executedCount: 0, failedCount: 0, passedCount: 0 };
       return {
         executedCount: numberCount(raw.executed) ?? 0,
-        failedCount: 0,
-        passedCount: 0,
+        failedCount: numberCount(raw.byFinalStatus?.FAIL) ?? 0,
+        passedCount: numberCount(raw.byFinalStatus?.PASS) ?? 0,
         dryRun: raw.dryRun === true,
         selectedCount: numberCount(raw.selected) ?? 0,
         recorded: raw.dryRun !== true && (numberCount(raw.selected) ?? 0) > 0,
@@ -169,6 +190,28 @@ export function readStageExecutedCounts(key: string): ExecutedItemCounts | null 
       const raw = readJsonIfExists<{ items?: unknown[]; totals?: { testableItems?: number } }>(PATHS.coverageJsonFile);
       const executedCount = arrayCount(raw?.items) ?? numberCount(raw?.totals?.testableItems);
       return executedCount == null ? null : { executedCount, failedCount: 0, passedCount: executedCount };
+    }
+    case 'allure': {
+      if (!allureResultsPresent(PATHS.allureResults)) {
+        return { executedCount: 0, failedCount: 0, passedCount: 0 };
+      }
+      if (dirHasHtmlIndex(PATHS.allureReport)) {
+        return { executedCount: 1, failedCount: 0, passedCount: 1 };
+      }
+      return { executedCount: 0, failedCount: 0, passedCount: 0 };
+    }
+    case 'playwright-reports': {
+      const suites = listPlaywrightHtmlReports(PATHS.reports.playwright);
+      if (suites.length === 0) return { executedCount: 0, failedCount: 0, passedCount: 0 };
+      return { executedCount: suites.length, failedCount: 0, passedCount: suites.length };
+    }
+    case 'report': {
+      const md = path.join(PATHS.reports.summary, 'final-qa-report.md');
+      const raw = readJsonIfExists<{ professionalError?: string | null }>(
+        path.join(PATHS.reports.summary, 'final-qa-report.json')
+      );
+      if (!raw && !fs.existsSync(md)) return null;
+      return { executedCount: 1, failedCount: 0, passedCount: 1 };
     }
     default:
       return null;
@@ -185,6 +228,16 @@ export function resolveStageOutcome(input: {
   }
   if (input.processStatus === 'NOT_EXECUTED') {
     return { status: 'NOT_EXECUTED', executedCount: 0 };
+  }
+
+  if (input.key === 'allure') {
+    if (!allureResultsPresent(PATHS.allureResults)) {
+      return { status: 'NOT_EXECUTED', executedCount: 0 };
+    }
+    if (dirHasHtmlIndex(PATHS.allureReport) && !input.processFailed) {
+      return { status: 'PASS', executedCount: 1 };
+    }
+    return { status: 'BLOCKED' };
   }
 
   const counts = readStageExecutedCounts(input.key);

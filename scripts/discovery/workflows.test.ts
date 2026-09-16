@@ -98,6 +98,48 @@ test('inferWorkflows() records form-submit as NOT_TESTED and never treats it as 
   assert.match(submit!.potentialAction, /NOT_TESTED|safety/i);
 });
 
+test('inferWorkflows() marks authentication DISCOVERED only after a successful discovery session', () => {
+  const inventory = inferWorkflows(emptyPageMap(), [], emptyApi(), {
+    attempted: true,
+    succeeded: true,
+    reason: 'Observed login form accepted the provided QA_USERNAME/QA_PASSWORD session',
+    loginPageUrl: 'https://example.com/',
+    afterUrl: 'https://example.com/inventory',
+  });
+  const auth = inventory.workflows.find((item) => item.kind === 'authentication');
+  assert.ok(auth);
+  assert.equal(auth!.status, 'DISCOVERED');
+});
+
+test('inferWorkflows() records gated inventory as REQUIRES_CONFIGURATION without inventing pages', () => {
+  const gated = emptyPageMap({
+    pages: [
+      {
+        url: 'https://example.com/inventory',
+        route: '/inventory',
+        title: 'Swag Labs',
+        status: 200,
+        ok: false,
+        depth: 1,
+        h1s: [],
+        access: 'gated',
+        gatedReason: 'Login wall observed',
+        applicableTestTypes: applicableTestTypes('pages'),
+      },
+    ],
+    auth: {
+      attempted: false,
+      succeeded: false,
+      reason: 'Login form observed; QA_USERNAME/QA_PASSWORD are not set',
+    },
+  });
+  const inventory = inferWorkflows(gated, [], emptyApi());
+  const row = inventory.workflows.find((item) => item.kind === 'gated');
+  assert.ok(row);
+  assert.equal(row!.status, 'REQUIRES_CONFIGURATION');
+  assert.match(row!.evidence, /inventory/);
+});
+
 test('applicableTestTypes() does not assign the same matrix to every category', () => {
   assert.deepEqual(applicableTestTypes('link'), ['broken-link', 'page-sanity']);
   assert.deepEqual(applicableTestTypes('image'), ['seo-alt', 'visibility']);

@@ -4,8 +4,10 @@ import { resolveResponsivePages } from '../../../scripts/responsive/pages';
 const RESPONSIVE_PAGES = resolveResponsivePages();
 
 /**
- * Layout behavior across emulated viewports.
- * Failures include page, viewport, element, expected vs actual, and a screenshot.
+ * Layout behavior across emulated viewports (Chromium page.setViewportSize).
+ * This is not a real device. Failures include page, viewport, element,
+ * expected vs actual, and a screenshot. Missing header/hero/footer pairs
+ * are NOT_APPLICABLE — they are not invented.
  */
 test.describe('responsive layout @responsive', () => {
   for (const pageDef of RESPONSIVE_PAGES) {

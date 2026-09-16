@@ -6,6 +6,7 @@ import { getEnv } from './utils/env';
 import { loadConfig } from './scripts/lib/load-config';
 import {
   PLAYWRIGHT_FAILURE_ARTIFACTS,
+  playwrightAllureReporterConfig,
   playwrightHtmlReporterConfig,
   playwrightJsonReporterConfig,
   resolvePlaywrightSuiteNameFromEnv,
@@ -51,10 +52,12 @@ export default defineConfig({
     ['list'],
     ['html', playwrightHtmlReporterConfig(suiteName)],
     ['json', playwrightJsonReporterConfig(suiteName)],
+    ['allure-playwright', playwrightAllureReporterConfig(suiteName)],
   ],
   use: {
     baseURL: getEnv('QA_PLAYWRIGHT_BASE_URL', loadConfig().playwright.baseURL),
     headless,
+    testIdAttribute: loadConfig().playwright.testIdAttribute ?? 'data-testid',
     ...PLAYWRIGHT_FAILURE_ARTIFACTS,
     actionTimeout: 15000,
     navigationTimeout: 35000,

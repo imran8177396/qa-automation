@@ -125,6 +125,29 @@ test('analyzeSeo() skips autoindex / directory-listing pages', () => {
   );
 });
 
+test('analyzeSeo() flags skipped heading levels from discovered headings', () => {
+  const findings = analyzeSeo(
+    makeDiscovery([
+      makePage({
+        h1s: [],
+        headings: [
+          { level: 'h4', text: 'Accepted usernames are:' },
+          { level: 'h4', text: 'Password for all users:' },
+        ],
+      }),
+    ])
+  );
+  const skipped = findings.find((f) => f.rule === 'skipped-heading-level');
+  assert.ok(skipped);
+  assert.equal(skipped!.status, 'WARNING');
+  assert.match(skipped!.detail, /h1/);
+});
+
+test('analyzeSeo() assigns FAIL status to a missing title', () => {
+  const findings = analyzeSeo(makeDiscovery([makePage({ title: '' })]));
+  assert.equal(findings.find((f) => f.rule === 'missing-title')?.status, 'FAIL');
+});
+
 test('analyzeSeo() assigns a unique id to every finding', () => {
   const findings = analyzeSeo(
     makeDiscovery([

@@ -1,4 +1,5 @@
 import { type Locator, type Page, expect } from '@playwright/test';
+import { LoginForm } from '../components/LoginForm';
 import { BasePage } from './BasePage';
 
 const NAV_TIMEOUT_MS = 30000;
@@ -8,8 +9,11 @@ const NAV_TIMEOUT_MS = 30000;
  * Specs go through these methods — no raw goto/fill in the generated spec.
  */
 export class DiscoveredPage extends BasePage {
+  private readonly loginForm: LoginForm;
+
   constructor(page: Page) {
     super(page);
+    this.loginForm = new LoginForm(page);
   }
 
   async open(url: string, options?: { requireOk?: boolean }): Promise<void> {
@@ -25,7 +29,16 @@ export class DiscoveredPage extends BasePage {
   }
 
   locate(selector: string): Locator {
-    return this.page.locator(selector).first();
+    return this.loginForm.locatorForDiscoverySelector(selector) ?? this.page.locator(selector).first();
+  }
+
+  async expectPageReady(): Promise<void> {
+    await expect(this.page).not.toHaveTitle('');
+    await expect(this.page.locator('body')).toBeVisible();
+  }
+
+  async expectAnyHeadingVisible(): Promise<void> {
+    await expect(this.page.getByRole('heading').first()).toBeVisible();
   }
 
   async expectVisible(selector: string): Promise<Locator> {

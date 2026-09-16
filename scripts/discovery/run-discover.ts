@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { chromium } from '@playwright/test';
 import { loadConfig } from '../lib/load-config';
+import { loadRuntimeEnv } from '../lib/load-runtime-env';
 import { PATHS } from '../lib/paths';
 import { resolveDiscoveryConfig } from '../core/scope';
 import { resolveSafetyConfig } from '../core/safety-policy';
@@ -12,6 +13,8 @@ import { inferWorkflows, type WorkflowInventory } from './workflows';
 import { readJsonIfExists, writeJson } from './write-json';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
 import { analyzeSeo, isSeoSkippedPage } from '../seo/analyze-seo';
+import { discoveryCredentials } from './credentials';
+import { tryDiscoveryLogin, type AuthAttempt } from './auth-session';
 
 export interface DiscoverResult {
   pageMap: PageMap;
@@ -20,13 +23,38 @@ export interface DiscoverResult {
   workflows: WorkflowInventory;
 }
 
+export interface PageDiscoveryOutput {
+  pageMap: PageMap;
+  auth?: AuthAttempt;
+}
+
+function testIdAttributes(): string[] {
+  const configured = loadConfig().playwright?.testIdAttribute;
+  const attrs = ['data-testid', 'data-test'];
+  if (configured && !attrs.includes(configured)) attrs.unshift(configured);
+  return [...new Set(attrs)];
+}
+
 export async function runPageDiscovery(url: string, maxPages?: number): Promise<PageMap> {
+  const { pageMap } = await runPageDiscoveryWithAuth(url, maxPages);
+  return pageMap;
+}
+
+export async function runPageDiscoveryWithAuth(url: string, maxPages?: number): Promise<PageDiscoveryOutput> {
+  loadRuntimeEnv();
   const config = loadConfig();
   const safety = resolveSafetyConfig(config.safety);
+  const credentials = discoveryCredentials();
   const options = resolveDiscoveryConfig({ ...config.discovery, maxPages: maxPages ?? config.discovery?.maxPages });
 
   logStep('Discovering pages / routes / navigation');
-  const discovery = await crawl(url, { ...options, safety });
+  if (credentials) {
+    logStep('QA_USERNAME/QA_PASSWORD present — will use an observed login form only (no invented catalog)');
+  } else {
+    logWarn('QA_USERNAME/QA_PASSWORD not set — discovering unauthenticated pages only');
+  }
+
+  const discovery = await crawl(url, { ...options, safety, credentials });
   fs.mkdirSync(PATHS.reports.discovery, { recursive: true });
   writeJson(PATHS.discoveryFile, discovery);
   const seoEligible = discovery.pages.filter((page) => !isSeoSkippedPage(page));
@@ -42,27 +70,52 @@ export async function runPageDiscovery(url: string, maxPages?: number): Promise<
     `Discovery: ${discovery.pagesDiscoveredUnique} unique page(s) (${discovery.pagesDiscoveredRaw} raw) → ${PATHS.discoveryFile}`
   );
   logSuccess(`Page map: ${pageMap.pages.length} page(s), ${pageMap.routes.length} route(s) → ${PATHS.pageMapFile}`);
-  return pageMap;
+  if (discovery.auth) {
+    const state = discovery.auth.succeeded ? 'authenticated' : 'unauthenticated / gated';
+    logSuccess(`Auth session: ${state} — ${discovery.auth.reason}`);
+  }
+  return { pageMap, auth: discovery.auth };
 }
 
-export async function runUiAndApiDiscovery(pageMap: PageMap): Promise<{ ui: UiInventory; api: ApiInventory }> {
+export async function runUiAndApiDiscovery(
+  pageMap: PageMap,
+  auth?: AuthAttempt
+): Promise<{ ui: UiInventory; api: ApiInventory }> {
+  loadRuntimeEnv();
+  const credentials = discoveryCredentials();
   const browser = await chromium.launch();
+  const context = await browser.newContext();
   const elements: UiElementRecord[] = [];
   const calls: ApiCallRecord[] = [];
   let pagesScanned = 0;
+  const ids = testIdAttributes();
 
   try {
+    if (credentials && (auth?.succeeded || auth === undefined)) {
+      const bootstrap = await context.newPage();
+      try {
+        await bootstrap.goto(pageMap.seedUrl, { waitUntil: 'load', timeout: 30000 });
+        await tryDiscoveryLogin(bootstrap, credentials);
+      } finally {
+        await bootstrap.close();
+      }
+    }
+
     for (const pageInfo of pageMap.pages) {
+      if (pageInfo.access === 'gated') {
+        logWarn(`UI/API scan skipped for ${pageInfo.url} (behind authentication — not invented)`);
+        continue;
+      }
       if (pageInfo.error || pageInfo.status === null || pageInfo.status >= 400) {
         logWarn(`UI/API scan skipped for ${pageInfo.url} (status ${pageInfo.status ?? 'n/a'})`);
         continue;
       }
 
-      const page = await browser.newPage();
+      const page = await context.newPage();
       const detach = attachApiObserver(page, pageInfo.url, calls);
       try {
         await page.goto(pageInfo.url, { waitUntil: 'load', timeout: 30000 });
-        const pageElements = await scanPageUi(page, pageInfo.url);
+        const pageElements = await scanPageUi(page, pageInfo.url, { testIdAttributes: ids });
         elements.push(...pageElements);
         pagesScanned += 1;
       } catch (error) {
@@ -73,6 +126,7 @@ export async function runUiAndApiDiscovery(pageMap: PageMap): Promise<{ ui: UiIn
       }
     }
   } finally {
+    await context.close();
     await browser.close();
   }
 
@@ -85,21 +139,21 @@ export async function runUiAndApiDiscovery(pageMap: PageMap): Promise<{ ui: UiIn
   return { ui, api };
 }
 
-export async function loadOrDiscoverPageMap(url: string, maxPages?: number): Promise<PageMap> {
+export async function loadOrDiscoverPageMap(url: string, maxPages?: number): Promise<PageDiscoveryOutput> {
   const existing = readJsonIfExists<PageMap>(PATHS.pageMapFile);
-  if (existing) return existing;
+  if (existing) return { pageMap: existing, auth: existing.auth };
   logWarn('page-map.json not found — running page discovery first');
-  return runPageDiscovery(url, maxPages);
+  return runPageDiscoveryWithAuth(url, maxPages);
 }
 
 export async function runFullDiscovery(url: string, maxPages?: number): Promise<DiscoverResult> {
-  const pageMap = await runPageDiscovery(url, maxPages);
+  const { pageMap, auth } = await runPageDiscoveryWithAuth(url, maxPages);
 
   logStep('Discovering UI and observing network');
-  const { ui, api } = await runUiAndApiDiscovery(pageMap);
+  const { ui, api } = await runUiAndApiDiscovery(pageMap, auth);
 
   logStep('Inferring workflows from evidence only');
-  const workflows = inferWorkflows(pageMap, ui.elements, api);
+  const workflows = inferWorkflows(pageMap, ui.elements, api, auth);
   writeJson(PATHS.workflowInventoryFile, workflows);
   logSuccess(`Workflow inventory: ${workflows.workflows.length} evidence-based workflow(s)`);
 

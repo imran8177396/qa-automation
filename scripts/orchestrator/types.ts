@@ -65,10 +65,11 @@ export interface OrchestratorSummary {
   skipped: string[];
   passed: string[];
   notExecuted: string[];
-  overallStatus: 'PASS' | 'FAIL';
+  overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'WARNING';
   exitCode: number;
   orderingValid: boolean;
   orderingViolations: string[];
+  suiteRollup?: Array<{ label: string; status: string; percent?: number; detail?: string }>;
 }
 
 export const ORCHESTRATOR_DISCLAIMER =

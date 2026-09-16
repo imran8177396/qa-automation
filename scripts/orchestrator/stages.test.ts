@@ -1,20 +1,35 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { buildStages } from './stages';
+import { CONTRACT_NAMED_STEPS, CONTRACT_STAGE_KEYS, contractKeysInOrder } from './contract-flow';
 import { overallExitCode } from './spawn-stage';
 import { parseOrchestratorCli, resolveOrchestratorUrl, isLoopbackUrl } from './resolve-url';
 import type { OrchestratorContext, StageResult } from './types';
 
 describe('orchestrator stages', () => {
-  it('defines twenty stage slots including in-process collection', () => {
+  it('keeps the 20 named contract steps in order and splits Allure / Playwright / final report', () => {
     const stages = buildStages();
-    assert.equal(stages.length, 20);
+    assert.equal(CONTRACT_NAMED_STEPS.length, 20);
+    const order = contractKeysInOrder(stages.map((stage) => stage.key));
+    assert.deepEqual(order.violations, []);
+    assert.equal(order.ok, true);
     assert.equal(stages[0]?.key, 'preflight');
     assert.equal(stages.at(-1)?.key, 'report');
     assert.equal(stages.find((stage) => stage.key === 'collect')?.script, null);
+    assert.equal(stages.find((stage) => stage.key === 'coverage-planning')?.script, 'scripts/planning/write-planned-checks.ts');
+    assert.equal(stages.find((stage) => stage.key === 'allure')?.script, 'scripts/reporting/generate-allure-report.ts');
+    assert.equal(
+      stages.find((stage) => stage.key === 'playwright-reports')?.script,
+      'scripts/reporting/report-playwright.ts'
+    );
+    assert.equal(stages.find((stage) => stage.key === 'report')?.script, 'scripts/reporting/generate-final-report.ts');
+    assert.equal(stages.find((stage) => stage.key === 'retest')?.args?.[0], '--automation-only');
+    assert.ok(!(stages.find((stage) => stage.key === 'performance')?.args ?? []).includes('--authorize-heavy'));
     assert.equal(stages.find((stage) => stage.key === 'dependencies')?.phase, 'setup');
     assert.equal(stages.find((stage) => stage.key === 'discovery')?.phase, 'discovery');
+    assert.equal(stages.find((stage) => stage.key === 'coverage-planning')?.phase, 'inventory');
     assert.equal(stages.find((stage) => stage.key === 'e2e')?.phase, 'execution');
+    assert.ok(CONTRACT_STAGE_KEYS.includes('performance'));
   });
 
   it('runs security, seo, and content as a concurrent page-scan group', () => {
@@ -47,8 +62,10 @@ describe('orchestrator stages', () => {
 
     const discovery = buildStages().find((stage) => stage.key === 'discovery');
     const inventory = buildStages().find((stage) => stage.key === 'inventory');
+    const planning = buildStages().find((stage) => stage.key === 'coverage-planning');
     assert.match(discovery?.skip?.(ctx) ?? '', /discovery/i);
     assert.match(inventory?.skip?.(ctx) ?? '', /discovery/i);
+    assert.match(planning?.skip?.(ctx) ?? '', /discovery/i);
   });
 });
 

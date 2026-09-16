@@ -6,6 +6,11 @@ export const INVENTORY_KINDS = [
   'button',
   'link',
   'navigation',
+  'dropdown',
+  'checkbox',
+  'radio',
+  'toggle',
+  'table',
   'ui-component',
   'workflow',
   'api',
@@ -37,6 +42,7 @@ export const SCENARIO_IDS = [
   'long-input',
   'unicode-input',
   'editability',
+  'required-state',
   'accessible-name',
   'validation-state',
   'error-recovery',
@@ -84,23 +90,59 @@ export const COVERAGE_STATUSES = [
 
 export type CoverageStatus = (typeof COVERAGE_STATUSES)[number];
 
-export const ADVANCED_DIMENSIONS = [
-  { id: 'page', label: 'Page coverage', kinds: ['page'] },
-  { id: 'route', label: 'Route coverage', kinds: ['route'] },
-  { id: 'ui-element', label: 'UI element coverage', kinds: ['field', 'button', 'link', 'form', 'ui-component', 'navigation'] },
-  { id: 'field', label: 'Field coverage', kinds: ['field'] },
-  { id: 'button', label: 'Button coverage', kinds: ['button'] },
-  { id: 'link', label: 'Link coverage', kinds: ['link'] },
-  { id: 'form', label: 'Form coverage', kinds: ['form'] },
-  { id: 'workflow', label: 'Workflow coverage', kinds: ['workflow'] },
-  { id: 'api', label: 'API coverage', kinds: ['api'] },
-  { id: 'browser', label: 'Browser coverage', kinds: ['browser'] },
-  { id: 'responsive', label: 'Responsive coverage', kinds: ['viewport'] },
-  { id: 'accessibility', label: 'Accessibility coverage', kinds: ['accessibility'] },
-  { id: 'visual', label: 'Visual coverage', kinds: ['visual'] },
+/** Interactive UI kinds — first-class Field/Button/Link/Form stay separate; this is the UI rollup. */
+export const UI_ELEMENT_KINDS = [
+  'field',
+  'button',
+  'link',
+  'form',
+  'dropdown',
+  'checkbox',
+  'radio',
+  'toggle',
+  'table',
+  'ui-component',
+  'navigation',
+] as const satisfies readonly InventoryKind[];
+
+/**
+ * Contract dimensions (Part 17): Page, Route, UI, Field, Button, Link, Form,
+ * Workflow, API, Browser, Responsive, Accessibility, Visual.
+ */
+export const REQUIRED_COVERAGE_DIMENSIONS = [
+  { id: 'page', label: 'Page coverage', kinds: ['page'] as const },
+  { id: 'route', label: 'Route coverage', kinds: ['route'] as const },
+  { id: 'ui', label: 'UI coverage', kinds: UI_ELEMENT_KINDS },
+  { id: 'field', label: 'Field coverage', kinds: ['field'] as const },
+  { id: 'button', label: 'Button coverage', kinds: ['button'] as const },
+  { id: 'link', label: 'Link coverage', kinds: ['link'] as const },
+  { id: 'form', label: 'Form coverage', kinds: ['form'] as const },
+  { id: 'workflow', label: 'Workflow coverage', kinds: ['workflow'] as const },
+  { id: 'api', label: 'API coverage', kinds: ['api'] as const },
+  { id: 'browser', label: 'Browser coverage', kinds: ['browser'] as const },
+  { id: 'responsive', label: 'Responsive coverage', kinds: ['viewport'] as const },
+  { id: 'accessibility', label: 'Accessibility coverage', kinds: ['accessibility'] as const },
+  { id: 'visual', label: 'Visual coverage', kinds: ['visual'] as const },
 ] as const;
 
+/** Extra discovered types — kept for inventory honesty, not a substitute for the 13. */
+export const EXTRA_COVERAGE_DIMENSIONS = [
+  { id: 'dropdown', label: 'Dropdown coverage', kinds: ['dropdown'] as const },
+  { id: 'checkbox', label: 'Checkbox coverage', kinds: ['checkbox'] as const },
+  { id: 'radio', label: 'Radio coverage', kinds: ['radio'] as const },
+  { id: 'toggle', label: 'Toggle coverage', kinds: ['toggle'] as const },
+  { id: 'table', label: 'Table coverage', kinds: ['table'] as const },
+  { id: 'viewport', label: 'Viewport coverage', kinds: ['viewport'] as const },
+] as const;
+
+export const ADVANCED_DIMENSIONS = [...REQUIRED_COVERAGE_DIMENSIONS, ...EXTRA_COVERAGE_DIMENSIONS] as const;
+
 export type AdvancedDimensionId = (typeof ADVANCED_DIMENSIONS)[number]['id'];
+
+export const REQUIRED_COVERAGE_DIMENSION_IDS: readonly AdvancedDimensionId[] =
+  REQUIRED_COVERAGE_DIMENSIONS.map((row) => row.id);
+
+export type RequiredCoverageDimensionId = (typeof REQUIRED_COVERAGE_DIMENSIONS)[number]['id'];
 
 export type CoverageHint = 'skipped' | 'not-applicable' | 'untestable';
 
@@ -116,6 +158,8 @@ export interface InventoryItem {
   applicableScenarios: AssignedScenario[];
   /** Explicit inventory hint — never used to drop the item from the report. */
   coverageHint?: CoverageHint;
+  /** Discovery or suite status before mapping onto CoverageStatus. */
+  projectStatus?: string;
 }
 
 export interface CoverageRecord {
@@ -179,9 +223,28 @@ export interface KindCoverage {
 export interface CoverageTotals {
   discoveredItems: number;
   testableItems: number;
+  /** Covered items (TESTED + FAILED). Not pass rate. */
   testedItems: number;
+  /** Items with status TESTED only (executed and did not fail). */
+  testedCount: number;
+  /** Items with status FAILED (executed — still covered). */
+  failedCount: number;
+  /** Items with status BLOCKED (never treated as TESTED). */
+  blockedCount: number;
   uncoveredItems: number;
   itemCoveragePercent: number;
+  /**
+   * Testable items plus BLOCKED items. Used only for scope coverage — the
+   * original item-coverage denominator (testable-only) is unchanged.
+   */
+  scopeItems: number;
+  /** Covered (TESTED + FAILED) ÷ (testable + BLOCKED). Not a quality gate. */
+  scopeCoveragePercent: number;
+  /**
+   * True only when item coverage is 100%, BLOCKED is 0, UNCOVERED is 0, and
+   * discovery is not a single-page login-only crawl. Sauce Demo cannot satisfy this.
+   */
+  complete: boolean;
   executableScenarios: number;
   testedScenarios: number;
   scenarioCoveragePercent: number;
@@ -190,6 +253,37 @@ export interface CoverageTotals {
   skippedExecutions: number;
   passRatePercent: number | null;
   byStatus: Record<CoverageStatus, number>;
+}
+
+export interface RiskArea {
+  id: string;
+  title: string;
+  severity: 'high' | 'medium' | 'low';
+  category: 'uncovered' | 'blocked' | 'failed';
+  reason: string;
+  itemIds: string[];
+  itemCount: number;
+}
+
+export interface CoverageSummary {
+  generatedAt: string;
+  seedUrl: string | null;
+  playwrightBaseUrl: string;
+  formula: string;
+  coverageIsNotPassRate: true;
+  itemCoveragePercent: number;
+  scopeCoveragePercent: number;
+  testableItems: number;
+  scopeItems: number;
+  coveredItems: number;
+  testedCount: number;
+  failedCount: number;
+  blockedCount: number;
+  uncoveredCount: number;
+  complete: boolean;
+  passRatePercent: number | null;
+  dimensions: DimensionCoverage[];
+  riskAreas: RiskArea[];
 }
 
 export interface ExcludedInventoryItem {
@@ -236,8 +330,11 @@ export interface CoverageFormula {
     testableItems: number;
     coveredItems: number;
     itemCoveragePercent: number;
+    scopeItems: number;
+    scopeCoveragePercent: number;
     passRatePercent: number | null;
   };
+  scopeDefinition: string;
   figures: {
     elementCoverage: CoverageFigure;
     functionalAreaCoverage: CoverageFigure;
@@ -261,6 +358,7 @@ export interface CoverageReport {
   byKind: KindCoverage[];
   dimensions: DimensionCoverage[];
   formula: CoverageFormula;
+  riskAreas: RiskArea[];
   records: CoverageRecord[];
   items: InventoryItem[];
   evidence: ExecutionEvidence[];

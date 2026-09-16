@@ -1,5 +1,5 @@
-import { PATHS } from '../lib/paths';
 import type { QaConfig } from '../types';
+import { resolveJmeterPlanPath } from './plans';
 import { PERFORMANCE_PROFILES, type CanonicalPerformanceProfile, type PerformanceProfile } from './types';
 
 export interface ResolvedProfile {
@@ -55,7 +55,7 @@ export function resolvePerformanceProfile(config: QaConfig, profile: Performance
     host,
     method: 'GET',
     path: config.jmeter.path,
-    planPath: PATHS.jmeterPlan,
+    planPath: resolveJmeterPlanPath(id),
     threads: plan.threads,
     rampUpSeconds: plan.rampUpSeconds,
     loopCount: plan.loopCount,

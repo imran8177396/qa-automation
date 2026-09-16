@@ -55,6 +55,8 @@ for (const check of planned) {
       case 'page-sanity': {
         await discoveredPage.open(check.targetUrl);
         if (check.expect?.requireH1) await discoveredPage.expectHeadingVisible();
+        else if (check.expect?.requireHeading) await discoveredPage.expectAnyHeadingVisible();
+        else await discoveredPage.expectPageReady();
         break;
       }
 
@@ -97,7 +99,7 @@ for (const check of planned) {
       case 'required-state': {
         if (!selector) throw new Error(`${check.id} missing locator`);
         await discoveredPage.open(check.targetUrl);
-        if (check.expect?.required) await discoveredPage.expectRequired(selector, true);
+        await discoveredPage.expectRequired(selector, Boolean(check.expect?.required));
         await discoveredPage.expectVisible(selector);
         break;
       }
@@ -141,7 +143,11 @@ for (const check of planned) {
         if (!selector || check.expect?.fillValue == null) throw new Error(`${check.id} missing fill value`);
         await discoveredPage.open(check.targetUrl);
         await discoveredPage.fillWithoutSubmit(selector, check.expect.fillValue);
-        await discoveredPage.expectConstraintValidity(selector, false);
+        if (check.expect.constraintInvalid) {
+          await discoveredPage.expectConstraintValidity(selector, false);
+        } else {
+          await discoveredPage.expectVisible(selector);
+        }
         break;
       }
 

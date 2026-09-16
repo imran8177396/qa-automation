@@ -2,32 +2,93 @@
  * Browser-side DOM walk, kept as a string so tsx/esbuild cannot inject `__name`
  * (that helper does not exist inside Playwright's page.evaluate context).
  */
-export const COLLECT_UI_DOM = `(() => {
+export function collectUiDomScript(testIdAttributes: string[] = ['data-testid', 'data-test']): string {
+  return `(() => {
+  const TEST_ID_ATTRS = ${JSON.stringify(testIdAttributes)};
+
   const isVisible = function (el) {
     const style = window.getComputedStyle(el);
     const rect = el.getBoundingClientRect();
     return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
   };
 
+  const associatedLabel = function (el) {
+    if (el.id) {
+      try {
+        const escaped = window.CSS && CSS.escape ? CSS.escape(el.id) : el.id;
+        const byFor = document.querySelector('label[for="' + escaped + '"]');
+        if (byFor) return (byFor.textContent || '').trim().slice(0, 120);
+      } catch (err) { /* invalid id for a CSS selector */ }
+    }
+    const parent = el.closest && el.closest('label');
+    if (parent) return (parent.textContent || '').trim().slice(0, 120);
+    const labelledBy = el.getAttribute('aria-labelledby');
+    if (labelledBy) {
+      const parts = labelledBy.split(/\\s+/).map(function (id) {
+        const node = document.getElementById(id);
+        return node ? (node.textContent || '').trim() : '';
+      }).filter(Boolean);
+      if (parts.length) return parts.join(' ').slice(0, 120);
+    }
+    return null;
+  };
+
+  const isEditable = function (el) {
+    if (el.isContentEditable) return true;
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'textarea' || tag === 'select') return !el.disabled && !el.readOnly;
+    if (tag !== 'input') return false;
+    const type = (el.type || 'text').toLowerCase();
+    if (['hidden', 'submit', 'button', 'image', 'reset', 'file', 'checkbox', 'radio'].indexOf(type) !== -1) return false;
+    return !el.disabled && !el.readOnly;
+  };
+
+  const firstTestId = function (el) {
+    for (var i = 0; i < TEST_ID_ATTRS.length; i++) {
+      const value = el.getAttribute(TEST_ID_ATTRS[i]);
+      if (value) return { attr: TEST_ID_ATTRS[i], value: value };
+    }
+    return null;
+  };
+
+  const relevantAttributes = function (el) {
+    const attrs = {};
+    const keys = ['id', 'name', 'type', 'role', 'href', 'placeholder', 'autocomplete', 'aria-label', 'aria-expanded', 'aria-required'];
+    TEST_ID_ATTRS.forEach(function (key) { keys.push(key); });
+    keys.forEach(function (key) {
+      const value = el.getAttribute(key);
+      if (value) attrs[key] = value;
+    });
+    return attrs;
+  };
+
   const snapshot = function (el, category, evidence, candidate) {
     const input = el;
-    // HTMLFormElement.name is the control named "name", not a string — never invent a locator from that.
     const nameAttr = el.getAttribute('name');
     const nameProp = typeof input.name === 'string' ? input.name : '';
+    const testId = firstTestId(el);
     return {
       category: category,
       tag: el.tagName.toLowerCase(),
       inputType: typeof input.type === 'string' ? input.type : null,
       role: el.getAttribute('role'),
       text: (el.textContent || '').trim().slice(0, 120),
+      controlValue: (typeof input.type === 'string' && input.type.toLowerCase() === 'password')
+        ? null
+        : (typeof input.value === 'string' && (el.tagName.toLowerCase() === 'input' || el.tagName.toLowerCase() === 'button')
+          ? String(input.value).trim().slice(0, 80)
+          : null),
       ariaLabel: el.getAttribute('aria-label'),
+      label: associatedLabel(el),
       placeholder: typeof input.placeholder === 'string' ? input.placeholder : null,
       name: nameProp || nameAttr,
       id: el.id || null,
-      testId: el.getAttribute('data-testid'),
+      testId: testId ? testId.value : null,
+      testIdAttribute: testId ? testId.attr : null,
       visible: isVisible(el),
       enabled: !('disabled' in input) || !input.disabled,
-      required: Boolean(input.required),
+      required: Boolean(input.required) || el.getAttribute('aria-required') === 'true',
+      editable: isEditable(el),
       readOnly: Boolean(input.readOnly),
       min: input.min || el.getAttribute('min'),
       max: input.max || el.getAttribute('max'),
@@ -36,6 +97,7 @@ export const COLLECT_UI_DOM = `(() => {
       formMethod: (el.closest && el.closest('form') && el.closest('form').getAttribute('method')) || null,
       href: el.getAttribute('href'),
       isSubmit: input.type === 'submit' || el.getAttribute('type') === 'submit',
+      attributes: relevantAttributes(el),
       evidence: evidence,
       candidate: Boolean(candidate),
     };
@@ -60,10 +122,15 @@ export const COLLECT_UI_DOM = `(() => {
     'breadcrumbs',
     'breadcrumb landmark or class'
   );
-  collect('nav, [role="navigation"]', 'navigation', 'nav / role=navigation');
+  collect('nav, [role="navigation"], [role="menubar"]', 'navigation', 'nav / role=navigation|menubar');
   collect('a[href]', 'link', '<a href>');
   collect('button, [role="button"], input[type="submit"], input[type="button"]', 'button', 'button / role=button');
   collect('textarea', 'textarea', '<textarea>');
+  collect(
+    'select[data-test*="sort" i], select[data-testid*="sort" i], select[id*="sort" i], select[name*="sort" i], select[class*="sort" i]',
+    'sort',
+    'select whose id/name/class/test id matched sort'
+  );
   collect('select', 'select', '<select>');
   collect('input[type="checkbox"]', 'checkbox', 'input type=checkbox');
   collect('input[type="radio"]', 'radio', 'input type=radio');
@@ -114,3 +181,6 @@ export const COLLECT_UI_DOM = `(() => {
 
   return out;
 })()`;
+}
+
+export const COLLECT_UI_DOM = collectUiDomScript();

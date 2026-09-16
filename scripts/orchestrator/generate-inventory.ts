@@ -7,7 +7,7 @@ import type { WorkflowInventory } from '../discovery/workflows';
 import { loadConfig } from '../lib/load-config';
 import { PATHS } from '../lib/paths';
 import { logError, logStep, logSuccess } from '../lib/logger';
-import { generateUiChecks } from '../planning/generate-ui-checks';
+import { writePlannedUiChecks } from '../planning/write-planned-checks';
 import { buildDiscoveryInventory } from './discovery-inventory';
 
 function main(): void {
@@ -31,9 +31,7 @@ function main(): void {
   const inventory = buildDiscoveryInventory(pageMap, ui, safety);
   writeJson(PATHS.inventoryFile, inventory);
 
-  const checks = generateUiChecks(pageMap, ui, safety);
-  writeJson(PATHS.plannedChecksFile, checks);
-  writeJson(PATHS.uiChecksFile, checks);
+  const checks = writePlannedUiChecks(pageMap, ui, safety);
 
   const planned = checks.filter((check) => check.status === 'PLANNED').length;
   console.log(`Pages            ${pageMap.pages.length}`);

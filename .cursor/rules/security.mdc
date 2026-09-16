@@ -35,6 +35,7 @@ Do **not**:
 - One GET per path in the fixed `WELL_KNOWN_PATHS` list
 - CSRF and HTML5 type *indicators* on observed forms (forms are never submitted)
 - Rate-limit *headers* on those GETs — missing headers are NOTE, never a flood test
+- Record every check as PASS, FAIL, WARNING, NOTE, NOT_TESTED, BLOCKED, or NOT_APPLICABLE — never omit silently
 
 ## Execution
 

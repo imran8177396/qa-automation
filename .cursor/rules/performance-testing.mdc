@@ -1,21 +1,34 @@
 ---
 description: Performance testing — JMeter load plans, thresholds, CI-safe execution
-globs: tests/performance/**,scripts/runners/jmeter.ts,scripts/run-jmeter.ts,qa.config.json
+globs: tests/performance/**,tests/e2e/performance/**,scripts/performance/**,scripts/runners/jmeter.ts,scripts/run-jmeter.ts,scripts/run-performance.ts,playwright.performance.config.ts,qa.config.json
 alwaysApply: false
 ---
 
 # Performance Testing
 
-Apply when editing JMeter plans, performance runners, or `qa.config.json` jmeter section.
+Apply when editing JMeter plans, Playwright UI timing, performance runners, or `qa.config.json` jmeter / lighthouse sections.
+
+## Two surfaces (do not mix)
+
+- **A. Playwright UI performance** — page load, Navigation Timing, resource/network timing on the discovered login page (`tests/e2e/performance/`, `reports/performance/`). Status is **RECORDED**. No SLA is invented. Official CWV scores are not fabricated here.
+- **B. JMeter backend/load** — documented API only (`qa.config.json` `urls.api` + `jmeter.path`, JSONPlaceholder GET `/posts`). Not Sauce Demo REST (discovery found 0 XHR on login).
 
 ## Source of truth
 
 - Configure load in **`qa.config.json`** → `jmeter` (threads, ramp-up, loop count, path, profile).
 - The default profile is **`liveness`**. It records measurements as **RECORDED**, never PASS. `smoke` is an alias of liveness.
 - Threshold keys (`jmeter.thresholds.maxP95Ms`, `jmeter.thresholds.maxErrorRatePercent`) may be null. Do not invent numeric SLAs.
-- Core Web Vitals live in **`qa.config.json`** → `lighthouse` and `reports/lighthouse/`. Do not merge them into JMeter findings.
-- Run **`npm run qa:sync`** to update `tests/performance/load-test.jmx`.
+- Core Web Vitals live in **`qa.config.json`** → `lighthouse` and `reports/lighthouse/`. If the Lighthouse CLI is missing, record **NOT_EXECUTED** — do not invent scores.
+- Playwright UI timings live in `reports/performance/`. Do not merge them into JMeter findings.
+- Run **`npm run qa:sync`** to regenerate `tests/performance/jmeter/{smoke,load,stress,spike,soak}/documented-api.jmx` and the liveness alias `tests/performance/load-test.jmx`.
 - Prefer editing config + sync over manual JMX-only changes.
+
+## Authorization
+
+- `npm run test:performance` runs **only** the safe liveness/smoke JMeter profile plus Playwright UI timing and Lighthouse.
+- Heavy profiles (`load` / `stress` / `spike` / `soak`) require `--authorize-heavy` or `QA_PERF_AUTHORIZE`, plus `allowHeavyAgainst` when that list is non-empty.
+- Dedicated pipelines: `.github/workflows/qa-performance-heavy.yml` (`workflow_dispatch` with `authorize-heavy`, optional weekly schedule + `QA_PERF_AUTHORIZE_SCHEDULE`; never `pull_request`) and `jenkins/Jenkinsfile.performance` (`AUTHORIZE_HEAVY` default false). Never authorize heavy on the PR Jenkinsfile.
+- Never run heavy/destructive load against production by default.
 
 ## Performance considerations
 
@@ -32,9 +45,9 @@ Document expected baseline (threads, avg response time, error rate) in test comm
 
 | Type | Purpose |
 | --- | --- |
-| **Smoke load** | Small thread count validates endpoint under light concurrency |
-| **Regression** | Re-run prior scenario after infra or API changes |
-| **Boundary** | Ramp to configured max threads; watch for degradation |
+| **Smoke / liveness** | Small thread count validates the documented API under light concurrency (CI-safe) |
+| **Load / stress / spike / soak** | Heavy plans exist as files; they do not auto-run |
+| **UI timing** | Single-page Playwright measurement on the login page — not a load test |
 
 ## Execution
 
@@ -42,12 +55,12 @@ Document expected baseline (threads, avg response time, error rate) in test comm
 npm run test:performance
 ```
 
-Reports: `reports/jmeter/results.jtl`, `reports/jmeter/html/index.html`.
+Reports: `reports/jmeter/results.jtl`, `reports/jmeter/html/index.html`, `reports/performance/`, `reports/lighthouse/`.
 
 ## Failure triage
 
 - **Product/infra defect**: sustained high latency, 5xx, timeouts under expected load.
 - **Automation defect**: wrong host/path, JMeter not installed, malformed JMX — fix config or runner.
-- Never hide failures by removing listeners or assertions to make runs pass.
+- Never hide failures by removing listeners or assertions to make a run pass.
 
 Keep plans **CI/CD-ready** — non-GUI mode, deterministic paths, no local-only hardcoded directories.

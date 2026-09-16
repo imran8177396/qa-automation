@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 import { PATHS, ROOT, generatedCheckResultsPath } from './paths';
 import type { PlaywrightBrowser } from './playwright-browsers';
@@ -146,6 +147,31 @@ export function playwrightHtmlReporterConfig(suiteName: PlaywrightSuiteName): {
   return {
     outputFolder: path.relative(ROOT, playwrightSuiteHtmlDir(suiteName)).replace(/\\/g, '/'),
     open: 'never',
+  };
+}
+
+/**
+ * Allure Playwright reporter. Writes raw results only — never replaces list/html/json.
+ * Screenshots, video, and traces are attached when Playwright retained them.
+ */
+export function playwrightAllureReporterConfig(suiteName?: PlaywrightSuiteName): {
+  resultsDir: string;
+  detail: true;
+  suiteTitle: true;
+  environmentInfo: Record<string, string>;
+} {
+  const suite = suiteName ?? process.env[QA_PLAYWRIGHT_SUITE_ENV] ?? 'e2e';
+  return {
+    resultsDir: toPosixRelative(PATHS.allureResults),
+    detail: true,
+    suiteTitle: true,
+    environmentInfo: {
+      suite,
+      node_version: process.version,
+      os_platform: os.platform(),
+      os_release: os.release(),
+      baseURL: process.env.QA_PLAYWRIGHT_BASE_URL?.trim() || 'NOT_SET',
+    },
   };
 }
 

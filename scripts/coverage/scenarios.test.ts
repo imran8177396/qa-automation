@@ -29,24 +29,53 @@ test('required email field gets format-invalid and empty checks, not an invented
   assert.ok(!ids.includes('form-submit'));
 });
 
-test('optional free-text input does not get empty/required/invalid scenarios', () => {
-  const ids = applicableScenarios({
+test('optional free-text input gets fill-without-submit empty/invalid, not required-validation', () => {
+  const assigned = applicableScenarios({
     kind: 'field',
     elementType: 'input',
     required: false,
     inputHint: 'text',
-  }).map((s) => s.id);
+  });
+  const ids = assigned.map((s) => s.id);
   assert.ok(ids.includes('valid-input'));
-  assert.ok(!ids.includes('invalid-input'));
-  assert.ok(!ids.includes('empty-input'));
+  assert.ok(ids.includes('invalid-input'));
+  assert.ok(ids.includes('empty-input'));
+  assert.ok(ids.includes('required-state'));
   assert.ok(!ids.includes('required-validation'));
+  assert.equal(assigned.find((s) => s.id === 'validation-state')?.disposition, 'blocked-safety');
+});
+
+test('password field is filled without submit using sample values — credentials are not assumed', () => {
+  const assigned = applicableScenarios({
+    kind: 'field',
+    elementType: 'input',
+    inputHint: 'password',
+    required: false,
+  });
+  const ids = assigned.map((s) => s.id);
+  assert.ok(ids.includes('visibility'));
+  assert.ok(ids.includes('valid-input'));
+  assert.ok(ids.includes('empty-input'));
+  assert.ok(ids.includes('special-characters'));
+  assert.equal(assigned.find((s) => s.id === 'valid-input')?.disposition, 'executable');
+  assert.equal(assigned.find((s) => s.id === 'error-recovery')?.disposition, 'blocked-safety');
 });
 
 test('submit button is not given an executable click or submit scenario', () => {
   const scenarios = applicableScenarios({ kind: 'button', isSubmit: true });
   assert.ok(scenarios.some((s) => s.id === 'visibility' && s.disposition === 'executable'));
   assert.ok(scenarios.some((s) => s.id === 'form-submit' && s.disposition === 'blocked-safety'));
-  assert.ok(!scenarios.some((s) => s.id === 'click-behavior'));
+  assert.ok(scenarios.some((s) => s.id === 'click-behavior' && s.disposition === 'blocked-safety'));
+  assert.ok(scenarios.some((s) => s.id === 'navigation' && s.disposition === 'blocked-safety'));
+  assert.ok(!scenarios.some((s) => s.id === 'click-behavior' && s.disposition === 'executable'));
+});
+
+test('form submission variants are blocked-safety; presence stays executable', () => {
+  const scenarios = applicableScenarios({ kind: 'form' });
+  assert.ok(scenarios.some((s) => s.id === 'form-presence' && s.disposition === 'executable'));
+  assert.ok(scenarios.some((s) => s.id === 'form-submit' && s.disposition === 'blocked-safety'));
+  assert.ok(scenarios.some((s) => s.id === 'empty-input' && s.disposition === 'blocked-safety'));
+  assert.ok(scenarios.some((s) => s.id === 'invalid-input' && s.disposition === 'blocked-safety'));
 });
 
 test('non-submit button can be clicked; loading/success/error are not invented', () => {
@@ -88,7 +117,7 @@ test('viewport matrix is executable as Chromium emulation, not real devices', ()
   assert.equal(scenarios.length, 1);
   assert.equal(scenarios[0]?.id, 'viewport-matrix');
   assert.equal(scenarios[0]?.disposition, 'executable');
-  assert.match(scenarios[0]?.reason ?? '', /not real-device|not Mobile Safari/i);
+  assert.match(scenarios[0]?.reason ?? '', /not a real device|not Mobile Safari/i);
 });
 
 test('accessibility scan is executable as automated checks, not a full WCAG audit', () => {
@@ -140,6 +169,11 @@ test('kindForElement() maps discovery types without collapsing everything to int
   assert.equal(kindForElement('form'), 'form');
   assert.equal(kindForElement('input'), 'field');
   assert.equal(kindForElement('button'), 'button');
+  assert.equal(kindForElement('select'), 'dropdown');
+  assert.equal(kindForElement('checkbox'), 'checkbox');
+  assert.equal(kindForElement('radio'), 'radio');
+  assert.equal(kindForElement('toggle'), 'toggle');
+  assert.equal(kindForElement('table'), 'table');
   assert.equal(kindForElement('header'), 'ui-component');
   assert.equal(kindForElement('pages'), null);
 });

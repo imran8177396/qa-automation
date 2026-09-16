@@ -8,6 +8,8 @@ import {
   PLAYWRIGHT_SUITE_OUTPUT_PATHS,
   assertNoDuplicateOutputPaths,
   assertUniquePlaywrightSuitePaths,
+  playwrightAllureReporterConfig,
+  playwrightHtmlReporterConfig,
   playwrightSuiteResultsPath,
 } from './playwright-suites';
 
@@ -29,6 +31,16 @@ describe('playwright suite output paths', () => {
   it('keeps engine caveats that WebKit is not iOS Safari and Chromium is not Android Chrome', () => {
     assert.ok(PLAYWRIGHT_ENGINE_CAVEATS.some((line) => /WebKit is not iOS Safari/i.test(line)));
     assert.ok(PLAYWRIGHT_ENGINE_CAVEATS.some((line) => /Chromium is not Android Chrome/i.test(line)));
+  });
+
+  it('adds Allure results under reports/allure/results without replacing HTML reporter', () => {
+    const allure = playwrightAllureReporterConfig('e2e');
+    const html = playwrightHtmlReporterConfig('e2e');
+    assert.equal(allure.resultsDir, 'reports/allure/results');
+    assert.equal(allure.detail, true);
+    assert.match(html.outputFolder, /reports\/playwright\/e2e\/html$/);
+    assert.equal(html.open, 'never');
+    assert.equal(allure.environmentInfo.suite, 'e2e');
   });
 
   it('fails the run when two suites resolve to the same output path', () => {

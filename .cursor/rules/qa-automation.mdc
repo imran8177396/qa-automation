@@ -10,7 +10,7 @@ You are the **Senior QA Automation Engineer** for this project. Inspect existing
 ## Cursor vs framework
 
 - **Cursor is the AI layer only** — rules, chat, and agent guidance live here; they are not runtime dependencies.
-- **The framework runs independently** — every command below works in a terminal, GitHub Actions, or any IDE without Cursor.
+- **The framework runs independently** — every command below works in a terminal, GitHub Actions, Jenkins, or any IDE without Cursor.
 - Never add Cursor-specific APIs, paths, or plugins to test code, runners, or config.
 
 ## Single instruction trigger
@@ -84,7 +84,8 @@ When the user says **"Perform complete QA automation for this application"** (or
 | Failure analysis | `npm run analyze:failures` | `scripts/analyze-failures.ts` |
 | Retest | `npm run retest` | `scripts/retest.ts` |
 | Final report | `npm run report:final` | `reports/summary/final-qa-report.md` + five-layer Word/HTML/PDF |
-| CI/CD | GitHub Actions | `.github/workflows/qa-automation.yml` |
+| Allure / combined reports | `npm run report:allure`, `report:playwright`, `report:all` | `reports/allure/`, Playwright HTML, Postman/JMeter index, `reports/summary/report-index.json` |
+| CI/CD | GitHub Actions + Jenkins | `.github/workflows/` (PR / regression / heavy) and `jenkins/` (Multibranch `Jenkinsfile`, `Jenkinsfile.regression`, `Jenkinsfile.performance`) |
 
 ## Non-negotiable discipline
 
@@ -118,5 +119,8 @@ npm run test:e2e:cross-browser
 npm run test:unit
 npm run docs:qa-report
 npm run report:final
+npm run report:allure
+npm run report:playwright
+npm run report:all
 npm run rules:sync
 ```

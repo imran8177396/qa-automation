@@ -1,10 +1,11 @@
-import { test, expect } from '../../../fixtures/qa-test';
+import { test } from '../../../fixtures/qa-test';
 import { isFixtureUiTarget } from '../../../scripts/lib/ui-target';
 
 /**
- * Visual state change: empty vs filled contact form.
+ * Visual state change: empty vs filled form.
  * Fill only — never submit (safety policy).
- * Fixture contact.html is NOT_TESTED on a live origin.
+ * Fixture contact.html is NOT_APPLICABLE on a live origin; the discovered
+ * login form empty/filled states still run.
  */
 test.describe('visual states @visual', () => {
   if (isFixtureUiTarget()) {
@@ -21,15 +22,21 @@ test.describe('visual states @visual', () => {
     return;
   }
 
-  test('fixture contact-form states recorded as NOT_TESTED on live origin', () => {
-    test.info().annotations.push({
-      type: 'NOT_TESTED',
-      description:
-        'NOT_TESTED: /contact.html filled/empty visual states are fixture-only. Live UI visual pages still execute from discovery.',
-    });
-    expect(
-      isFixtureUiTarget(),
-      'NOT_TESTED: fixture contact-form states are not executed against a live origin.'
-    ).toBe(false);
+  test('login form empty state', async ({ visualPage }) => {
+    await visualPage.open('/');
+    await visualPage.expectElementScreenshot(visualPage.loginForm.root, 'live-login-form-empty.png');
+  });
+
+  test('login form filled state without submit', async ({ visualPage }) => {
+    await visualPage.open('/');
+    await visualPage.fillLoginPreview();
+    await visualPage.expectElementScreenshot(visualPage.loginForm.root, 'live-login-form-filled.png');
+  });
+
+  test('fixture contact-form states recorded as NOT_APPLICABLE on live origin', () => {
+    const reason =
+      'NOT_APPLICABLE: /contact.html filled/empty visual states are fixture-only. Live login form empty/filled still execute from discovery.';
+    test.info().annotations.push({ type: 'NOT_APPLICABLE', description: reason });
+    test.skip(true, reason);
   });
 });

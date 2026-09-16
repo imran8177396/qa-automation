@@ -1,4 +1,7 @@
+import { readJsonIfExists } from '../discovery/write-json';
+import { resolveGeneratedCheckPlan } from '../lib/generated-check-plan';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
+import { PATHS } from '../lib/paths';
 import { isPlaywrightBrowserInstalled, resolvePlaywrightBrowsers, type PlaywrightBrowser } from '../lib/playwright-browsers';
 import { runLocalBin } from '../lib/run-command';
 import {
@@ -6,7 +9,12 @@ import {
   QA_PLAYWRIGHT_SUITE_ENV,
   type PlaywrightSuiteName,
 } from '../lib/playwright-suites';
-import { completePlaywrightSuite, preparePlaywrightSuite } from '../lib/playwright-suite-summary';
+import {
+  completePlaywrightSuite,
+  preparePlaywrightSuite,
+  recordPlaywrightSuiteNotExecuted,
+} from '../lib/playwright-suite-summary';
+import { resolveConfiguredPlaywrightBaseUrl } from '../lib/suite-origin';
 import type { QaConfig } from '../types';
 
 export interface RunPlaywrightOptions {
@@ -47,7 +55,7 @@ export async function runPlaywright(config: QaConfig, options?: RunPlaywrightOpt
   const started = preparePlaywrightSuite({
     suiteName,
     targetUrl: process.env.QA_PLAYWRIGHT_BASE_URL || config.playwright.baseURL,
-    configuredBaseUrl: config.playwright.baseURL,
+    configuredBaseUrl: resolveConfiguredPlaywrightBaseUrl(),
   });
 
   logStep(`E2E tests (Playwright) — suite ${suiteName} — ${requestedBrowsers.join(', ')}`);
@@ -116,6 +124,25 @@ export async function runPlaywright(config: QaConfig, options?: RunPlaywrightOpt
 }
 
 export async function runGeneratedCheckSuite(config: QaConfig): Promise<boolean> {
+  if (!config.playwright.enabled) {
+    logWarn('Playwright generated-check skipped (disabled in qa.config.json).');
+    return true;
+  }
+
+  const raw = readJsonIfExists<unknown>(PATHS.plannedChecksFile);
+  const plan = resolveGeneratedCheckPlan(raw);
+  if (!plan.execute) {
+    const reason = plan.reason ?? 'NOT_EXECUTED: 0 generated checks.';
+    logWarn(reason);
+    const started = preparePlaywrightSuite({
+      suiteName: 'generated-check',
+      targetUrl: process.env.QA_PLAYWRIGHT_BASE_URL || config.playwright.baseURL,
+      configuredBaseUrl: resolveConfiguredPlaywrightBaseUrl(),
+    });
+    recordPlaywrightSuiteNotExecuted(started, { reason });
+    return true;
+  }
+
   return runPlaywright(config, {
     suiteName: 'generated-check',
     grep: '@generated',

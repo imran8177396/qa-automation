@@ -115,6 +115,19 @@ describe('classifyFailure', () => {
     assert.equal(row.ruleFired, 'ERROR_TEXT_CONSOLE');
   });
 
+  it('does not treat Firefox Browser logs console.error as CONSOLE_ERROR', () => {
+    const row = classifyFailure(
+      evidence({
+        errorMessage:
+          'Tearing down "context" exceeded the test timeout of 60000ms.\nBrowser logs:\nconsole.error: services.settings',
+        durationMs: 68_472,
+      })
+    );
+    assert.notEqual(row.classification, 'CONSOLE_ERROR');
+    assert.equal(row.classification, 'NAVIGATION_TIMEOUT');
+    assert.equal(row.ownerClassification, 'BROWSER');
+  });
+
   it('classifies missing browser binary as ENVIRONMENT', () => {
     const row = classifyFailure(
       evidence({

@@ -385,5 +385,7 @@ test('zero testable items is 0% coverage, not 100%', () => {
     notes: [],
   });
   assert.equal(report.totals.itemCoveragePercent, 0);
+  assert.equal(report.totals.scopeCoveragePercent, 0);
+  assert.equal(report.totals.complete, false);
   assert.equal(report.totals.passRatePercent, null);
 });

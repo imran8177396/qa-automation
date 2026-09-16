@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { NOT_AVAILABLE, compareSuiteOriginToBaseUrl, originOf } from './suite-origin';
-import { assertSuiteOriginMatchesBaseUrl } from './suite-origin';
+import {
+  NOT_AVAILABLE,
+  assertSuiteOriginMatchesBaseUrl,
+  compareSuiteOriginToBaseUrl,
+  originOf,
+  resolveConfiguredPlaywrightBaseUrl,
+} from './suite-origin';
 
 describe('suite origin comparison', () => {
   it('returns VALID when origins match regardless of trailing slash', () => {
@@ -38,5 +43,23 @@ describe('suite origin comparison', () => {
       () => assertSuiteOriginMatchesBaseUrl('visual', 'http://127.0.0.1:4173', 'https://example.com'),
       /wrong origin/
     );
+  });
+
+  it('accepts orchestrator --url / QA_PLAYWRIGHT_BASE_URL as the resolved origin', () => {
+    const previous = process.env.QA_PLAYWRIGHT_BASE_URL;
+    process.env.QA_PLAYWRIGHT_BASE_URL = 'https://example.com';
+    try {
+      assert.equal(originOf(resolveConfiguredPlaywrightBaseUrl()), 'https://example.com');
+      assert.doesNotThrow(() =>
+        assertSuiteOriginMatchesBaseUrl(
+          'e2e',
+          'https://example.com',
+          resolveConfiguredPlaywrightBaseUrl()
+        )
+      );
+    } finally {
+      if (previous === undefined) delete process.env.QA_PLAYWRIGHT_BASE_URL;
+      else process.env.QA_PLAYWRIGHT_BASE_URL = previous;
+    }
   });
 });

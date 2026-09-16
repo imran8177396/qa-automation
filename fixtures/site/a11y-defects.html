@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Site — A11y defects</title>
+  <style>
+    body { background: #fff; margin: 1rem; font-family: sans-serif; }
+    .low-contrast { color: #eee; background: #fff; }
+    button { width: 10px; height: 10px; }
+  </style>
+</head>
+<body>
+  <p class="low-contrast">Low contrast text planted so axe color-contrast must FAIL.</p>
+  <input type="text" name="orphan" />
+  <button></button>
+  <img src="/logo.svg" width="64" height="64" />
+</body>
+</html>

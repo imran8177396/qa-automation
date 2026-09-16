@@ -52,7 +52,6 @@ const UI_COMPONENT_TYPES = new Set<DiscoveryCategory>([
   'footer',
   'sidebar',
   'breadcrumbs',
-  'table',
   'pagination',
   'tab',
   'accordion',
@@ -70,13 +69,14 @@ export function kindForElement(elementType: DiscoveryCategory): InventoryKind | 
   if (elementType === 'form') return 'form';
   if (elementType === 'button') return 'button';
   if (elementType === 'link') return 'link';
+  if (elementType === 'select') return 'dropdown';
+  if (elementType === 'checkbox') return 'checkbox';
+  if (elementType === 'radio') return 'radio';
+  if (elementType === 'toggle') return 'toggle';
+  if (elementType === 'table') return 'table';
   if (
     elementType === 'input' ||
     elementType === 'textarea' ||
-    elementType === 'select' ||
-    elementType === 'checkbox' ||
-    elementType === 'radio' ||
-    elementType === 'toggle' ||
     elementType === 'file-upload' ||
     elementType === 'search'
   ) {
@@ -115,15 +115,23 @@ export function applicableScenarios(ctx: ScenarioContext): AssignedScenario[] {
     case 'field':
       return fieldScenarios(ctx);
 
+    case 'dropdown':
+      return fieldScenarios({ ...ctx, elementType: ctx.elementType ?? 'select' });
+
+    case 'checkbox':
+      return fieldScenarios({ ...ctx, elementType: 'checkbox' });
+
+    case 'radio':
+      return fieldScenarios({ ...ctx, elementType: 'radio' });
+
+    case 'toggle':
+      return fieldScenarios({ ...ctx, elementType: 'toggle' });
+
+    case 'table':
+      return [scenario('visibility', 'executable', 'Table markup was observed')];
+
     case 'form':
-      return [
-        scenario('form-presence', 'executable', 'Form markup was observed'),
-        scenario(
-          'form-submit',
-          'blocked-safety',
-          'Submit is never authorized for generated or inventory-driven execution'
-        ),
-      ];
+      return formScenarios();
 
     case 'ui-component':
       if (ctx.elementType === 'filter' || ctx.elementType === 'sort') {
@@ -175,7 +183,7 @@ export function applicableScenarios(ctx: ScenarioContext): AssignedScenario[] {
         scenario(
           'viewport-matrix',
           'executable',
-          'Playwright Chromium viewport emulation for desktop/laptop/tablet/mobile — not real-device or Mobile Safari coverage'
+          'Playwright Chromium emulated viewports for desktop/laptop/tablet/mobile — not a real device or Mobile Safari coverage'
         ),
       ];
 
@@ -256,10 +264,16 @@ function buttonScenarios(ctx: ScenarioContext): AssignedScenario[] {
 
   if (ctx.isSubmit) {
     out.push(
+      scenario('form-submit', 'blocked-safety', 'Submit / state-changing click is not authorized'),
       scenario(
-        'form-submit',
+        'click-behavior',
         'blocked-safety',
-        'Submit / state-changing click is not authorized'
+        'Click / duplicate-click / modal / loading / success / error require a submit — not authorized'
+      ),
+      scenario(
+        'navigation',
+        'blocked-safety',
+        'Navigation after Login/submit is a state-changing action — not authorized'
       )
     );
     return out;
@@ -279,6 +293,7 @@ function fieldScenarios(ctx: ScenarioContext): AssignedScenario[] {
     scenario('visibility', 'executable', 'Field was observed'),
     scenario('enabled-state', 'executable', 'Enabled/disabled can be asserted from the inventoried state'),
     scenario('editability', 'executable', 'Read-only vs editable can be asserted from the inventoried state'),
+    scenario('required-state', 'executable', 'Required vs optional can be asserted from the inventoried required flag'),
     scenario('form-presence', 'executable', 'Field presence can be checked without submit'),
   ];
 
@@ -310,17 +325,6 @@ function fieldScenarios(ctx: ScenarioContext): AssignedScenario[] {
     return out;
   }
 
-  if (hint === 'password') {
-    out.push(
-      scenario(
-        'valid-input',
-        'requires-configuration',
-        'Password value must be supplied — credentials are not assumed'
-      )
-    );
-    return out;
-  }
-
   if (hint === 'date') {
     out.push(
       scenario(
@@ -337,6 +341,7 @@ function fieldScenarios(ctx: ScenarioContext): AssignedScenario[] {
   }
 
   out.push(scenario('valid-input', 'executable', 'Fill a representative valid value without submitting'));
+  out.push(scenario('empty-input', 'executable', 'Clear the field and blur — no submit'));
 
   if (hint === 'email' || hint === 'number' || hint === 'tel' || hint === 'url') {
     out.push(
@@ -344,27 +349,78 @@ function fieldScenarios(ctx: ScenarioContext): AssignedScenario[] {
     );
     out.push(scenario('validation-state', 'executable', 'HTML5 validity can be read after blur — message text is not invented'));
     out.push(scenario('error-recovery', 'executable', 'Invalid then valid fill, no submit'));
+  } else if (hint === 'text' || hint === 'password') {
+    out.push(
+      scenario(
+        'invalid-input',
+        'executable',
+        'Fill an atypical value without submit — do not assert a validation message unless a client-side constraint exists'
+      )
+    );
+    out.push(
+      scenario(
+        'validation-state',
+        'blocked-safety',
+        'Validation message / constraint failure is not observable without submit on this control type'
+      )
+    );
+    out.push(
+      scenario(
+        'error-recovery',
+        'blocked-safety',
+        'Error recovery after an invalid submit is not authorized — generated checks do not submit'
+      )
+    );
   }
 
   if (ctx.required) {
-    out.push(scenario('empty-input', 'executable', 'Required field — clear and blur'));
     out.push(scenario('required-validation', 'executable', 'Required flag was observed'));
   }
 
-  if (hint === 'text') {
+  if (hint === 'text' || hint === 'password') {
     out.push(scenario('whitespace-input', 'executable', 'Whitespace-only fill without submit'));
     out.push(scenario('long-input', 'executable', 'Long string fill without submit'));
     out.push(scenario('unicode-input', 'executable', 'Unicode fill without submit'));
-    if (type === 'textarea') {
-      out.push(scenario('special-characters', 'executable', 'Free-text textarea can receive special characters without submit'));
-    }
+    out.push(scenario('special-characters', 'executable', 'Special-character fill without submit'));
   }
 
   if (ctx.min || ctx.max || ctx.minLength || ctx.maxLength) {
     out.push(scenario('boundary-values', 'executable', 'min/max/length constraint was observed on the control'));
+  } else if (hint === 'text' || hint === 'password') {
+    out.push(
+      scenario(
+        'boundary-values',
+        'not-implemented',
+        'No min/max/length constraint was observed — boundary values are not invented'
+      )
+    );
   }
 
   return out;
+}
+
+function formScenarios(): AssignedScenario[] {
+  return [
+    scenario('form-presence', 'executable', 'Form markup was observed'),
+    scenario(
+      'form-submit',
+      'blocked-safety',
+      'Valid / empty / missing / invalid / boundary / server-error / success / duplicate / reset / cancel submission is not authorized'
+    ),
+    scenario('empty-input', 'blocked-safety', 'Empty / missing-field submission requires submit — not authorized'),
+    scenario('invalid-input', 'blocked-safety', 'Invalid submission requires submit — not authorized'),
+    scenario('boundary-values', 'blocked-safety', 'Boundary submission requires submit — not authorized'),
+    scenario(
+      'error-recovery',
+      'blocked-safety',
+      'Server-error / success after submit is not authorized'
+    ),
+    scenario(
+      'click-behavior',
+      'blocked-safety',
+      'Duplicate / reset / cancel submission is not authorized'
+    ),
+  ];
 }
 
 function workflowScenarios(ctx: ScenarioContext): AssignedScenario[] {

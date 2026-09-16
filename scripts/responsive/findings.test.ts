@@ -12,7 +12,7 @@ const finding: ResponsiveFinding = {
   expected: 'navigation stays within the layout viewport',
   actual: 'nav extends 40px past the viewport',
   screenshot: 'test-results/responsive/evidence/mobile-home-nav.png',
-  engineNote: 'Playwright Chromium viewport/touch emulation — not a real device, not Mobile Safari',
+  engineNote: 'Chromium emulated viewport (page.setViewportSize / Playwright viewport + touch flags) — not a real device, not iOS Safari, not Android Chrome',
 };
 
 test('formatFinding() includes page, viewport, element, expected, actual, evidence', () => {
@@ -23,7 +23,8 @@ test('formatFinding() includes page, viewport, element, expected, actual, eviden
   assert.match(text, /Expected: navigation stays/);
   assert.match(text, /Actual: nav extends/);
   assert.match(text, /Evidence: test-results\/responsive\/evidence\/mobile-home-nav.png/);
-  assert.match(text, /not Mobile Safari/);
+  assert.match(text, /emulated viewport/);
+  assert.match(text, /not a real device/);
 });
 
 test('slugFinding() is filesystem-safe', () => {

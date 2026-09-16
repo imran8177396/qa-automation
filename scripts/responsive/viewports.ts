@@ -20,8 +20,8 @@ export interface ViewportProfile {
   emulationNote: string;
 }
 
-const EMULATION_NOTE =
-  'Playwright Chromium viewport/touch emulation — not a real device, not Mobile Safari';
+export const EMULATION_NOTE =
+  'Chromium emulated viewport (page.setViewportSize / Playwright viewport + touch flags) — not a real device, not iOS Safari, not Android Chrome';
 
 export const VIEWPORTS: Record<ViewportName, ViewportProfile> = {
   desktop: {
@@ -91,7 +91,9 @@ export function playwrightUseFor(profile: ViewportProfile): {
 }
 
 export const RESPONSIVE_LIMITATIONS = [
-  'This suite emulates CSS viewports and touch flags in Chromium. It is not real-device testing.',
-  'A passing mobile viewport is not iPhone coverage and is not Mobile Safari coverage.',
+  'This suite uses emulated viewports in Chromium (page.setViewportSize and Playwright project viewport/touch flags). It is not a real device.',
+  'No real iOS Safari, real Android Chrome, or device-cloud session was executed.',
+  'A passing mobile emulated viewport is not iPhone coverage and is not Mobile Safari coverage.',
+  'Playwright device descriptors are not used as named iPhone/Pixel profiles — form factors are desktop/laptop/tablet/mobile only.',
   'WebKit engine results (if added later) would still be browser-engine testing, not Mobile Safari on a device.',
 ] as const;

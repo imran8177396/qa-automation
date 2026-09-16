@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Site — Inventory</title>
+  <link rel="stylesheet" href="/fixture.css" />
+</head>
+<body>
+  <header>
+    <nav aria-label="Primary">
+      <a href="/authed.html">Inventory</a>
+      <a href="/cart.html">Cart</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Products</h1>
+    <label for="sort">Sort</label>
+    <select id="sort" data-test="product-sort-container" name="sort">
+      <option>Name (A to Z)</option>
+      <option>Name (Z to A)</option>
+    </select>
+    <ul>
+      <li><a href="/item.html?id=1">Backpack</a></li>
+    </ul>
+    <button type="button">Add to cart</button>
+  </main>
+</body>
+</html>

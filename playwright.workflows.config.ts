@@ -6,6 +6,7 @@ import { getEnv } from './utils/env';
 import { loadConfig } from './scripts/lib/load-config';
 import {
   PLAYWRIGHT_FAILURE_ARTIFACTS,
+  playwrightAllureReporterConfig,
   playwrightJsonReporterConfig,
   resolvePlaywrightSuiteNameFromEnv,
 } from './scripts/lib/playwright-suites';
@@ -22,7 +23,11 @@ export default defineConfig({
   outputDir: 'test-results/workflows',
   workers: 1,
   retries: 0,
-  reporter: [['list'], ['json', playwrightJsonReporterConfig(suiteName)]],
+  reporter: [
+    ['list'],
+    ['json', playwrightJsonReporterConfig(suiteName)],
+    ['allure-playwright', playwrightAllureReporterConfig(suiteName)],
+  ],
   use: {
     baseURL: getEnv('QA_PLAYWRIGHT_BASE_URL', loadConfig().playwright.baseURL),
     headless: getEnv('QA_PLAYWRIGHT_HEADLESS', 'true') === 'true',

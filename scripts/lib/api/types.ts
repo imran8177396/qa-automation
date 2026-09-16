@@ -8,6 +8,8 @@ export interface ApiSection27Request {
   method: string;
   endpoint: string;
   path: string;
+  /** config = qa.config.json postman.requests. capability = auth rows. discovery is never invented. */
+  source: 'config' | 'discovery' | 'capability';
   statusCode: string;
   expectedStatus: ExpectedHttpStatus;
   collectionAssertedStatus: number | null;
@@ -26,12 +28,14 @@ export interface ApiAuthStance {
   authorization: 'NOT_EXECUTED' | 'EXECUTED';
   reason: string;
   tokenPresent: boolean;
+  documentedContract: boolean;
 }
 
 export interface ApiSection27Artifact {
   generatedAt: string;
   collection: string;
   terminology: string;
+  discoveryNote: string;
   auth: ApiAuthStance;
   requests: ApiSection27Request[];
   counts: {

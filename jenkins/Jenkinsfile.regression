@@ -1,0 +1,126 @@
+// Dedicated Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.regression
+// Always runs npm run qa:all (liveness JMeter only). Not a pull-request job.
+// Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
+// Never hardcode passwords, tokens, API keys, cookies, or credentials.
+
+def qa
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 90, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  parameters {
+    string(
+      name: 'DISCOVER_URL',
+      defaultValue: '',
+      description: 'Optional live URL for qa:all --url=. Empty uses the in-repo fixture. Do not put secrets in this field.'
+    )
+  }
+
+  environment {
+    CI = 'true'
+    QA_PLAYWRIGHT_HEADLESS = 'true'
+    QA_USE_FIXTURE = 'true'
+    QA_PLAYWRIGHT_BASE_URL = 'http://127.0.0.1:4173'
+    QA_WEBSITE_URL = 'http://127.0.0.1:4173/'
+    QA_FIXTURE_PORT = '4173'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          qa = load 'jenkins/scripts/qa-pipeline.groovy'
+        }
+      }
+    }
+
+    stage('Environment validation') {
+      steps {
+        script {
+          qa.validateAgentEnvironment()
+          qa.bindQaRuntimeCredentials()
+          qa.recordAllCredentialAvailability()
+          qa.restoreFixtureWebsiteIfNeeded()
+        }
+      }
+    }
+
+    stage('Install dependencies') {
+      steps {
+        script {
+          qa.npmRun('ci')
+          qa.npmRun('run qa:sync')
+          qa.installPlaywrightBrowsers('chromium firefox webkit')
+          qa.npmRun('run preflight')
+        }
+      }
+    }
+
+    stage('TypeScript validation') {
+      steps {
+        script {
+          qa.npmRun('run typecheck')
+        }
+      }
+    }
+
+    stage('Full regression (qa:all)') {
+      steps {
+        echo 'Runs npm run qa:all (complete orchestrator: discovery through Allure and final summary). Heavy JMeter is not authorized.'
+        script {
+          qa.runFullRegression(params.DISCOVER_URL)
+        }
+      }
+    }
+
+    stage('Allure report') {
+      steps {
+        script {
+          qa.tryNpmRun('run report:all')
+        }
+      }
+    }
+
+    stage('Artifact collection') {
+      steps {
+        script {
+          qa.archiveQaArtifacts()
+        }
+      }
+    }
+
+    stage('Final QA summary') {
+      steps {
+        echo 'Final QA summary is written by report:all / qa:all to reports/summary/. Credentials are not printed.'
+      }
+    }
+
+    stage('Notification') {
+      steps {
+        script {
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        if (qa != null && currentBuild.currentResult != 'SUCCESS') {
+          qa.tryNpmRun('run report:all')
+          qa.archiveQaArtifacts()
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+}

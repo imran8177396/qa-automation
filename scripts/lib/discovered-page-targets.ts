@@ -48,7 +48,7 @@ export function resolveDiscoveredPageTargets(input: {
   const sameOrigin = Boolean(pageMap && seedOrigin !== 'NOT_AVAILABLE' && seedOrigin === input.target.origin);
 
   if (pageMap && sameOrigin) {
-    const okPages = pageMap.pages.filter((page) => page.ok && !page.error);
+    const okPages = pageMap.pages.filter((page) => page.ok && !page.error && page.access !== 'gated');
     const seen = new Set<string>();
     const pages: UiPageTarget[] = [];
     const limit = input.maxPages ?? okPages.length;

@@ -8,6 +8,7 @@ import {
   firstRepoStackFrame,
   parseAssertionExpectedActual,
   parseFailedExecutions,
+  projectToEngine,
   type PlaywrightJsonReport,
 } from './playwright-results';
 
@@ -73,6 +74,13 @@ describe('playwright failure detail parser', () => {
     });
     assert.equal(firstRepoStackFrame(''), NOT_AVAILABLE);
     assert.equal(firstRepoStackFrame('at /usr/lib/node/internal.js:1:1'), NOT_AVAILABLE);
+  });
+
+  it('maps Playwright project names to engines without treating Safari as a real device', () => {
+    assert.equal(projectToEngine('chromium'), 'chromium');
+    assert.equal(projectToEngine('firefox'), 'firefox');
+    assert.equal(projectToEngine('webkit'), 'webkit');
+    assert.equal(projectToEngine('Desktop Safari'), 'webkit');
   });
 
   it('records skipped engines as NOT_EXECUTED with a reason', () => {

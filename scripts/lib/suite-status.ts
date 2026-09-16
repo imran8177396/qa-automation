@@ -7,6 +7,7 @@ export const SUITE_STATUSES = [
   'INVALID',
   'RECORDED',
   'DRY_RUN',
+  'BLOCKED',
 ] as const;
 
 export type SuiteStatus = (typeof SUITE_STATUSES)[number];
@@ -24,6 +25,8 @@ export interface ResolveSuiteStatusInput {
   invalid?: boolean;
   /** Child process exited non-zero. */
   processFailed?: boolean;
+  /** Required tool or configuration prevented the stage (not an application FAIL). */
+  blocked?: boolean;
 }
 
 /**
@@ -32,6 +35,7 @@ export interface ResolveSuiteStatusInput {
  */
 export function resolveSuiteStatus(input: ResolveSuiteStatusInput): SuiteStatus {
   if (input.invalid) return 'INVALID';
+  if (input.blocked) return 'BLOCKED';
 
   const executedCount = Number.isFinite(input.executedCount) ? input.executedCount : 0;
   if (executedCount <= 0) {
@@ -63,7 +67,7 @@ const FAILED_GROUP = new Set(['FAIL', 'INVALID', 'PARTIAL', 'ERROR']);
 const PASSED_GROUP = new Set(['PASS']);
 
 /**
- * Layer 1 stage rollup: three groups. NOT_EXECUTED / DRY_RUN / RECORDED never count as passed.
+ * Layer 1 stage rollup: three groups. NOT_EXECUTED / DRY_RUN / RECORDED / BLOCKED never count as passed.
  */
 export function rollupStageGroups(stages: StageGroupInput[]): StageGroupRollup {
   const passed: string[] = [];

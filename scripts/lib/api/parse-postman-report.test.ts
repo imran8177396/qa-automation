@@ -159,9 +159,49 @@ test('absent QA_API_TOKEN records authentication and authorization as NOT_EXECUT
   const artifact = parsePostmanReportForSection27({ report, config: config(), tokenPresent: false });
   assert.equal(artifact.auth.authentication, 'NOT_EXECUTED');
   assert.equal(artifact.auth.authorization, 'NOT_EXECUTED');
+  assert.equal(artifact.auth.documentedContract, false);
   const authRows = artifact.requests.filter((row) => row.result === 'NOT_EXECUTED');
   assert.equal(authRows.length, 2);
   assert.equal(authRows.every((row) => row.includedInPassCount === false), true);
+  assert.equal(authRows.every((row) => row.source === 'capability'), true);
+});
+
+test('token present without a documented auth contract stays NOT_EXECUTED', () => {
+  const artifact = parsePostmanReportForSection27({ report, config: config(), tokenPresent: true });
+  assert.equal(artifact.auth.authentication, 'NOT_EXECUTED');
+  assert.equal(artifact.auth.documentedContract, false);
+  assert.match(artifact.auth.reason, /no authentication or authorization contract/i);
+});
+
+test('documented bearer contract without QA_API_TOKEN stays NOT_EXECUTED', () => {
+  const documented = config();
+  documented.postman.auth = { type: 'bearer', tokenEnv: 'apiToken' };
+  const artifact = parsePostmanReportForSection27({ report, config: documented, tokenPresent: false });
+  assert.equal(artifact.auth.authentication, 'NOT_EXECUTED');
+  assert.equal(artifact.auth.documentedContract, true);
+  assert.match(artifact.auth.reason, /QA_API_TOKEN/i);
+});
+
+test('documented bearer contract with QA_API_TOKEN is EXECUTED', () => {
+  const documented = config();
+  documented.postman.auth = { type: 'bearer', tokenEnv: 'apiToken' };
+  const artifact = parsePostmanReportForSection27({ report, config: documented, tokenPresent: true });
+  assert.equal(artifact.auth.authentication, 'EXECUTED');
+  assert.equal(artifact.auth.authorization, 'EXECUTED');
+  assert.equal(artifact.requests.filter((row) => row.result === 'NOT_EXECUTED').length, 0);
+});
+
+test('executed rows are sourced from config, not invented discovery paths', () => {
+  const artifact = parsePostmanReportForSection27({
+    report,
+    config: config(),
+    tokenPresent: false,
+    discoveryNote: 'Sauce Demo discovery found 0 xhr/fetch/websocket APIs.',
+  });
+  const executed = artifact.requests.filter((row) => row.result !== 'NOT_EXECUTED');
+  assert.ok(executed.every((row) => row.source === 'config'));
+  assert.match(artifact.discoveryNote, /0 xhr\/fetch\/websocket/i);
+  assert.match(artifact.terminology, /qa\.config\.json/i);
 });
 
 test('API stage passes when documented 404 matches observed 404', () => {

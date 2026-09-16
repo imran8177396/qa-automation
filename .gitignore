@@ -1,38 +1,69 @@
-
 # Dependencies
 node_modules/
 
-# Playwright
-test-results/
-visual-baselines/**/*-actual.png
-visual-baselines/**/*-diff.png
-blob-report/
-playwright/.cache/
-playwright/.auth/
-
-# Reports (generated at runtime)
-reports/
-playwright-report/
-jmeter.log
-
-# Environment & secrets
+# Environment & secrets (.env.example is the committed template)
 .env
 .env.*
 !.env.example
 
-# Generated config
+# Generated config (created by qa:sync — do not commit secrets)
 config/generated.env
+
+# Playwright runtime artifacts (keep visual-baselines/ goldens)
+test-results/
+screenshots/
+traces/
+blob-report/
+playwright-report/
+playwright/.cache/
+playwright/.auth/
+visual-baselines/**/*-actual.png
+visual-baselines/**/*-diff.png
+
+# Ephemeral tool reports (qa:clean wipes these; historical packs do not live here)
+reports/
+
+# JMeter / tool scratch
+temp/
+jmeter.log
 
 # Build output
 dist/
 
-# JMeter / tool scratch
-temp/
+# Temporary files and logs (do not ignore Markdown docs)
+*.tmp
+*.temp
+*.log
+*.swp
+*.swo
+*~
 
-# Generated Word documents
+# OS-specific files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# npm / debug leftovers
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Historical professional Word/HTML/PDF packs are generated under these trees.
+# They stay gitignored (ephemeral evidence on disk). qa:clean must never delete them.
+# Do not un-ignore these paths. Do not delete existing timestamp folders.
 docs/output/
 docs/input/qa-test-results/
 
 # Generated application discovery inventories
 discovery/*.json
 
+# Full local snapshot (not the project SSOT — do not commit)
+QA Automation Structure/
+
+# Jenkins pipeline sources are committed (Multibranch + dedicated jobs).
+# Do not ignore jenkins/ or Jenkinsfile*.
+!jenkins/
+!jenkins/**

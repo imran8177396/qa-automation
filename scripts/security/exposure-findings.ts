@@ -72,6 +72,27 @@ export function collectExposureFindings(input: { pages: ExposureScanPage[] }): S
   const seenListing = new Set<string>();
   const seenArtifact = new Set<string>();
 
+  if (input.pages.length === 0) {
+    return [
+      asFinding({
+        status: 'NOT_TESTED',
+        rule: 'directory-listing-enabled',
+        severity: 'info',
+        detail: 'No discovery pages were available — directory listing was not invented',
+        expected: 'Directory listing disabled',
+        actual: 'no discovery pages',
+      }),
+      asFinding({
+        status: 'NOT_TESTED',
+        rule: 'build-artifact-exposed',
+        severity: 'info',
+        detail: 'No discovery pages were available — build-artifact URLs were not invented',
+        expected: 'Build artifacts not publicly reachable',
+        actual: 'no discovery pages',
+      }),
+    ];
+  }
+
   for (const page of input.pages) {
     if (!isReachable(page)) continue;
 
@@ -114,6 +135,31 @@ export function collectExposureFindings(input: { pages: ExposureScanPage[] }): S
         })
       );
     }
+  }
+
+  if (seenListing.size === 0) {
+    findings.push(
+      asFinding({
+        status: 'PASS',
+        rule: 'directory-listing-enabled',
+        severity: 'info',
+        detail: 'No Apache-style directory listing was present in discovery evidence',
+        expected: 'Directory listing disabled',
+        actual: 'no autoindex pages observed',
+      })
+    );
+  }
+  if (seenArtifact.size === 0) {
+    findings.push(
+      asFinding({
+        status: 'PASS',
+        rule: 'build-artifact-exposed',
+        severity: 'info',
+        detail: 'No reachable __next / source-map / build-manifest URLs were present in discovery evidence',
+        expected: 'Build artifacts not publicly reachable',
+        actual: 'none observed',
+      })
+    );
   }
 
   return findings;

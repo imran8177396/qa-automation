@@ -7,6 +7,7 @@ import { resolvePlaywrightBrowsers } from '../lib/playwright-browsers';
 import { PERFORMANCE_PROFILES } from '../performance/types';
 import { resolveCorrelatedWorkflows } from '../correlation/resolve';
 import { normalizeCrawlUrl } from '../lib/url-normalize';
+import { buildAbsentCategoryItems, mergeDiscoveryCategoryStatus } from './absent-categories';
 import { applicableScenarios, inferFieldHint, kindForElement } from './scenarios';
 import type { AssignedScenario, InventoryItem } from './types';
 
@@ -171,6 +172,7 @@ export function buildInventory(discovery: DiscoveryBundle, config: QaConfig): In
         name: workflow.title,
         page: workflow.page,
         source: 'discovery',
+        projectStatus: workflow.status,
         applicableScenarios: applicableScenarios({
           kind: 'workflow',
           workflowKind: workflow.kind,
@@ -229,11 +231,28 @@ export function buildInventory(discovery: DiscoveryBundle, config: QaConfig): In
       kind: 'api',
       name: 'API authentication / authorization',
       source: 'capability',
+      projectStatus: 'REQUIRES_CONFIGURATION',
       applicableScenarios: applicableScenarios({ kind: 'api', workflowKind: 'auth' }),
     });
   }
 
-  for (const workflow of resolveCorrelatedWorkflows(config)) {
+  const correlated = resolveCorrelatedWorkflows(config);
+  if (correlated.length === 0) {
+    items.push({
+      id: 'WF-CORRELATED',
+      kind: 'workflow',
+      name: 'Documented UI+API correlated workflows',
+      source: 'capability',
+      projectStatus: 'NOT_DISCOVERED',
+      coverageHint: 'not-applicable',
+      applicableScenarios: noted(
+        'ui-api-correlation',
+        'not-implemented',
+        'NOT_APPLICABLE / UNCOVERED: no discovered XHR and no documented UI↔API pair. JSONPlaceholder is not forced into Sauce Demo UI. Combined workflows stay separate from test:e2e and test:api.'
+      ),
+    });
+  }
+  for (const workflow of correlated) {
     items.push({
       id: `WF-CORR-${workflow.id}`,
       kind: 'workflow',
@@ -359,6 +378,11 @@ export function buildInventory(discovery: DiscoveryBundle, config: QaConfig): In
       });
     }
   }
+
+  const seedUrl = discovery.pageMap?.seedUrl ?? discovery.ui?.seedUrl ?? discovery.api?.seedUrl ?? null;
+  items.push(
+    ...buildAbsentCategoryItems(mergeDiscoveryCategoryStatus(discovery), seedUrl)
+  );
 
   return items;
 }

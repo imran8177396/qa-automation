@@ -1,12 +1,13 @@
 import { normalizeCrawlUrl } from '../lib/url-normalize';
-import type {
-  CoverageFormula,
-  CoverageRecord,
-  CoverageTotals,
-  DimensionContribution,
-  ExcludedInventoryItem,
-  InventoryItem,
-  InventoryKind,
+import {
+  UI_ELEMENT_KINDS,
+  type CoverageFormula,
+  type CoverageRecord,
+  type CoverageTotals,
+  type DimensionContribution,
+  type ExcludedInventoryItem,
+  type InventoryItem,
+  type InventoryKind,
 } from './types';
 import { isCoveredStatus, isTestable, percent } from './status';
 
@@ -16,17 +17,13 @@ export const TESTABLE_ITEM_DEFINITION =
 export const COVERAGE_DEFINITION =
   'Coverage = items with status TESTED or FAILED ÷ testable items after URL dedupe. Pass rate (passed executions ÷ executed executions) is not coverage.';
 
+export const SCOPE_COVERAGE_DEFINITION =
+  'Scope coverage = items with status TESTED or FAILED ÷ (testable items + BLOCKED items). The original item-coverage formula is unchanged. BLOCKED residual inventory (auth catalog, safety-gated submit) stays in this second denominator so a login-only crawl cannot be reported as 100% product coverage.';
+
 export const COVERAGE_IS_NOT_PASS_RATE =
   'Coverage is not pass rate. A FAILED item still counts as covered. Passing tests that do not match a discovered item do not increase coverage.';
 
-export const ELEMENT_COVERAGE_KINDS: readonly InventoryKind[] = [
-  'field',
-  'button',
-  'link',
-  'form',
-  'ui-component',
-  'navigation',
-];
+export const ELEMENT_COVERAGE_KINDS: readonly InventoryKind[] = UI_ELEMENT_KINDS;
 
 export const FUNCTIONAL_AREA_COVERAGE_KINDS: readonly InventoryKind[] = [
   'page',
@@ -142,11 +139,14 @@ export function deriveCoverageFormula(
       denominator: 'Testable unique items after URL normalization (P2-1 dedupe)',
       passRate: 'passed executions ÷ executed executions — reported separately, never used as coverage',
     },
+    scopeDefinition: SCOPE_COVERAGE_DEFINITION,
     totals: {
       discoveredItems: totals.discoveredItems,
       testableItems: totals.testableItems,
       coveredItems: totals.testedItems,
       itemCoveragePercent: totals.itemCoveragePercent,
+      scopeItems: totals.scopeItems,
+      scopeCoveragePercent: totals.scopeCoveragePercent,
       passRatePercent: totals.passRatePercent,
     },
     figures: {

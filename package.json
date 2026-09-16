@@ -1,7 +1,7 @@
 {
   "name": "qa-automation",
   "version": "1.0.0",
-  "description": "Single-config QA automation pipeline for Playwright, Postman, JMeter, and GitHub Actions",
+  "description": "Single-config QA automation pipeline for Playwright, Postman, JMeter, GitHub Actions, and Jenkins",
   "scripts": {
     "typecheck": "npx tsc --noEmit",
     "preflight": "tsx scripts/preflight.ts",
@@ -27,6 +27,7 @@
     "discover:pages": "tsx scripts/discover-pages.ts",
     "discover:ui": "tsx scripts/discover-ui.ts",
     "discover:api": "tsx scripts/discover-api.ts",
+    "generate:checks": "tsx scripts/planning/write-planned-checks.ts",
     "coverage": "tsx scripts/coverage.ts",
     "test:ui": "tsx scripts/run-ui-engine.ts",
     "test:visual": "tsx scripts/run-visual.ts",
@@ -45,16 +46,24 @@
     "retest": "tsx scripts/retest.ts",
     "docs:qa-report": "tsx scripts/generate-qa-report.ts",
     "report:final": "tsx scripts/reporting/generate-final-report.ts",
+    "report:allure": "tsx scripts/reporting/generate-allure-report.ts",
+    "report:playwright": "tsx scripts/reporting/report-playwright.ts",
+    "report:all": "tsx scripts/reporting/report-all.ts",
     "rules:sync": "tsx scripts/sync-cursor-rules.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.3.0",
+    "allure-commandline": "^2.46.1",
+    "allure-playwright": "^3.12.2",
     "docx": "^9.5.0",
     "dotenv": "^16.4.7",
     "postman-cli": "^1.27.0",

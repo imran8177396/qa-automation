@@ -1,10 +1,31 @@
 import type { DiscoveredPage, DiscoveryResult } from '../discovery/types';
-import type { SeoFinding } from './types';
+import type { SeoFinding, SeoFindingStatus, SeoSeverity } from './types';
 import { isLoopbackHost } from '../orchestrator/resolve-url';
 import { isAutoindexTitle } from '../security/autoindex';
+import { emptyHeadings, skippedHeadingLevels } from './heading-structure';
 
 export function isSeoSkippedPage(page: Pick<DiscoveredPage, 'title' | 'isAutoindex'>): boolean {
   return page.isAutoindex === true || isAutoindexTitle(page.title ?? '');
+}
+
+function problem(
+  nextId: () => string,
+  rule: string,
+  severity: SeoSeverity,
+  status: SeoFindingStatus,
+  page: string,
+  detail: string,
+  expected?: string,
+  actual?: string
+): SeoFinding {
+  return { id: nextId(), rule, severity, status, page, detail, expected, actual };
+}
+
+function headingsOf(page: DiscoveredPage): Array<{ level: string; text: string }> {
+  if (page.headings && page.headings.length > 0) {
+    return page.headings.map((heading) => ({ level: heading.level, text: heading.text }));
+  }
+  return page.h1s.map((text) => ({ level: 'h1', text }));
 }
 
 /**
@@ -30,93 +51,154 @@ export function analyzeSeo(discovery: DiscoveryResult): SeoFinding[] {
       /* keep HTTPS check when URL is not parseable */
     }
     if (!page.url.startsWith('https://')) {
-      findings.push({
-        id: nextId(),
-        rule: 'non-https',
-        severity: 'high',
-        page: page.url,
-        detail: 'Page is served over a non-HTTPS URL.',
-      });
+      findings.push(
+        problem(
+          nextId,
+          'non-https',
+          'high',
+          'FAIL',
+          page.url,
+          'Page is served over a non-HTTPS URL.',
+          'https URL',
+          page.url
+        )
+      );
     }
   }
 
   for (const page of loadedPages) {
     if (!page.title.trim()) {
-      findings.push({
-        id: nextId(),
-        rule: 'missing-title',
-        severity: 'high',
-        page: page.url,
-        detail: 'Page has no <title>.',
-      });
+      findings.push(
+        problem(nextId, 'missing-title', 'high', 'FAIL', page.url, 'Page has no <title>.', 'non-empty title', '(empty)')
+      );
     }
 
     if (page.h1s.length === 0) {
-      findings.push({
-        id: nextId(),
-        rule: 'missing-h1',
-        severity: 'high',
-        page: page.url,
-        detail: 'Page has no <h1>.',
-      });
+      findings.push(
+        problem(nextId, 'missing-h1', 'high', 'FAIL', page.url, 'Page has no <h1>.', 'at least one h1', '0')
+      );
     } else if (page.h1s.length > 1) {
-      findings.push({
-        id: nextId(),
-        rule: 'multiple-h1',
-        severity: 'low',
-        page: page.url,
-        detail: `Page has ${page.h1s.length} <h1> elements — search engines expect at most one.`,
-      });
+      findings.push(
+        problem(
+          nextId,
+          'multiple-h1',
+          'low',
+          'WARNING',
+          page.url,
+          `Page has ${page.h1s.length} <h1> elements — search engines expect at most one.`,
+          'at most one h1',
+          String(page.h1s.length)
+        )
+      );
+    }
+
+    const empty = emptyHeadings(headingsOf(page));
+    if (empty.length > 0) {
+      findings.push(
+        problem(
+          nextId,
+          'empty-heading',
+          'medium',
+          'FAIL',
+          page.url,
+          `${empty.length} empty heading(s) (${empty.map((row) => row.level).join(', ')}).`,
+          'headings with visible text',
+          `${empty.length} empty`
+        )
+      );
+    }
+
+    const skipped = skippedHeadingLevels(headingsOf(page));
+    if (skipped.length > 0) {
+      findings.push(
+        problem(
+          nextId,
+          'skipped-heading-level',
+          'low',
+          'WARNING',
+          page.url,
+          `Heading structure skips level(s) h${skipped.join(', h')} (observed ${headingsOf(page)
+            .map((row) => row.level)
+            .join(', ') || 'none'}).`,
+          'h1–h6 without skipped levels',
+          `skipped h${skipped.join(', h')}`
+        )
+      );
     }
 
     if (!page.metaDescription?.trim()) {
-      findings.push({
-        id: nextId(),
-        rule: 'missing-meta-description',
-        severity: 'medium',
-        page: page.url,
-        detail: 'Page has no meta description.',
-      });
+      findings.push(
+        problem(
+          nextId,
+          'missing-meta-description',
+          'medium',
+          'FAIL',
+          page.url,
+          'Page has no meta description.',
+          'non-empty meta description',
+          '(absent)'
+        )
+      );
     }
 
     if (!page.canonicalUrl?.trim()) {
-      findings.push({
-        id: nextId(),
-        rule: 'missing-canonical',
-        severity: 'low',
-        page: page.url,
-        detail: 'Page has no canonical <link>.',
-      });
+      findings.push(
+        problem(
+          nextId,
+          'missing-canonical',
+          'low',
+          'FAIL',
+          page.url,
+          'Page has no canonical <link>.',
+          'canonical link',
+          '(absent)'
+        )
+      );
     }
 
     if (page.robotsMeta?.toLowerCase().includes('noindex')) {
-      findings.push({
-        id: nextId(),
-        rule: 'robots-noindex',
-        severity: 'medium',
-        page: page.url,
-        detail: `Page's robots meta tag includes "noindex" (${page.robotsMeta}) — confirm this is intentional.`,
-      });
+      findings.push(
+        problem(
+          nextId,
+          'robots-noindex',
+          'medium',
+          'WARNING',
+          page.url,
+          `Page's robots meta tag includes "noindex" (${page.robotsMeta}) — confirm this is intentional.`,
+          'indexable unless intentional',
+          page.robotsMeta
+        )
+      );
     }
 
     if (page.imagesWithoutAlt > 0) {
-      findings.push({
-        id: nextId(),
-        rule: 'images-missing-alt',
-        severity: 'medium',
-        page: page.url,
-        detail: `${page.imagesWithoutAlt} of ${page.totalImages} image(s) have no alt attribute.`,
-      });
+      findings.push(
+        problem(
+          nextId,
+          'images-missing-alt',
+          'medium',
+          'FAIL',
+          page.url,
+          `${page.imagesWithoutAlt} of ${page.totalImages} image(s) have no alt attribute.`,
+          'alt on every img',
+          `${page.imagesWithoutAlt} missing`
+        )
+      );
     }
 
     if (!page.ogTitle && !page.ogDescription) {
-      findings.push({
-        id: nextId(),
-        rule: 'missing-open-graph',
-        severity: 'low',
-        page: page.url,
-        detail: 'Page has no Open Graph title or description (affects link-preview quality on social/chat).',
-      });
+      findings.push(
+        problem(
+          nextId,
+          'missing-open-graph',
+          'low',
+          'FAIL',
+          page.url,
+          'Page has no Open Graph title or description (affects link-preview quality on social/chat).',
+          'og:title or og:description',
+          '(absent)'
+        )
+      );
     }
   }
 
@@ -157,8 +239,11 @@ function findDuplicates(
       id: nextId(),
       rule,
       severity: 'medium',
+      status: 'FAIL',
       page: 'site-wide',
       detail: `${urls.length} pages share the same ${label} ("${value}"): ${urls.join(', ')}`,
+      expected: `unique ${label} per page`,
+      actual: `${urls.length} pages`,
     });
   }
   return findings;

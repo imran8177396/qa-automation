@@ -26,6 +26,8 @@ test('classify() labels a delete/purchase-style action as destructive', () => {
   const config = resolveSafetyConfig();
   assert.equal(classify({ text: 'Delete account' }, config), 'destructive');
   assert.equal(classify({ text: 'Buy now' }, config), 'destructive');
+  assert.equal(classify({ text: 'Logout' }, config), 'destructive');
+  assert.equal(classify({ text: 'Reset App State' }, config), 'destructive');
 });
 
 test('classify() labels a non-idempotent GET link as destructive', () => {

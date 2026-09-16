@@ -13,6 +13,8 @@ import { writeProfessionalSqaReport, type ProfessionalReportPaths } from './writ
 import { renderCanonicalFinalReportMd } from './render-canonical-summary';
 import { buildEnterpriseReportModel, type EnterpriseReportModel } from '../lib/qa-report/enterprise-model';
 import { assertDiscoveryPrecedesExecution, type StageTimeline } from '../lib/stage-timeline';
+import { writeFallbackCombinedReport, writeReportIndex } from './build-report-index';
+import { dirHasHtmlIndex, toPosixRelative } from '../lib/report-kinds';
 
 export async function generateFinalQaReport(): Promise<{
   mdPath: string;
@@ -63,7 +65,14 @@ export async function generateFinalQaReport(): Promise<{
   } catch (error) {
     professionalError = error instanceof Error ? error.message : String(error);
     logError(`Professional SQA report could not be written: ${professionalError}`);
-    model = buildEnterpriseReportModel();
+    try {
+      model = buildEnterpriseReportModel();
+    } catch (modelError) {
+      const fallbackReason = modelError instanceof Error ? modelError.message : String(modelError);
+      writeFallbackCombinedReport(fallbackReason);
+      writeReportIndex();
+      throw modelError;
+    }
   }
 
   fs.mkdirSync(PATHS.reports.summary, { recursive: true });
@@ -92,6 +101,14 @@ export async function generateFinalQaReport(): Promise<{
         }
       : null,
     professionalError: professionalError ?? null,
+    allure: {
+      resultsDir: toPosixRelative(PATHS.allureResults),
+      reportDir: toPosixRelative(PATHS.allureReport),
+      indexHtml: dirHasHtmlIndex(PATHS.allureReport)
+        ? toPosixRelative(path.join(PATHS.allureReport, 'index.html'))
+        : null,
+    },
+    reportIndex: toPosixRelative(PATHS.reportIndexJson),
     datedFolder: professional
       ? {
           timestamp: professional.timestamp,
@@ -113,6 +130,7 @@ export async function generateFinalQaReport(): Promise<{
     professionalError,
   });
   fs.writeFileSync(mdPath, markdown, 'utf8');
+  writeReportIndex();
   logSuccess(`Final report: ${mdPath} (${verdict})`);
   if (!professional) {
     logWarn('Five-layer Word/HTML/PDF was not produced; canonical markdown still written from artifacts.');

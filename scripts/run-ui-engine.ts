@@ -2,8 +2,8 @@ import { loadConfig } from './lib/load-config';
 import { PATHS } from './lib/paths';
 import { logError, logStep, logSuccess, logWarn } from './lib/logger';
 import { resolveSafetyConfig } from './core/safety-policy';
-import { generateUiChecks } from './planning/generate-ui-checks';
-import { readJsonIfExists, writeJson } from './discovery/write-json';
+import { writePlannedUiChecks } from './planning/write-planned-checks';
+import { readJsonIfExists } from './discovery/write-json';
 import { runPlaywright } from './runners/playwright';
 import { DEFAULT_FIXTURE_PORT, ensureFixtureChildProcess } from './testing/serve-fixture-site';
 import { printCoverageSummary, runCoverage } from './coverage/run-coverage';
@@ -30,9 +30,7 @@ async function main(): Promise<void> {
   }
 
   logStep('Planning applicable UI checks from discovery');
-  const checks = generateUiChecks(pageMap, ui, resolveSafetyConfig(config.safety));
-  writeJson(PATHS.plannedChecksFile, checks);
-  writeJson(PATHS.uiChecksFile, checks);
+  const checks = writePlannedUiChecks(pageMap, ui, resolveSafetyConfig(config.safety));
 
   const planned = checks.filter((check) => check.status === 'PLANNED').length;
   const gated = checks.length - planned;

@@ -1,0 +1,50 @@
+{
+  "applicationAxe": {
+    "errorMessage": "Error: axe violations on / (1):\n- page-has-heading-one (moderate): Page should contain a level-one heading — html\nexpect(received).toEqual(expected)",
+    "stackTrace": "at AccessibilityPage.expectNoAxeViolations (pages/AccessibilityPage.ts:119:87)"
+  },
+  "applicationSeo": {
+    "errorMessage": "Page has no <h1>.\nExpected: at least one h1\nActual: 0",
+    "stackTrace": "NOT_AVAILABLE"
+  },
+  "applicationSecurityHeader": {
+    "errorMessage": "content-security-policy missing on https://example.test/\nExpected: content-security-policy\nActual: absent",
+    "stackTrace": "NOT_AVAILABLE"
+  },
+  "automationLocatorTimeout": {
+    "errorMessage": "locator.click: Timeout 15000ms exceeded. waiting for locator(\"button.submit\")",
+    "stackTrace": "at tests/e2e/login.spec.ts:22:18"
+  },
+  "assertionMismatch": {
+    "errorMessage": "expect(received).toBe(expected)\nExpected: true\nReceived: false",
+    "stackTrace": "at tests/e2e/home.spec.ts:10:5"
+  },
+  "environmentBrowserMissing": {
+    "errorMessage": "browserType.launch: Executable doesn't exist. Run npx playwright install",
+    "stackTrace": "NOT_AVAILABLE"
+  },
+  "testDataFixture": {
+    "errorMessage": "Login rejected: invalid test user in fixture data (seed data username does not match).",
+    "stackTrace": "at tests/e2e/login.spec.ts:40:3"
+  },
+  "configurationMissing": {
+    "errorMessage": "REQUIRES_CONFIGURATION: QA_USERNAME / QA_PASSWORD are not set. Auth contract is absent.",
+    "stackTrace": "NOT_AVAILABLE"
+  },
+  "networkRefused": {
+    "errorMessage": "page.goto: net::ERR_CONNECTION_REFUSED at https://127.0.0.1:9/",
+    "stackTrace": "at tests/e2e/home.spec.ts:4:3"
+  },
+  "browserFirefoxTeardown": {
+    "errorMessage": "Tearing down \"context\" exceeded the test timeout of 60000ms.\nError: browserContext.close: Test ended.\nBrowser logs:\n<launching> firefox.exe -headless\n[GFX1-]: RenderCompositorSWGL failed mapping default framebuffer",
+    "stackTrace": "Tearing down \"context\" exceeded the test timeout of 60000ms."
+  },
+  "dependencyMissingModule": {
+    "errorMessage": "Error: Cannot find module 'missing-pkg'\nRequire stack:\n- scripts/run-api.ts",
+    "stackTrace": "Error: Cannot find module 'missing-pkg'"
+  },
+  "insufficient": {
+    "errorMessage": "NOT_AVAILABLE",
+    "stackTrace": "NOT_AVAILABLE"
+  }
+}

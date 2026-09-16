@@ -26,6 +26,9 @@ Full test commands (`qa:all`, `test:all`, `qa:test`, and a default `qa` pipeline
 - **Final unified report** — `npm run report:final` (and `qa:all` stage 19) writes `reports/summary/final-qa-report.md` + `.json`, then the five-layer professional SQA Word/HTML/PDF under a **new** date-time folder `docs/input|output/qa-test-results/YYYY-MM-DD_HH-MM-SS/`. Previous timestamp folders stay on disk. Stage 19 always runs at the end of `qa:all`, including after earlier FAIL stages and after `--fail-fast` stops. Tautological / observed-status API assertions are recorded as report-quality warnings and do **not** abort Word/HTML/PDF generation.
 - **Enterprise formats on demand** — `npm run docs:qa-report` regenerates DOCX/HTML/PDF from the same artifacts.
 - **Raw tool artifacts** — stay in `reports/<tool>/`; index via `reports/summary/raw-index.md`, do not overwrite them.
+- **Allure** — Playwright writes raw results to `reports/allure/results`. `npm run report:allure` (or `report:all`) runs `allure generate` into `reports/allure/report`. A previous `index.html` is copied to `reports/allure/history/<timestamp>/` before `--clean` so the only prior HTML is not wiped. Requires project deps `allure-playwright` + `allure-commandline` (Java JRE for the CLI). If the CLI cannot run, record **BLOCKED** — do not claim Allure works.
+- **Playwright HTML** remains enabled (`list` / `html` / `json` reporters are not removed). `npm run report:playwright` prints suite HTML paths via PATHS.
+- **Combined index** — `npm run report:all` generates/indexes Allure + Playwright HTML + existing Postman/JMeter + `report:final`, then writes `reports/summary/report-index.json`. Missing Postman/JMeter artifacts are **NOT_EXECUTED**; scores are never invented.
 
 ## Five report layers
 

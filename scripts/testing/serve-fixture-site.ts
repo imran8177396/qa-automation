@@ -38,6 +38,7 @@ const SITE_PAGES = [
   '/broken-link.html',
   '/responsive.html',
   '/create-user.html',
+  '/correlated.html',
 ];
 
 function fixtureOrigin(server: http.Server): string {
@@ -86,6 +87,23 @@ export function startFixtureServer(port = 0): Promise<FixtureServer> {
         const origin = fixtureOrigin(server);
         res.writeHead(200, { 'Content-Type': MIME_TYPES['.xml'] });
         res.end(buildSitemapXml(origin));
+        return;
+      }
+
+      if (url.pathname === '/api/status') {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+          res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'method not allowed' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            service: 'fixture-self-check',
+            note: 'Local fixture API for framework UI↔API correlation. Not a Sauce Demo endpoint.',
+          })
+        );
         return;
       }
 

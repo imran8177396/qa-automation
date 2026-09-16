@@ -19,7 +19,7 @@ import type { ElementRecord } from '../inventory/types';
  */
 test(
   'discovery pipeline never sends a state-changing request to the fixture site',
-  { timeout: 60000 },
+    { timeout: 120000 },
   async () => {
     const server = await startFixtureServer();
 

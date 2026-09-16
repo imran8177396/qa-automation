@@ -1,6 +1,6 @@
 ---
 description: Accessibility testing — automated axe + keyboard checks, not a complete WCAG audit
-globs: tests/e2e/accessibility/**,playwright.accessibility.config.ts,pages/AccessibilityPage.ts
+globs: tests/e2e/accessibility/**,playwright.accessibility.config.ts,pages/AccessibilityPage.ts,scripts/accessibility/**,scripts/run-accessibility.ts
 alwaysApply: false
 ---
 
@@ -19,6 +19,8 @@ It is **not** a complete manual WCAG audit. Never claim full WCAG conformance fr
 - Run axe rules on key pages from discovery inventory or `qa.config.json` targets.
 - Keyboard focus order and visible focus indicators on interactive elements.
 - Landmarks, headings hierarchy, form labels, and image alt text where detectable automatically.
+- Keyboard interaction, 200% Chromium CSS zoom, and 24×24 CSS-pixel touch targets where measurable.
+- Undiscovered chrome (nav, tables, images) is **NOT_APPLICABLE** with a reason — do not invent it.
 - Document violations with rule ID, impact, element, and page URL in reports.
 
 ## Execution

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Site — Login</title>
+  <link rel="stylesheet" href="/fixture.css" />
+</head>
+<body>
+  <main>
+    <h1>Sign in</h1>
+    <form id="login-form">
+      <label for="user">Username</label>
+      <input id="user" name="username" type="text" data-test="username" />
+
+      <label for="pass">Password</label>
+      <input id="pass" name="password" type="password" data-test="password" />
+
+      <button type="submit" data-test="login-button">Login</button>
+    </form>
+    <p id="error" hidden></p>
+  </main>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      var user = document.getElementById('user').value;
+      var pass = document.getElementById('pass').value;
+      if (user === 'fixture-user' && pass === 'fixture-pass') {
+        document.cookie = 'qa_fixture_session=1; path=/';
+        window.location.href = '/authed.html';
+        return;
+      }
+      var err = document.getElementById('error');
+      err.hidden = false;
+      err.textContent = 'You can only access this area when you are logged in';
+    });
+  </script>
+</body>
+</html>

@@ -42,6 +42,8 @@ test(
       assert.ok(name, 'name input is present with id=name');
       assert.equal(name!.required, true);
       assert.equal(name!.visible, true);
+      assert.equal(name!.label, 'Name');
+      assert.equal(name!.editable, true);
       assert.ok(name!.applicableTestTypes.includes('form-boundary'));
 
       const send = elements.find((el) => el.accessibleName === 'Send message');

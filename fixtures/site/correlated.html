@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fixture Site — Correlation self-check</title>
+  <link rel="stylesheet" href="/fixture.css" />
+</head>
+<body>
+  <main>
+    <h1>Correlation self-check</h1>
+    <nav>
+      <a href="/index.html">Home</a>
+    </nav>
+    <p data-qa="correlation-note">
+      Framework self-check only. This page calls the local fixture API
+      <code>GET /api/status</code>. It is not a Sauce Demo endpoint and is not Sauce Demo coverage.
+    </p>
+    <button type="button" data-qa="load-status">Load status</button>
+    <p data-qa="status-result" hidden></p>
+  </main>
+  <script>
+    async function loadStatus() {
+      var result = document.querySelector('[data-qa="status-result"]');
+      var response = await fetch('/api/status');
+      var data = await response.json();
+      result.hidden = false;
+      result.textContent = data.ok === true && data.service === 'fixture-self-check' ? 'ok' : 'error';
+      result.dataset.status = String(response.status);
+      result.dataset.method = 'GET';
+      result.dataset.url = '/api/status';
+    }
+    document.querySelector('[data-qa="load-status"]').addEventListener('click', function () {
+      loadStatus();
+    });
+    loadStatus();
+  </script>
+</body>
+</html>

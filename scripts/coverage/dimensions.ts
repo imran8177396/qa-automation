@@ -1,5 +1,6 @@
 import {
   ADVANCED_DIMENSIONS,
+  REQUIRED_COVERAGE_DIMENSION_IDS,
   type CoverageRecord,
   type DimensionCoverage,
   type InventoryItem,
@@ -9,6 +10,7 @@ import { emptyByStatus, isCoveredStatus, percent } from './status';
 
 export function calculateDimensions(items: InventoryItem[], records: CoverageRecord[]): DimensionCoverage[] {
   const byId = new Map(records.map((row) => [row.id, row]));
+  const required = new Set<string>(REQUIRED_COVERAGE_DIMENSION_IDS);
 
   return ADVANCED_DIMENSIONS.map((dimension) => {
     const dimItems = items.filter((item) =>
@@ -32,5 +34,5 @@ export function calculateDimensions(items: InventoryItem[], records: CoverageRec
       coveragePercent: percent(covered, testable.length),
       byStatus,
     };
-  }).filter((row) => row.discovered > 0);
+  }).filter((row) => row.discovered > 0 || required.has(row.id));
 }

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { expectPageLoads } from './helpers/page-load';
 
-/** Placeholder public pages. Replace with discovered routes after configuring a target URL. */
+/** Public Sauce Demo routes that load without a session. Inventory is login-gated. */
 const staticPages: Array<{ path: string; title: RegExp }> = [
-  { path: '/', title: /.+/ },
+  { path: '/', title: /Swag Labs/ },
 ];
 
 test('static page list is ready for a target site @cross-browser', async () => {

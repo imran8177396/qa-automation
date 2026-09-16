@@ -15,6 +15,8 @@ import {
 } from './orchestrator/resolve-url';
 import { runChildStage, runChildStageAsync, skippedResult } from './orchestrator/spawn-stage';
 import { buildStages } from './orchestrator/stages';
+import { CONTRACT_NAMED_STEPS, REPORTING_STAGE_KEYS } from './orchestrator/contract-flow';
+import { collectSuiteRollup } from './orchestrator/suite-rollup';
 import {
   ORCHESTRATOR_DISCLAIMER,
   type OrchestratorContext,
@@ -62,6 +64,26 @@ function discoveryArgs(url: string, extraArgs: string[]): string[] {
   return [normalized, ...passthrough];
 }
 
+function isAuthorizeHeavyArg(arg: string): boolean {
+  return arg === '--authorize-heavy' || arg.startsWith('--authorize-heavy=');
+}
+
+function childArgs(stage: StageDefinition, passthroughArgs: string[], extraArgs: string[], url: string): string[] {
+  if (stage.key === 'discovery') return discoveryArgs(url, extraArgs);
+  const merged = [...(stage.args ?? []), ...passthroughArgs];
+  if (stage.key === 'performance') {
+    return merged.filter((arg) => !isAuthorizeHeavyArg(arg));
+  }
+  return merged;
+}
+
+function childEnv(stage: StageDefinition, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (stage.key !== 'performance') return env;
+  const next = { ...env };
+  delete next.QA_PERF_AUTHORIZE;
+  return next;
+}
+
 function collectStageResult(stage: { id: number; key: string; name: string }): StageResult {
   const now = new Date().toISOString();
   return {
@@ -82,41 +104,44 @@ function failsFast(status: StageResult['status']): boolean {
   return status === 'FAIL' || status === 'INVALID' || status === 'PARTIAL';
 }
 
-/** Always emit the professional report after earlier stages, including --fail-fast stops. */
-function ensureFinalReportStage(input: {
+/** Allure, Playwright HTML index, then final markdown/JSON — always after earlier stages. */
+function ensureReportingStages(input: {
   stages: StageDefinition[];
   results: StageResult[];
   ctx: OrchestratorContext;
   passthroughArgs: string[];
+  extraArgs: string[];
   env: NodeJS.ProcessEnv;
   effectiveUrl: string;
   failFast: boolean;
 }): void {
-  const reportStage = input.stages.find((stage) => stage.key === 'report');
-  if (!reportStage) return;
-  if (input.results.some((row) => row.key === 'report')) return;
+  for (const key of REPORTING_STAGE_KEYS) {
+    if (input.results.some((row) => row.key === key)) continue;
+    const stage = input.stages.find((row) => row.key === key);
+    if (!stage) continue;
 
-  const skipReason = reportStage.skip?.(input.ctx) ?? null;
-  if (skipReason) {
-    input.results.push(skippedResult(reportStage, skipReason));
+    const skipReason = stage.skip?.(input.ctx) ?? null;
+    if (skipReason) {
+      input.results.push(skippedResult(stage, skipReason));
+      writeOrchestratorArtifacts({
+        url: input.effectiveUrl,
+        failFast: input.failFast,
+        results: input.results,
+      });
+      continue;
+    }
+
+    logStep(`${stage.name} (always runs at end of qa:all)`);
+    const result = runChildStage(stage, childArgs(stage, input.passthroughArgs, input.extraArgs, input.effectiveUrl), {
+      env: childEnv(stage, input.env),
+    });
+    input.results.push(result);
     writeOrchestratorArtifacts({
       url: input.effectiveUrl,
       failFast: input.failFast,
       results: input.results,
     });
-    return;
   }
-
-  logStep('Final report generation (always runs at end of qa:all)');
-  const result = runChildStage(reportStage, [...(reportStage.args ?? []), ...input.passthroughArgs], {
-    env: input.env,
-  });
-  input.results.push(result);
-  writeOrchestratorArtifacts({
-    url: input.effectiveUrl,
-    failFast: input.failFast,
-    results: input.results,
-  });
 }
 
 async function main(): Promise<void> {
@@ -125,6 +150,14 @@ async function main(): Promise<void> {
 
   logStep(`${config.project.name} — qa:all orchestrator`);
   console.log(ORCHESTRATOR_DISCLAIMER);
+  logStep('Contract execution flow (20 named steps)');
+  for (const step of CONTRACT_NAMED_STEPS) {
+    console.log(`  ${step.n}. ${step.title}`);
+  }
+  console.log(
+    'Extra existing stages still run: dependencies, content, workflows, collect. ' +
+      'UI performance and JMeter smoke share one liveness command (no --authorize-heavy).'
+  );
   const exhaustive = resolveExhaustiveExecutionPolicy(config.pipeline);
   if (exhaustive.enabled) {
     logStep('Exhaustive execution policy');
@@ -244,7 +277,9 @@ async function main(): Promise<void> {
         logStep(`Running ${runnable.length} stage(s) concurrently (${stage.parallelGroup})`);
         const batchResults = await Promise.all(
           runnable.map((groupStage) =>
-            runChildStageAsync(groupStage, [...(groupStage.args ?? []), ...passthroughArgs], { env })
+            runChildStageAsync(groupStage, childArgs(groupStage, passthroughArgs, extraArgs, effectiveUrl), {
+              env: childEnv(groupStage, env),
+            })
           )
         );
         for (const result of batchResults) results.push(result);
@@ -264,16 +299,14 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const args =
-      stage.key === 'discovery'
-        ? discoveryArgs(effectiveUrl, extraArgs)
-        : [...(stage.args ?? []), ...passthroughArgs];
-
-    const result = runChildStage(stage, args, { env });
+    const result = runChildStage(stage, childArgs(stage, passthroughArgs, extraArgs, effectiveUrl), {
+      env: childEnv(stage, env),
+    });
     results.push(result);
     writeOrchestratorArtifacts({ url: effectiveUrl, failFast, results });
 
-    if (failFast && failsFast(result.status) && stage.key !== 'report') {
+    const isReporting = (REPORTING_STAGE_KEYS as readonly string[]).includes(stage.key);
+    if (failFast && failsFast(result.status) && !isReporting) {
       logError(`--fail-fast set; stopping execution after ${stage.name}`);
       break;
     }
@@ -281,17 +314,19 @@ async function main(): Promise<void> {
     stageIndex += 1;
   }
 
-  ensureFinalReportStage({
+  ensureReportingStages({
     stages,
     results,
     ctx,
     passthroughArgs,
+    extraArgs,
     env,
     effectiveUrl,
     failFast,
   });
 
   const summary = collectResults({ url: effectiveUrl, failFast, results });
+  const rollup = collectSuiteRollup(results);
 
   if (fixtureClose) {
     await fixtureClose();
@@ -313,6 +348,7 @@ async function main(): Promise<void> {
     logError(`Stage ordering violated: ${summary.orderingViolations.join('; ')}`);
   }
   logSuccess(`Stage report: ${path.join(PATHS.reports.orchestrator, 'stages.md')}`);
+  console.log(rollup.banner);
 
   process.exit(summary.exitCode);
 }

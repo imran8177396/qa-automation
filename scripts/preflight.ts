@@ -1,12 +1,15 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createRequire } from 'module';
 import { PATHS } from './lib/paths';
 import { loadConfig } from './lib/load-config';
 import { logStep } from './lib/logger';
 import { resolveJmeterCommand } from './lib/jmeter';
-import { resolvePlaywrightBrowsers, type PlaywrightBrowser } from './lib/playwright-browsers';
+import {
+  isPlaywrightBrowserInstalled,
+  resolvePlaywrightBrowsers,
+  type PlaywrightBrowser,
+} from './lib/playwright-browsers';
 import { assertUniquePlaywrightSuitePaths } from './lib/playwright-suites';
 import { resolvePostmanCommand } from './lib/postman';
 import { captureCommand, findOnPath, localBinPath } from './lib/run-command';
@@ -22,6 +25,8 @@ interface CheckResult {
 }
 
 const MIN_NODE_MAJOR = 18;
+const SUPPORTED_PLATFORMS = new Set(['win32', 'darwin', 'linux']);
+const SUPPORTED_ARCHITECTURES = new Set(['x64', 'arm64']);
 const SECRET_ENV_KEY = /password|secret|token|key|credential|authorization/i;
 const SECRET_PATH = /(^|[\\/])\.env($|\.)|credentials|secret|\.pem$|\.pfx$/i;
 
@@ -34,6 +39,7 @@ const INSPECTED_ENV_KEYS = [
   'QA_USERNAME',
   'QA_PASSWORD',
   'QA_LOGIN_URL',
+  'JAVA_HOME',
   'JMETER_HOME',
   'QA_PERF_AUTHORIZE',
   'CI',
@@ -64,6 +70,10 @@ function packageJsonPath(): string {
   return path.join(PATHS.root, 'package.json');
 }
 
+function packageLockPath(): string {
+  return path.join(PATHS.root, 'package-lock.json');
+}
+
 function readPackageJson(): { name?: string; version?: string; dependencies?: Record<string, string>; devDependencies?: Record<string, string> } {
   return JSON.parse(fs.readFileSync(packageJsonPath(), 'utf8')) as {
     name?: string;
@@ -71,6 +81,87 @@ function readPackageJson(): { name?: string; version?: string; dependencies?: Re
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
   };
+}
+
+function checkOperatingSystem(): CheckResult {
+  const detail = `${os.type()} ${os.release()} (${process.platform})`;
+  if (!SUPPORTED_PLATFORMS.has(process.platform)) {
+    return {
+      name: 'Operating System',
+      status: 'WARNING',
+      detail: `${detail} — untested platform`,
+      required: false,
+    };
+  }
+  return { name: 'Operating System', status: 'PASS', detail, required: true };
+}
+
+function checkArchitecture(): CheckResult {
+  const arch = os.arch();
+  if (!SUPPORTED_ARCHITECTURES.has(arch)) {
+    return {
+      name: 'CPU architecture',
+      status: 'WARNING',
+      detail: `${arch} — Playwright browsers target x64/arm64`,
+      required: false,
+    };
+  }
+  return { name: 'CPU architecture', status: 'PASS', detail: arch, required: true };
+}
+
+function checkPackageJson(): CheckResult {
+  const pkgPath = packageJsonPath();
+  if (!fs.existsSync(pkgPath)) {
+    return {
+      name: 'package.json',
+      status: 'FAIL',
+      detail: 'not found at project root',
+      required: true,
+    };
+  }
+
+  try {
+    const pkg = readPackageJson();
+    const name = pkg.name ?? 'unnamed';
+    const version = pkg.version ?? 'n/a';
+    return { name: 'package.json', status: 'PASS', detail: `${name}@${version}`, required: true };
+  } catch (error) {
+    return {
+      name: 'package.json',
+      status: 'FAIL',
+      detail: `invalid JSON: ${String(error)}`,
+      required: true,
+    };
+  }
+}
+
+function checkPackageLock(): CheckResult {
+  const lockPath = packageLockPath();
+  if (!fs.existsSync(lockPath)) {
+    return {
+      name: 'package-lock.json',
+      status: 'WARNING',
+      detail: 'missing — npm installs will not be reproducible',
+      required: false,
+    };
+  }
+
+  try {
+    const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
+      lockfileVersion?: number;
+      name?: string;
+    };
+    const version =
+      typeof lock.lockfileVersion === 'number' ? `lockfileVersion ${lock.lockfileVersion}` : 'present';
+    return { name: 'package-lock.json', status: 'PASS', detail: version, required: false };
+  } catch (error) {
+    return {
+      name: 'package-lock.json',
+      status: 'FAIL',
+      detail: `invalid JSON: ${String(error)}`,
+      required: true,
+    };
+  }
 }
 
 function describeEnv(key: string): string {
@@ -131,9 +222,9 @@ function checkJava(): CheckResult {
   const java = findOnPath('java');
   if (!java) {
     return {
-      name: 'Java',
+      name: 'Java/JDK',
       status: 'WARNING',
-      detail: 'not found on PATH (required to run JMeter)',
+      detail: 'not found on PATH (required to run JMeter; rest of the framework can still run)',
       required: false,
     };
   }
@@ -141,12 +232,17 @@ function checkJava(): CheckResult {
   const captured = captureCommand(java, ['-version']);
   const combined = `${captured.stdout}\n${captured.stderr}`;
   if (isSpawnError(combined) && !/version/i.test(combined)) {
-    return { name: 'Java', status: 'WARNING', detail: 'found on PATH but -version failed', required: false };
+    return {
+      name: 'Java/JDK',
+      status: 'WARNING',
+      detail: 'found on PATH but -version failed',
+      required: false,
+    };
   }
   const version = firstLine(captured.stderr, captured.stdout) || 'found';
   const javac = findOnPath('javac');
-  const detail = javac ? version : `${version} (JRE only — javac not on PATH)`;
-  return { name: 'Java', status: 'PASS', detail, required: false };
+  const detail = javac ? version : `${version} (JRE only — javac not on PATH; JMeter can still run)`;
+  return { name: 'Java/JDK', status: 'PASS', detail, required: false };
 }
 
 function checkJmeter(config: QaConfig | null): CheckResult {
@@ -258,46 +354,29 @@ function checkBrowsers(config: QaConfig | null): CheckResult {
     ? resolvePlaywrightBrowsers(config.playwright)
     : (['chromium'] as PlaywrightBrowser[]);
 
-  let playwright: typeof import('@playwright/test');
-  try {
-    playwright = createRequire(__filename)('@playwright/test') as typeof import('@playwright/test');
-  } catch {
+  const pkgDir = path.join(PATHS.root, 'node_modules', '@playwright', 'test');
+  if (!fs.existsSync(pkgDir)) {
     return {
-      name: 'Browsers',
+      name: 'Playwright browsers',
       status: 'FAIL',
-      detail: 'cannot import @playwright/test',
+      detail: 'cannot check browsers — @playwright/test is not installed',
       required: true,
     };
   }
 
-  const types = {
-    chromium: playwright.chromium,
-    firefox: playwright.firefox,
-    webkit: playwright.webkit,
-  };
-
-  const missing: string[] = [];
-  const present: string[] = [];
-
-  for (const name of needed) {
-    const executable = types[name].executablePath();
-    if (fs.existsSync(executable)) {
-      present.push(name);
-    } else {
-      missing.push(name);
-    }
-  }
+  const present = needed.filter((name) => isPlaywrightBrowserInstalled(name));
+  const missing = needed.filter((name) => !isPlaywrightBrowserInstalled(name));
 
   if (missing.length > 0) {
     return {
-      name: 'Browsers',
+      name: 'Playwright browsers',
       status: 'FAIL',
       detail: `missing ${missing.join(', ')} — run: npx playwright install ${missing.join(' ')}`,
       required: true,
     };
   }
 
-  return { name: 'Browsers', status: 'PASS', detail: present.join(', '), required: true };
+  return { name: 'Playwright browsers', status: 'PASS', detail: present.join(', '), required: true };
 }
 
 function checkTypeScript(): CheckResult {
@@ -325,7 +404,7 @@ function checkDependencies(): CheckResult {
   const nodeModules = path.join(PATHS.root, 'node_modules');
   if (!fs.existsSync(nodeModules)) {
     return {
-      name: 'Dependencies',
+      name: 'Project dependencies',
       status: 'FAIL',
       detail: 'node_modules/ missing — run npm install',
       required: true,
@@ -337,7 +416,7 @@ function checkDependencies(): CheckResult {
     pkg = readPackageJson();
   } catch (error) {
     return {
-      name: 'Dependencies',
+      name: 'Project dependencies',
       status: 'FAIL',
       detail: `cannot read package.json: ${String(error)}`,
       required: true,
@@ -350,14 +429,14 @@ function checkDependencies(): CheckResult {
 
   if (missing.length > 0) {
     return {
-      name: 'Dependencies',
+      name: 'Project dependencies',
       status: 'FAIL',
       detail: `missing ${missing.join(', ')} — run npm install`,
       required: true,
     };
   }
 
-  return { name: 'Dependencies', status: 'PASS', detail: `${names.length} package(s)`, required: true };
+  return { name: 'Project dependencies', status: 'PASS', detail: `${names.length} package(s)`, required: true };
 }
 
 function loadConfigSafe(): { config: QaConfig | null; error?: string } {
@@ -417,6 +496,12 @@ function printInspect(config: QaConfig | null, configError?: string): void {
     ['tests/e2e/generated', PATHS.generatedSpecsDir],
     ['tests/api/postman', path.dirname(PATHS.postmanCollection)],
     ['tests/performance', path.dirname(PATHS.jmeterPlan)],
+    ['tests/performance/jmeter', PATHS.jmeterPlansDir],
+    ['tests/performance/jmeter/smoke', path.join(PATHS.jmeterPlansDir, 'smoke')],
+    ['tests/performance/jmeter/load', path.join(PATHS.jmeterPlansDir, 'load')],
+    ['tests/performance/jmeter/stress', path.join(PATHS.jmeterPlansDir, 'stress')],
+    ['tests/performance/jmeter/spike', path.join(PATHS.jmeterPlansDir, 'spike')],
+    ['tests/performance/jmeter/soak', path.join(PATHS.jmeterPlansDir, 'soak')],
     ['scripts/security', path.join(PATHS.root, 'scripts', 'security')],
     ['scripts/seo', path.join(PATHS.root, 'scripts', 'seo')],
     ['scripts/content', path.join(PATHS.root, 'scripts', 'content')],
@@ -481,6 +566,21 @@ function printChecks(checks: CheckResult[]): void {
   console.log(`Summary         ${passed} PASS, ${warned} WARNING, ${failed} FAIL`);
 }
 
+function printGaps(checks: CheckResult[]): void {
+  const gaps = checks.filter((check) => check.status !== 'PASS');
+  logStep('Missing or degraded');
+  if (gaps.length === 0) {
+    console.log('None            all checks passed');
+    return;
+  }
+
+  const nameWidth = Math.max(...gaps.map((check) => check.name.length));
+  for (const check of gaps) {
+    const name = check.name.padEnd(nameWidth);
+    console.log(`${name}  ${check.status.padEnd(7)}  ${check.detail}`);
+  }
+}
+
 function writeReport(checks: CheckResult[]): void {
   fs.mkdirSync(PATHS.reports.root, { recursive: true });
   const reportPath = path.join(PATHS.reports.root, 'preflight.json');
@@ -495,6 +595,7 @@ function writeReport(checks: CheckResult[]): void {
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   console.log(`Report          ${path.relative(PATHS.root, reportPath)}`);
+  console.log('Note            Preflight reports only; it does not install tools or change PATH.');
 }
 
 function main(): void {
@@ -502,17 +603,21 @@ function main(): void {
   printInspect(config, error);
 
   const checks: CheckResult[] = [
+    checkOperatingSystem(),
+    checkArchitecture(),
     checkNode(),
     checkNpm(),
     checkGit(),
     checkJava(),
     checkJmeter(config),
     checkPostman(config),
+    checkTypeScript(),
     checkPlaywright(),
     checkPlaywrightSuitePaths(),
     checkBrowsers(config),
-    checkTypeScript(),
     checkDependencies(),
+    checkPackageJson(),
+    checkPackageLock(),
   ];
 
   if (error) {
@@ -525,6 +630,7 @@ function main(): void {
   }
 
   printChecks(checks);
+  printGaps(checks);
   writeReport(checks);
 
   const failedRequired = checks.filter((check) => check.status === 'FAIL' && check.required);

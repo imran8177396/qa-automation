@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { applicableTestTypes, potentialAction } from './test-types';
 import { rollupCategory, type CategoryStatus, type DiscoveryCategory } from './categories';
-import { COLLECT_UI_DOM } from './collect-ui-dom';
+import { COLLECT_UI_DOM, collectUiDomScript } from './collect-ui-dom';
 
 export interface UiElementRecord {
   page: string;
@@ -10,9 +10,11 @@ export interface UiElementRecord {
   locator: string | null;
   locatorCandidates: string[];
   accessibleName: string | null;
+  label?: string | null;
   visible: boolean;
   enabled: boolean;
   required: boolean;
+  editable?: boolean;
   interactive: boolean;
   potentialAction: string;
   applicableTestTypes: ReturnType<typeof applicableTestTypes>;
@@ -27,6 +29,7 @@ export interface UiElementRecord {
   maxLength?: string | null;
   formMethod?: string | null;
   inputType?: string | null;
+  attributes?: Record<string, string>;
 }
 
 export interface UiInventory {
@@ -43,14 +46,18 @@ interface RawUiElement {
   inputType: string | null;
   role: string | null;
   text: string;
+  controlValue: string | null;
   ariaLabel: string | null;
+  label: string | null;
   placeholder: string | null;
   name: string | null;
   id: string | null;
   testId: string | null;
+  testIdAttribute: string | null;
   visible: boolean;
   enabled: boolean;
   required: boolean;
+  editable: boolean;
   href: string | null;
   isSubmit: boolean;
   readOnly: boolean;
@@ -59,6 +66,7 @@ interface RawUiElement {
   minLength: string | null;
   maxLength: string | null;
   formMethod: string | null;
+  attributes: Record<string, string>;
   evidence: string;
   candidate: boolean;
 }
@@ -74,7 +82,8 @@ function cssAttr(name: string, value: string): string | null {
 function buildLocatorCandidates(raw: RawUiElement): string[] {
   const candidates: string[] = [];
   if (raw.testId) {
-    const attr = cssAttr('data-testid', raw.testId);
+    const attrName = raw.testIdAttribute || 'data-testid';
+    const attr = cssAttr(attrName, raw.testId);
     if (attr) candidates.push(attr);
   }
   if (raw.id) {
@@ -134,10 +143,12 @@ function toRecord(raw: RawUiElement, pageUrl: string, index: number): UiElementR
     elementType: raw.category,
     locator: locators[0] ?? null,
     locatorCandidates: locators,
-    accessibleName: raw.ariaLabel || raw.text || raw.placeholder || raw.name || null,
+    accessibleName: raw.ariaLabel || raw.label || raw.text || raw.controlValue || raw.placeholder || raw.name || null,
+    label: raw.label,
     visible: raw.visible,
     enabled: raw.enabled,
     required: raw.required,
+    editable: Boolean(raw.editable),
     interactive: flags.interactive,
     potentialAction: potentialAction(raw.category, { isSubmit: raw.isSubmit, href: raw.href }),
     applicableTestTypes: applicableTestTypes(raw.category, flags),
@@ -152,10 +163,15 @@ function toRecord(raw: RawUiElement, pageUrl: string, index: number): UiElementR
     maxLength: raw.maxLength,
     formMethod: raw.formMethod,
     inputType: raw.inputType,
+    attributes: raw.attributes,
   };
 }
 
-export async function scanPageUi(page: Page, pageUrl: string): Promise<UiElementRecord[]> {
+export async function scanPageUi(
+  page: Page,
+  pageUrl: string,
+  options: { testIdAttributes?: string[] } = {}
+): Promise<UiElementRecord[]> {
   await page
     .locator('body')
     .first()
@@ -168,7 +184,10 @@ export async function scanPageUi(page: Page, pageUrl: string): Promise<UiElement
     .waitFor({ state: 'attached', timeout: 5000 })
     .catch(() => undefined);
 
-  const raw = (await page.evaluate(COLLECT_UI_DOM)) as RawUiElement[];
+  const script = options.testIdAttributes?.length
+    ? collectUiDomScript(options.testIdAttributes)
+    : COLLECT_UI_DOM;
+  const raw = (await page.evaluate(script)) as RawUiElement[];
 
   return raw.slice(0, MAX_ELEMENTS_PER_PAGE).map((item, index) =>
     toRecord(item as RawUiElement, pageUrl, index)

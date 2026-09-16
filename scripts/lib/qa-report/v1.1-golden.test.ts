@@ -181,7 +181,7 @@ describe('v1.1 golden fixtures', () => {
     const productSuite = loadV11GeneratedCheckSuiteSummary();
 
     assert.equal(responsive.targetOrigin, 'http://127.0.0.1:4173');
-    assert.equal(config.playwright.baseURL, 'https://example.com');
+    assert.equal(config.playwright.baseURL, 'https://www.saucedemo.com');
     assert.equal(compareSuiteOriginToBaseUrl(responsive.targetOrigin, config.playwright.baseURL), 'INVALID');
     assert.equal(compareSuiteOriginToBaseUrl(suiteSummary.targetOrigin, suiteSummary.configuredBaseUrl), 'INVALID');
     assert.equal(suiteSummary.originStatus, 'INVALID');

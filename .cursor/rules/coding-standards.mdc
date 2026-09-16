@@ -38,7 +38,7 @@ const { password } = getCredentials();
 
 ## CI/CD readiness
 
-- All scripts must run headlessly on GitHub Actions (`.github/workflows/qa-automation.yml`).
+- All scripts must run headlessly on GitHub Actions (`.github/workflows/qa-automation.yml`, `qa-regression.yml`, `qa-performance-heavy.yml`) and Jenkins (`jenkins/Jenkinsfile`, `Jenkinsfile.regression`, `Jenkinsfile.performance`).
 - Use cross-platform paths (`path.join`); avoid Windows-only assumptions in shared code.
 - Run before opening PRs:
 

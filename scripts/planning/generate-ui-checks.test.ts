@@ -84,7 +84,9 @@ test('generateUiChecks() never plans a form submit or submit-button click', () =
 
   const plannedClicks = checks.filter((c) => c.status === 'PLANNED' && (c.kind === 'click-button' || c.kind === 'form-submit'));
   assert.equal(plannedClicks.length, 0);
-  assert.ok(checks.some((c) => c.kind === 'form-submit' && c.status === 'NOT_TESTED'));
+  assert.ok(checks.some((c) => c.kind === 'form-submit' && c.status === 'BLOCKED'));
+  assert.ok(checks.some((c) => c.status === 'BLOCKED' && /empty submission/i.test(c.title)));
+  assert.ok(checks.some((c) => c.status === 'BLOCKED' && /duplicate-click/i.test(c.title)));
 });
 
 test('generateUiChecks() does not authorize GET/click on a destructive query-string link', () => {
@@ -110,7 +112,7 @@ test('generateUiChecks() does not authorize GET/click on a destructive query-str
   assert.ok(checks.some((c) => c.status === 'NOT_TESTED' && /state-changing/i.test(c.reason ?? '')));
 });
 
-test('generateUiChecks() assigns invalid-input to email but not to a free-text name field', () => {
+test('generateUiChecks() asserts HTML5 constraint invalid only for typed fields, not free-text', () => {
   const checks = generateUiChecks(
     pageMap([page('/contact.html')]),
     ui([
@@ -127,7 +129,9 @@ test('generateUiChecks() assigns invalid-input to email but not to a free-text n
   );
 
   assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#email' && c.status === 'PLANNED'));
-  assert.ok(!checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#name'));
+  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#email' && c.expect?.constraintInvalid === true));
+  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#name' && c.status === 'PLANNED'));
+  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#name' && c.expect?.constraintInvalid !== true));
   assert.ok(checks.some((c) => c.kind === 'valid-input' && c.expect?.locator === '#name' && c.status === 'PLANNED'));
 });
 
@@ -156,6 +160,68 @@ test('generateUiChecks() plans a safe in-scope link click', () => {
 
   assert.ok(checks.some((c) => c.kind === 'click-link' && c.status === 'PLANNED' && c.expect?.href === '/contact.html'));
   assert.ok(checks.some((c) => c.kind === 'link-href' && c.status === 'PLANNED'));
+});
+
+test('generateUiChecks() does not require an H1 when discovery observed none', () => {
+  const bare = page('/login.html');
+  bare.h1s = [];
+  bare.headings = [{ level: 'h4', text: 'Accepted usernames are:' }];
+  const checks = generateUiChecks(pageMap([bare]), ui([]), safety);
+  const sanity = checks.find((c) => c.kind === 'page-sanity' && c.status === 'PLANNED');
+  assert.ok(sanity);
+  assert.equal(sanity?.expect?.requireH1, false);
+  assert.equal(sanity?.expect?.requireHeading, true);
+});
+
+test('generateUiChecks() plans password fill-without-submit using a synthetic sample, not credentials', () => {
+  const checks = generateUiChecks(
+    pageMap([page('/contact.html')]),
+    ui([
+      element({
+        elementId: 'UI-0003',
+        locator: '[data-test="password"]',
+        accessibleName: 'Password',
+        evidence: 'text-like input (type=password)',
+        required: false,
+      }),
+    ]),
+    safety
+  );
+
+  const valid = checks.find((c) => c.kind === 'valid-input' && c.status === 'PLANNED');
+  assert.ok(valid);
+  assert.equal(valid?.expect?.fillValue, 'SamplePass_qa');
+  assert.ok(!checks.some((c) => c.kind === 'valid-input' && c.status === 'REQUIRES_CONFIGURATION'));
+  assert.ok(checks.some((c) => c.kind === 'validation-state' && c.status === 'BLOCKED'));
+  assert.ok(checks.some((c) => c.kind === 'boundary-values' && c.status === 'NOT_TESTED'));
+});
+
+test('generateUiChecks() does not invent link or dropdown checks when none were discovered', () => {
+  const checks = generateUiChecks(
+    pageMap([page('/')]),
+    ui([
+      element({
+        page: 'http://app.test/',
+        elementId: 'UI-0001',
+        elementType: 'button',
+        locator: '[data-test="login-button"]',
+        accessibleName: 'Login',
+        isSubmit: true,
+      }),
+      element({
+        page: 'http://app.test/',
+        elementId: 'UI-0002',
+        locator: '[data-test="username"]',
+        accessibleName: 'Username',
+        evidence: 'text-like input',
+      }),
+    ]),
+    safety
+  );
+
+  assert.equal(checks.filter((c) => c.kind === 'click-link' || c.kind === 'link-href').length, 0);
+  assert.equal(checks.filter((c) => c.kind === 'select-options' || c.kind === 'select-change').length, 0);
+  assert.ok(checks.every((c) => c.kind !== 'toggle-state'));
 });
 
 test('generateUiChecks() records unmapped element types as NOT_TESTED instead of omitting them', () => {

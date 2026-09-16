@@ -11,6 +11,7 @@ import {
 } from '../lib/stage-timeline';
 import type { OrchestratorSummary, StageResult } from './types';
 import { overallExitCode } from './spawn-stage';
+import { collectSuiteRollup, orchestratorProcessExitCode } from './suite-rollup';
 
 function toTimelineRows(results: StageResult[]): StageTimelineRow[] {
   return results.map((row) => ({
@@ -35,7 +36,8 @@ export function writeOrchestratorArtifacts(input: {
 }): OrchestratorSummary {
   const groups = rollupStageGroups(input.results);
   const timeline = buildStageTimeline(toTimelineRows(input.results));
-  const exitCode = overallExitCode(input.results);
+  const suiteRollup = collectSuiteRollup(input.results);
+  const exitCode = orchestratorProcessExitCode(suiteRollup.overall, overallExitCode(input.results));
 
   const summary: OrchestratorSummary = {
     generatedAt: new Date().toISOString(),
@@ -47,10 +49,11 @@ export function writeOrchestratorArtifacts(input: {
     skipped: groups.notExecuted,
     passed: groups.passed,
     notExecuted: groups.notExecuted,
-    overallStatus: exitCode === 0 ? 'PASS' : 'FAIL',
+    overallStatus: suiteRollup.overall,
     exitCode,
     orderingValid: timeline.ordering.ok,
     orderingViolations: timeline.ordering.violations,
+    suiteRollup: suiteRollup.lines,
   };
 
   const dir = PATHS.reports.orchestrator;
@@ -65,6 +68,12 @@ export function writeOrchestratorArtifacts(input: {
     '',
     `URL: ${summary.url}`,
     `Overall: ${summary.overallStatus}`,
+    '',
+    '## Suite rollup',
+    '',
+    '```',
+    suiteRollup.banner.trim(),
+    '```',
     '',
     '## Stage groups',
     '',

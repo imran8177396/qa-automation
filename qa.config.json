@@ -3,7 +3,7 @@
     "name": "QA Automation"
   },
   "urls": {
-    "website": "https://example.com/",
+    "website": "https://www.saucedemo.com/",
     "api": "https://jsonplaceholder.typicode.com"
   },
   "pipeline": {
@@ -51,7 +51,110 @@
           "statusCode": 200,
           "expectJson": true,
           "responseShape": "object",
-          "requiredFields": ["userId", "id", "title", "body"]
+          "requiredFields": ["userId", "id", "title", "body"],
+          "fieldTypes": {
+            "userId": "number",
+            "id": "number",
+            "title": "string",
+            "body": "string"
+          },
+          "contentType": "application/json"
+        }
+      },
+      {
+        "name": "GET /posts — filter by userId",
+        "method": "GET",
+        "path": "/posts",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "query": {
+          "userId": "1"
+        },
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "array"
+        }
+      },
+      {
+        "name": "POST /posts — create resource",
+        "method": "POST",
+        "path": "/posts",
+        "kind": "valid",
+        "expectedStatus": 201,
+        "body": {
+          "title": "qa documented post",
+          "body": "created by the Postman suite from qa.config.json",
+          "userId": 1
+        },
+        "assertions": {
+          "statusCode": 201,
+          "expectJson": true,
+          "responseShape": "object",
+          "requiredFields": ["id", "title", "body", "userId"],
+          "fieldTypes": {
+            "id": "number",
+            "title": "string",
+            "body": "string",
+            "userId": "number"
+          }
+        }
+      },
+      {
+        "name": "PUT /posts/1 — replace resource",
+        "method": "PUT",
+        "path": "/posts/1",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "body": {
+          "id": 1,
+          "title": "qa documented replace",
+          "body": "replaced by the Postman suite from qa.config.json",
+          "userId": 1
+        },
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "object",
+          "requiredFields": ["id", "title", "body", "userId"]
+        }
+      },
+      {
+        "name": "PATCH /posts/1 — partial update",
+        "method": "PATCH",
+        "path": "/posts/1",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "body": {
+          "title": "qa documented patch"
+        },
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "object",
+          "requiredFields": ["id", "title"]
+        }
+      },
+      {
+        "name": "DELETE /posts/1 — delete resource",
+        "method": "DELETE",
+        "path": "/posts/1",
+        "kind": "valid",
+        "expectedStatus": 200,
+        "assertions": {
+          "statusCode": 200,
+          "expectJson": true,
+          "responseShape": "object"
+        }
+      },
+      {
+        "name": "POST /posts — missing body",
+        "method": "POST",
+        "path": "/posts",
+        "kind": "missing-parameter",
+        "expectedStatus": "UNVERIFIED",
+        "assertions": {
+          "expectJson": false
         }
       },
       {
@@ -102,10 +205,11 @@
   },
   "playwright": {
     "enabled": true,
-    "baseURL": "https://example.com",
+    "baseURL": "https://www.saucedemo.com",
     "browsers": ["chromium"],
     "headless": true,
-    "workers": 2
+    "workers": 2,
+    "testIdAttribute": "data-test"
   },
   "jmeter": {
     "enabled": true,

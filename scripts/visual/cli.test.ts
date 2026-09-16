@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'fs';
+import path from 'path';
 import { resolveVisualCli } from './cli';
+import { PATHS } from '../lib/paths';
 
 test('test:visual never enables baseline updates', () => {
   assert.deepEqual(resolveVisualCli(['node', 'run-visual.ts']), {
@@ -38,4 +41,14 @@ test('approved update still strips Playwright update flags from passthrough args
   ]);
   assert.equal(resolved.updateBaselines, true);
   assert.deepEqual(resolved.extraArgs, ['--headed']);
+});
+
+test('package.json test:visual does not approve baseline updates', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(PATHS.root, 'package.json'), 'utf8')) as {
+    scripts: Record<string, string>;
+  };
+  assert.equal(pkg.scripts['test:visual'], 'tsx scripts/run-visual.ts');
+  assert.equal(pkg.scripts['test:visual'].includes('approve'), false);
+  assert.equal(pkg.scripts['test:visual'].includes('update-snapshots'), false);
+  assert.match(pkg.scripts['test:visual:update'] ?? '', /approve-baseline-update/);
 });

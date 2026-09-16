@@ -77,7 +77,7 @@ import {
   parseFailedExecutionsFromFile,
   type PlaywrightFailedExecution,
 } from '../playwright-results';
-import { compareSuiteOriginToBaseUrl, NOT_AVAILABLE } from '../suite-origin';
+import { compareSuiteOriginToBaseUrl, NOT_AVAILABLE, resolveConfiguredPlaywrightBaseUrl } from '../suite-origin';
 import {
   assertDiscoveryPrecedesExecution,
   stagePhaseForKey,
@@ -359,8 +359,17 @@ export interface EnterpriseReportModel {
   correlation: {
     available: boolean;
     suitePassed: boolean;
-    workflows: Array<{ id: string; name: string; uiPath: string; api: string }>;
+    workflows: Array<{
+      id: string;
+      name: string;
+      uiPath?: string;
+      api?: string;
+      status?: string;
+      reason?: string;
+    }>;
     note: string;
+    correlationUsed?: boolean;
+    correlatedExecuted?: number;
   };
   failureAnalysis: FailureAnalysisSectionModel;
   retest: RetestSectionModel;
@@ -671,7 +680,8 @@ function buildSeoModel(
     high: findings.filter((row) => row.severity === 'high').length,
     medium: findings.filter((row) => row.severity === 'medium').length,
     low: findings.filter((row) => row.severity === 'low').length,
-    failCount: findings.filter((row) => row.severity === 'high').length,
+    failCount: findings.filter((row) => row.status === 'FAIL' || (row.status == null && row.severity === 'high'))
+      .length,
     rawFindingCount,
     uniqueFindingCount,
     findings,
@@ -707,6 +717,7 @@ function packageVersion(packageName: string): string {
 
 export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const config = loadConfig();
+  const expectedOrigin = resolveConfiguredPlaywrightBaseUrl();
   const { extras: reportExtras } = ensureReportConfigWritten();
   const rawSummary = readJson<SummaryFile>(path.join(PATHS.reports.root, 'summary.json'));
   assertUniquePlaywrightSuitePaths();
@@ -771,8 +782,17 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const uiInventoryRaw = readJson<UiInventory>(PATHS.uiInventoryFile);
   const workflowRaw = readJson<{
     passed?: boolean;
-    workflows?: Array<{ id: string; name: string; uiPath: string; api: string }>;
+    workflows?: Array<{
+      id: string;
+      name: string;
+      uiPath?: string;
+      api?: string;
+      status?: string;
+      reason?: string;
+    }>;
     note?: string;
+    correlationUsed?: boolean;
+    correlatedExecuted?: number;
   }>(path.join(PATHS.reports.workflows, 'summary.json'));
 
   const pwRaw = flattenPlaywright(playwright?.suites as Parameters<typeof flattenPlaywright>[0]);
@@ -785,9 +805,9 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const generatedCheckOrigin = generatedCheckSummary?.targetOrigin ?? NOT_AVAILABLE;
   const generatedCheckOriginStatus = generatedCheckSummary
     ? generatedCheckSummary.originStatus === 'INVALID' ||
-      compareSuiteOriginToBaseUrl(generatedCheckSummary.targetOrigin, config.playwright.baseURL) === 'INVALID'
+      compareSuiteOriginToBaseUrl(generatedCheckSummary.targetOrigin, expectedOrigin) === 'INVALID'
       ? 'INVALID'
-      : compareSuiteOriginToBaseUrl(generatedCheckSummary.targetOrigin, config.playwright.baseURL)
+      : compareSuiteOriginToBaseUrl(generatedCheckSummary.targetOrigin, expectedOrigin)
     : NOT_AVAILABLE;
   const generatedCheckOriginInvalid = generatedCheckOriginStatus === 'INVALID';
   const countableExecutions = generatedCheckOriginInvalid ? [] : executions;
@@ -888,12 +908,16 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         note:
           workflowRaw.note ??
           'Combined UI+API workflows only. UI tests and Postman API tests remain separate.',
+        correlationUsed: workflowRaw.correlationUsed === true,
+        correlatedExecuted: workflowRaw.correlatedExecuted ?? 0,
       }
     : {
         available: false,
         suitePassed: false,
         workflows: [],
         note: 'No combined UI+API workflow run is associated with this execution. Run npm run test:workflows.',
+        correlationUsed: false,
+        correlatedExecuted: 0,
       };
 
   const securityModel = securitySection;
@@ -1330,11 +1354,11 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   for (const suiteName of PLAYWRIGHT_SUITE_NAMES) {
     const suiteSummary = readJsonIfExists<PlaywrightSuiteSummary>(playwrightSuiteSummaryPath(suiteName));
     if (!suiteSummary) continue;
-    if (suiteSummary.originStatus === 'INVALID' || compareSuiteOriginToBaseUrl(suiteSummary.targetOrigin, config.playwright.baseURL) === 'INVALID') {
+    if (suiteSummary.originStatus === 'INVALID' || compareSuiteOriginToBaseUrl(suiteSummary.targetOrigin, expectedOrigin) === 'INVALID') {
       originMismatches.push({
         suite: suiteName,
         origin: suiteSummary.targetOrigin,
-        baseUrl: config.playwright.baseURL,
+        baseUrl: expectedOrigin,
         product: (PRODUCT_ORIGIN_SUITES as readonly string[]).includes(suiteName),
       });
     }
@@ -1533,7 +1557,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
 
     if (originMismatches.length > 0) {
     risks.push(
-      `Suite origin INVALID — excluded from pass counts. Expected origin: ${config.playwright.baseURL}. Observed: ${originMismatches
+      `Suite origin INVALID — excluded from pass counts. Expected origin: ${expectedOrigin}. Observed: ${originMismatches
         .map((row) => `${row.suite} actual ${row.origin}`)
         .join('; ')}.`
     );
@@ -1678,10 +1702,15 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
             {
               type: 'Combined UI+API Workflows',
               tool: 'Playwright (isolated suite — not every UI test)',
-              coverage: `${correlationModel.workflows.length} documented pair(s)`,
+              coverage: correlationModel.correlationUsed
+                ? `${correlationModel.correlatedExecuted ?? 0} correlated pair(s)`
+                : correlationModel.note,
               result: resolveSuiteStatus({
-                executedCount: correlationModel.workflows.length,
+                executedCount: correlationModel.correlatedExecuted ?? 0,
                 failedCount: correlationModel.suitePassed ? 0 : 1,
+                recorded:
+                  correlationModel.correlationUsed !== true && correlationModel.workflows.length > 0,
+                selectedCount: correlationModel.workflows.length,
               }),
             },
           ]
@@ -1785,7 +1814,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         label: 'JMeter Version',
         value: preflightRaw?.checks?.find((row) => row.name === 'JMeter')?.detail ?? NOT_AVAILABLE,
       },
-      { label: 'Base URL', value: config.playwright.baseURL },
+      { label: 'Base URL', value: expectedOrigin },
       { label: 'API Base URL', value: config.urls.api },
       { label: 'Environment', value: `Public website — ${config.urls.website}` },
       {
@@ -1866,7 +1895,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       available: generatedCheckAvailable,
       originStatus: generatedCheckOriginStatus,
       targetOrigin: generatedCheckOrigin,
-      configuredBaseUrl: config.playwright.baseURL,
+      configuredBaseUrl: expectedOrigin,
       engineCaveats: [...PLAYWRIGHT_ENGINE_CAVEATS],
       failureDetails,
       failureDetailsAvailable,
@@ -1885,7 +1914,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       maxMs: pmSummary?.timeStats?.responseMax ?? 0,
       requests: apiRequests,
       terminology:
-        'API automation via Postman CLI. Coverage is limited to endpoints documented in qa.config.json and xhr/fetch calls observed on the same API origin. Endpoints are never invented. Authentication/authorization stay untested unless the target documents them and QA_API_TOKEN is provided.',
+        'API automation via Postman CLI. Sauce Demo discovery found 0 xhr/fetch/websocket APIs; executed requests are documented in qa.config.json postman.requests, not invented from the login page. Coverage is limited to those documented requests and xhr/fetch calls observed on the same API origin. Authentication/authorization stay NOT_EXECUTED unless the target documents them and QA_API_TOKEN is provided.',
     },
     performance: {
       available: Boolean(jmeter),
@@ -1975,6 +2004,10 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       { name: 'Orchestrator stages', location: 'reports/orchestrator/stages.md' },
       { name: 'Orchestrator summary', location: 'reports/orchestrator/summary.json' },
       { name: 'Final QA report', location: 'reports/summary/final-qa-report.md' },
+      { name: 'Allure results', location: 'reports/allure/results' },
+      { name: 'Allure HTML report', location: 'reports/allure/report/index.html' },
+      { name: 'Playwright HTML report (e2e)', location: 'reports/playwright/e2e/html/index.html' },
+      { name: 'Report kind index', location: 'reports/summary/report-index.json' },
       ...(a11yModel.available
         ? [
             { name: 'Accessibility JSON', location: 'reports/accessibility/results.json' },
@@ -1989,6 +2022,8 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         ? [
             { name: 'Workflow correlation JSON', location: 'reports/workflows/results.json' },
             { name: 'Workflow correlation summary', location: 'reports/workflows/summary.json' },
+            { name: 'Workflow correlation evidence', location: 'reports/workflows/evidence.json' },
+            { name: 'Workflow correlation findings', location: 'reports/workflows/findings.md' },
           ]
         : []),
       ...(securityModel.available
@@ -2053,8 +2088,8 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         ? 'PENDING REVIEW — reviewer name is unset in qa.config.json report.signOff. This report is not approved.'
         : `Reviewed by ${formatReviewedBy(reportExtras.signOff)}.`,
       originMismatches.length > 0
-        ? `INVALID origin (excluded from pass counts). Expected: ${config.playwright.baseURL}. Observed: ${originMismatches.map((row) => `${row.suite} ${row.origin}`).join('; ')}.`
-        : `Suite origin compared to ${config.playwright.baseURL} where suite summaries were present.`,
+        ? `INVALID origin (excluded from pass counts). Expected: ${expectedOrigin}. Observed: ${originMismatches.map((row) => `${row.suite} ${row.origin}`).join('; ')}.`
+        : `Suite origin compared to ${expectedOrigin} where suite summaries were present.`,
       `Configured Playwright browsers in qa.config.json: ${(config.playwright.browsers ?? []).join(', ') || NOT_AVAILABLE}. Generated-check / UI executions observed: ${executedBrowsers.join(', ') || NOT_AVAILABLE}. WebKit is not iOS Safari; Chromium is not Android Chrome.`,
       `Lighthouse / Core Web Vitals: ${lighthouseSection.status}${lighthouseSection.skipReason ? ` — ${lighthouseSection.skipReason}` : ''}. JMeter measurements are separate and never stand in for CWV.`,
       ...(qualityWarnings.length

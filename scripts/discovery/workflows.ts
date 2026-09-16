@@ -3,10 +3,11 @@ import { rollupCategory, type CategoryStatus } from './categories';
 import type { PageMap } from './page-map';
 import type { UiElementRecord } from './ui-scan';
 import type { ApiInventory } from './api-observe';
+import type { AuthAttempt } from './auth-session';
 
 export interface WorkflowRecord {
   id: string;
-  kind: 'navigation' | 'form-submit' | 'authentication' | 'api';
+  kind: 'navigation' | 'form-submit' | 'authentication' | 'api' | 'gated';
   title: string;
   page?: string;
   status: 'DISCOVERED' | 'CANDIDATE' | 'NOT_TESTED' | 'REQUIRES_CONFIGURATION';
@@ -25,10 +26,16 @@ export interface WorkflowInventory {
 const AUTH_PATH = /login|signin|sign-in|signup|sign-up|register|auth/i;
 const PASSWORD_TYPE = /password/i;
 
-export function inferWorkflows(pageMap: PageMap, elements: UiElementRecord[], api: ApiInventory): WorkflowInventory {
+export function inferWorkflows(
+  pageMap: PageMap,
+  elements: UiElementRecord[],
+  api: ApiInventory,
+  auth?: AuthAttempt
+): WorkflowInventory {
   const workflows: WorkflowRecord[] = [];
   let seq = 1;
   const nextId = () => `WF-${String(seq++).padStart(4, '0')}`;
+  const session = auth ?? pageMap.auth;
 
   const inScopeNav = pageMap.navigation.filter((item) => item.inScope);
   if (inScopeNav.length > 0) {
@@ -66,20 +73,41 @@ export function inferWorkflows(pageMap: PageMap, elements: UiElementRecord[], ap
   );
   const authPages = pageMap.pages.filter((page) => AUTH_PATH.test(page.route));
 
-  if (passwordFields.length > 0 || authPages.length > 0) {
+  if (passwordFields.length > 0 || authPages.length > 0 || session?.attempted || session?.reason.includes('Login form')) {
     const evidenceParts = [
       passwordFields.length > 0 ? `${passwordFields.length} password-related field(s)` : null,
       authPages.length > 0 ? `route(s) matching login/signup/auth: ${authPages.map((p) => p.route).join(', ')}` : null,
+      session?.reason ?? null,
     ].filter(Boolean);
 
     workflows.push({
       id: nextId(),
       kind: 'authentication',
-      title: 'Potential authentication flow',
-      page: passwordFields[0]?.page ?? authPages[0]?.url,
-      status: 'REQUIRES_CONFIGURATION',
-      evidence: `${evidenceParts.join('; ')} — credentials are not assumed`,
+      title: session?.succeeded ? 'Authenticated discovery session' : 'Potential authentication flow',
+      page: passwordFields[0]?.page ?? authPages[0]?.url ?? session?.loginPageUrl,
+      status: session?.succeeded ? 'DISCOVERED' : 'REQUIRES_CONFIGURATION',
+      evidence: session?.succeeded
+        ? `${evidenceParts.join('; ')} — login submit was discovery bootstrap only, not a generated check`
+        : `${evidenceParts.join('; ')} — credentials are not assumed`,
       potentialAction: potentialAction('authentication'),
+      applicableTestTypes: applicableTestTypes('authentication'),
+    });
+  }
+
+  const gatedPages = pageMap.pages.filter((page) => page.access === 'gated');
+  if (gatedPages.length > 0 || (session && !session.succeeded && /QA_USERNAME|not set|not accessible/i.test(session.reason))) {
+    workflows.push({
+      id: nextId(),
+      kind: 'gated',
+      title: 'Behind-authentication inventory',
+      page: gatedPages[0]?.url ?? session?.loginPageUrl,
+      status: 'REQUIRES_CONFIGURATION',
+      evidence:
+        gatedPages.length > 0
+          ? `${gatedPages.length} URL(s) presented a login wall and were not inventoried: ${gatedPages.map((page) => page.route).join(', ')}`
+          : session?.reason ??
+            'Login form observed; behind-auth pages were not invented',
+      potentialAction: 'authenticate then rediscover (REQUIRES_CONFIGURATION)',
       applicableTestTypes: applicableTestTypes('authentication'),
     });
   }

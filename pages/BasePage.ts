@@ -24,4 +24,14 @@ export class BasePage {
   get firstLink(): Locator {
     return this.page.getByRole('link').first();
   }
+
+  /** Navigation landmark by role, so page objects do not fall back to `locator('nav')`. */
+  get navigation(): Locator {
+    return this.page.getByRole('navigation').first();
+  }
+
+  /** Link by accessible name — stable across markup changes that keep the label. */
+  link(name: string | RegExp): Locator {
+    return this.page.getByRole('link', { name });
+  }
 }

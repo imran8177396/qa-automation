@@ -27,7 +27,9 @@ test('project names are form factors, not device models', () => {
   for (const name of VIEWPORT_NAMES) {
     assert.match(VIEWPORTS[name].projectName, /^responsive-/);
     assert.doesNotMatch(VIEWPORTS[name].projectName, /iphone|ipad|safari|pixel/i);
-    assert.match(VIEWPORTS[name].emulationNote, /not Mobile Safari/i);
+    assert.match(VIEWPORTS[name].emulationNote, /emulated viewport/i);
+    assert.match(VIEWPORTS[name].emulationNote, /not a real device/i);
+    assert.doesNotMatch(VIEWPORTS[name].emulationNote, /real iOS Safari ran|real Android Chrome ran/i);
   }
 });
 
@@ -39,8 +41,10 @@ test('playwrightUseFor() does not attach a spoofed device name', () => {
   assert.equal(use.deviceScaleFactor, 1);
 });
 
-test('limitations refuse real-device / Mobile Safari claims', () => {
-  assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /not real-device/i.test(line)));
+test('limitations refuse real-device / iOS Safari / Android Chrome claims', () => {
+  assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /emulated viewport/i.test(line)));
+  assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /not a real device/i.test(line)));
+  assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /No real iOS Safari/i.test(line)));
   assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /not Mobile Safari/i.test(line)));
 });
 

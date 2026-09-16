@@ -79,10 +79,17 @@ export async function collectLayout(page: Page): Promise<LayoutSnapshot> {
       box: boxOf(img),
     }));
 
-    const buttons = [...document.querySelectorAll('button, [role="button"]')].map((btn) => ({
-      name: (btn.textContent || '').trim() || btn.id || 'button',
-      box: boxOf(btn),
-    }));
+    const buttons = [...document.querySelectorAll('button, [role="button"], input[type="submit"], input[type="button"]')].map(
+      (btn) => ({
+        name:
+          (btn.textContent || '').trim() ||
+          (btn instanceof HTMLInputElement ? btn.value : '') ||
+          btn.getAttribute('aria-label') ||
+          btn.id ||
+          'button',
+        box: boxOf(btn),
+      })
+    );
 
     const bodySize = Number.parseFloat(window.getComputedStyle(document.body).fontSize);
 

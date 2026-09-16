@@ -1,6 +1,7 @@
 import {
   generateEnvFile,
   generateGithubWorkflow,
+  generateJenkinsfiles,
   generateJmeterPlan,
   generatePostmanFiles,
   generateReportsFolders,
@@ -25,12 +26,20 @@ export async function runSync(): Promise<void> {
 
   if (config.jmeter.enabled) {
     generateJmeterPlan(config);
-    logSuccess('Generated JMeter test plan at tests/performance/load-test.jmx');
+    logSuccess(
+      'Generated JMeter plans at tests/performance/jmeter/{smoke,load,stress,spike,soak}/documented-api.jmx and tests/performance/load-test.jmx (liveness alias)'
+    );
   }
 
   generateGithubWorkflow(config);
   logSuccess('Generated .github/workflows/qa-automation.yml');
+  logSuccess('Generated .github/workflows/qa-regression.yml');
   logSuccess('Generated .github/workflows/qa-performance-heavy.yml');
+
+  generateJenkinsfiles(config);
+  logSuccess('Generated jenkins/Jenkinsfile');
+  logSuccess('Generated jenkins/Jenkinsfile.regression');
+  logSuccess('Generated jenkins/Jenkinsfile.performance');
 }
 
 if (require.main === module) {

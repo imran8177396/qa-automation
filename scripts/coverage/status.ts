@@ -1,3 +1,5 @@
+import { displayCoverageStatus, mapProjectStatus } from './project-status';
+import { evidenceMatchesItem } from './match';
 import type {
   CoverageRecord,
   CoverageStatus,
@@ -5,6 +7,8 @@ import type {
   InventoryItem,
   ScenarioId,
 } from './types';
+
+export { displayCoverageStatus };
 
 const RECOMMENDED: Record<ScenarioId, string> = {
   'page-load': 'Assert the discovered page returns < 400 and renders its main content.',
@@ -22,6 +26,7 @@ const RECOMMENDED: Record<ScenarioId, string> = {
   'long-input': 'Fill a long string without submitting.',
   'unicode-input': 'Fill unicode text without submitting.',
   editability: 'Assert read-only vs editable from the inventoried state.',
+  'required-state': 'Assert the inventoried required/optional flag. Do not invent HTML5 required.',
   'accessible-name': 'Assert the accessible name observed at discovery.',
   'validation-state': 'Read HTML5 validity after blur. Do not invent a message.',
   'error-recovery': 'Invalid fill, then valid fill, no submit.',
@@ -31,10 +36,11 @@ const RECOMMENDED: Record<ScenarioId, string> = {
   'api-smoke': 'Execute the documented or observed method+path via Postman CLI.',
   'api-auth': 'Do not invent an auth contract. Set postman.auth only when the target documents it.',
   'browser-execution': 'Run the engine project (Chromium/Firefox/WebKit). Do not claim iOS Safari or Android Chrome.',
-  'viewport-matrix': 'Run npm run test:responsive (Chromium emulation — not real devices / not Mobile Safari).',
+  'viewport-matrix': 'Run npm run test:responsive (Chromium emulated viewports — not a real device / not Mobile Safari).',
   'accessibility-scan': 'Run npm run test:accessibility (automated only — not a complete WCAG audit).',
   'visual-regression': 'Run npm run test:visual. Do not auto-update baselines.',
-  'ui-api-correlation': 'Run the documented UI+API pair only (npm run test:workflows).',
+  'ui-api-correlation':
+    'Run the documented UI+API pair only (npm run test:workflows). Do not invent Sauce Demo REST or force JSONPlaceholder into UI tests.',
   'performance-profile': 'Run the authorized JMeter profile. Do not invent thresholds.',
   'security-baseline': 'Run npm run test:security (QA-level only — not a pentest).',
   'seo-baseline': 'Run npm run test:seo (technical only — not a ranking audit).',
@@ -66,14 +72,31 @@ export function emptyByStatus(): Record<CoverageStatus, number> {
 }
 
 export function recommendedTestFor(item: InventoryItem): string {
+  if (item.coverageHint === 'not-applicable' || item.projectStatus === 'NOT_DISCOVERED') {
+    return 'Do not invent this control. Re-run discovery if the page later exposes it.';
+  }
   const pending = item.applicableScenarios.find((row) => !row.tested) ?? item.applicableScenarios[0];
   if (!pending) return 'Record why this item cannot be tested. Do not invent a passing check.';
   return RECOMMENDED[pending.id] ?? pending.reason;
 }
 
+export function ensureCoverageReason(status: CoverageStatus, reason: string): string {
+  const text = reason.trim();
+  if (status === 'SKIPPED') {
+    return text || 'SKIPPED WITH REASON — a skip reason was not supplied; the item is not omitted.';
+  }
+  return text || 'Coverage status was recorded without a detail string. The item is not omitted.';
+}
+
+function classified(status: CoverageStatus, reason: string): { status: CoverageStatus; reason: string } {
+  return { status, reason: ensureCoverageReason(status, reason) };
+}
+
 function evidenceFor(item: InventoryItem, evidence: ExecutionEvidence[]): ExecutionEvidence[] {
   const ids = new Set(item.applicableScenarios.flatMap((row) => row.evidenceIds));
-  return evidence.filter((row) => ids.has(row.id));
+  const byId = evidence.filter((row) => ids.has(row.id));
+  if (byId.length > 0) return byId;
+  return evidence.filter((row) => evidenceMatchesItem(item, row));
 }
 
 export function classifyItem(
@@ -81,22 +104,22 @@ export function classifyItem(
   evidence: ExecutionEvidence[]
 ): { status: CoverageStatus; reason: string } {
   if (item.coverageHint === 'skipped') {
-    return {
-      status: 'SKIPPED',
-      reason: item.applicableScenarios[0]?.reason ?? 'Explicitly skipped in configuration. The item is not omitted.',
-    };
+    return classified(
+      'SKIPPED',
+      item.applicableScenarios[0]?.reason ?? 'Explicitly skipped in configuration. The item is not omitted.'
+    );
   }
   if (item.coverageHint === 'not-applicable') {
-    return {
-      status: 'NOT APPLICABLE',
-      reason: item.applicableScenarios[0]?.reason ?? 'Not applicable for this configuration. The item is not omitted.',
-    };
+    return classified(
+      'NOT APPLICABLE',
+      item.applicableScenarios[0]?.reason ?? 'Not applicable for this configuration. The item is not omitted.'
+    );
   }
   if (item.coverageHint === 'untestable') {
-    return {
-      status: 'UNTESTABLE',
-      reason: item.applicableScenarios[0]?.reason ?? 'Discovered but not targetable. The item is not omitted.',
-    };
+    return classified(
+      'UNTESTABLE',
+      item.applicableScenarios[0]?.reason ?? 'Discovered but not targetable. The item is not omitted.'
+    );
   }
 
   const executable = item.applicableScenarios.filter((row) => row.disposition === 'executable');
@@ -108,62 +131,69 @@ export function classifyItem(
 
   if (executable.length > 0 && executed.length > 0) {
     if (failed.length > 0) {
-      return {
-        status: 'FAILED',
-        reason: `Execution evidence failed (${failed[0].title}). Coverage still counts this item — pass rate is not coverage.`,
-      };
+      return classified(
+        'FAILED',
+        `Execution evidence failed (${failed[0].title}). Coverage still counts this item — pass rate is not coverage.`
+      );
     }
     if (passed.length > 0) {
       const untested = executable.filter((row) => !row.tested);
-      return {
-        status: 'TESTED',
-        reason:
-          untested.length > 0
-            ? `At least one executable scenario has evidence. Remaining: ${untested.map((row) => row.id).join(', ')}.`
-            : 'Executable scenario(s) have execution evidence against this item.',
-      };
+      return classified(
+        'TESTED',
+        untested.length > 0
+          ? `At least one executable scenario has evidence. Remaining: ${untested.map((row) => row.id).join(', ')}.`
+          : 'Executable scenario(s) have execution evidence against this item.'
+      );
+    }
+    const recorded = executed.find((row) => row.status === 'RECORDED' || row.status === 'UNKNOWN');
+    if (recorded) {
+      return classified(
+        'TESTED',
+        `Execution evidence recorded (${recorded.title}). Coverage counts executed items — pass rate is not coverage.`
+      );
     }
   }
 
   if (executable.length > 0 && skipped.length > 0 && executed.length === 0) {
-    return { status: 'SKIPPED', reason: `Matching execution was skipped (${skipped[0].title}).` };
+    return classified('SKIPPED', `Matching execution was skipped (${skipped[0].title}).`);
   }
 
   if (executable.length > 0) {
-    return {
-      status: 'UNCOVERED',
-      reason: executable.find((row) => !row.tested)?.reason ?? 'No execution evidence matched this testable item.',
-    };
+    return classified(
+      'UNCOVERED',
+      executable.find((row) => !row.tested)?.reason ?? 'No execution evidence matched this testable item.'
+    );
   }
 
   if (item.applicableScenarios.some((row) => row.disposition === 'blocked-safety')) {
-    return {
-      status: 'BLOCKED',
-      reason:
-        item.applicableScenarios.find((row) => row.disposition === 'blocked-safety')?.reason ??
-        'Blocked by the safety policy. Not silently omitted.',
-    };
+    const detail =
+      item.applicableScenarios.find((row) => row.disposition === 'blocked-safety')?.reason ??
+      'Blocked by the safety policy. Not silently omitted.';
+    const mapped =
+      item.projectStatus === 'NOT_TESTED' ? mapProjectStatus('NOT_TESTED', detail) : null;
+    return classified('BLOCKED', mapped?.reason ?? detail);
   }
 
   if (item.applicableScenarios.some((row) => row.disposition === 'requires-configuration')) {
-    return {
-      status: 'BLOCKED',
-      reason:
-        item.applicableScenarios.find((row) => row.disposition === 'requires-configuration')?.reason ??
-        'Requires configuration. Not silently omitted.',
-    };
+    const detail =
+      item.applicableScenarios.find((row) => row.disposition === 'requires-configuration')?.reason ??
+      'Requires configuration. Not silently omitted.';
+    const mapped =
+      item.projectStatus === 'REQUIRES_CONFIGURATION' || !item.projectStatus
+        ? mapProjectStatus('REQUIRES_CONFIGURATION', detail)
+        : null;
+    return classified('BLOCKED', mapped?.reason ?? detail);
   }
 
   if (item.applicableScenarios.some((row) => row.disposition === 'not-implemented')) {
-    return {
-      status: 'UNTESTABLE',
-      reason:
-        item.applicableScenarios.find((row) => row.disposition === 'not-implemented')?.reason ??
-        'No executable mapping. Not silently omitted.',
-    };
+    return classified(
+      'UNTESTABLE',
+      item.applicableScenarios.find((row) => row.disposition === 'not-implemented')?.reason ??
+        'No executable mapping. Not silently omitted.'
+    );
   }
 
-  return { status: 'UNTESTABLE', reason: 'No applicable scenario was assigned. Not silently omitted.' };
+  return classified('UNTESTABLE', 'No applicable scenario was assigned. Not silently omitted.');
 }
 
 export function toCoverageRecord(item: InventoryItem, evidence: ExecutionEvidence[]): CoverageRecord {

@@ -2,8 +2,11 @@
   "info": {
     "_postman_id": "qa-automation-api-collection",
     "name": "QA Automation API",
-    "description": "Auto-generated from qa.config.json for QA Automation. Authentication/authorization are recorded as NOT_EXECUTED when QA_API_TOKEN is absent — they are not duplicate GET / collection items.",
+    "description": "Auto-generated from qa.config.json for QA Automation. Requests are generated only from qa.config.json postman.requests. Sauce Demo discovery found 0 xhr/fetch/websocket APIs — login-page REST paths are never invented. Authentication/authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION unless postman.auth documents a contract and QA_API_TOKEN (or basic credentials) are provided at runtime. Secrets are never written into this collection.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
   },
   "item": [
     {
@@ -46,7 +49,7 @@
           ],
           "query": []
         },
-        "description": "GET /posts (valid)\nexpectedStatus=200"
+        "description": "GET /posts (valid)\nsource=qa.config.json\nexpectedStatus=200"
       },
       "response": []
     },
@@ -63,6 +66,11 @@
               "",
               "pm.test(\"GET /posts/1 response time is under 15000ms\", function () {",
               "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"GET /posts/1 Content-Type includes application/json\", function () {",
+              "    const contentType = (pm.response.headers.get(\"Content-Type\") || \"\").toLowerCase();",
+              "    pm.expect(contentType).to.include(\"application/json\");",
               "});",
               "",
               "pm.test(\"GET /posts/1 response is JSON\", function () {",
@@ -87,6 +95,26 @@
               "",
               "pm.test(\"GET /posts/1 response includes field body\", function () {",
               "    pm.expect(pm.response.json()).to.have.property(\"body\");",
+              "});",
+              "",
+              "pm.test(\"GET /posts/1 field userId is number\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"userId\");",
+              "    pm.expect(pm.response.json()[\"userId\"]).to.be.a(\"number\");",
+              "});",
+              "",
+              "pm.test(\"GET /posts/1 field id is number\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"id\");",
+              "    pm.expect(pm.response.json()[\"id\"]).to.be.a(\"number\");",
+              "});",
+              "",
+              "pm.test(\"GET /posts/1 field title is string\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"title\");",
+              "    pm.expect(pm.response.json()[\"title\"]).to.be.a(\"string\");",
+              "});",
+              "",
+              "pm.test(\"GET /posts/1 field body is string\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"body\");",
+              "    pm.expect(pm.response.json()[\"body\"]).to.be.a(\"string\");",
               "});"
             ],
             "type": "text/javascript"
@@ -107,7 +135,373 @@
           ],
           "query": []
         },
-        "description": "GET /posts/1 (valid)\nexpectedStatus=200"
+        "description": "GET /posts/1 (valid)\nsource=qa.config.json\nexpectedStatus=200"
+      },
+      "response": []
+    },
+    {
+      "name": "GET /posts — filter by userId",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"GET /posts returns HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"GET /posts response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"GET /posts response is JSON\", function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "",
+              "pm.test(\"GET /posts response body is an array\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"array\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/posts?userId=1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts"
+          ],
+          "query": [
+            {
+              "key": "userId",
+              "value": "1"
+            }
+          ]
+        },
+        "description": "GET /posts (valid)\nsource=qa.config.json\nexpectedStatus=200"
+      },
+      "response": []
+    },
+    {
+      "name": "POST /posts — create resource",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"POST /posts returns HTTP 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"POST /posts response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"POST /posts response is JSON\", function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "",
+              "pm.test(\"POST /posts response body is an object\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"object\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts response includes field id\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"id\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts response includes field title\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"title\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts response includes field body\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"body\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts response includes field userId\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"userId\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts field id is number\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"id\");",
+              "    pm.expect(pm.response.json()[\"id\"]).to.be.a(\"number\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts field title is string\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"title\");",
+              "    pm.expect(pm.response.json()[\"title\"]).to.be.a(\"string\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts field body is string\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"body\");",
+              "    pm.expect(pm.response.json()[\"body\"]).to.be.a(\"string\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts field userId is number\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"userId\");",
+              "    pm.expect(pm.response.json()[\"userId\"]).to.be.a(\"number\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"qa documented post\",\n  \"body\": \"created by the Postman suite from qa.config.json\",\n  \"userId\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/posts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts"
+          ],
+          "query": []
+        },
+        "description": "POST /posts (valid)\nsource=qa.config.json\nexpectedStatus=201"
+      },
+      "response": []
+    },
+    {
+      "name": "PUT /posts/1 — replace resource",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"PUT /posts/1 returns HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response is JSON\", function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response body is an object\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"object\");",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response includes field id\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"id\");",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response includes field title\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"title\");",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response includes field body\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"body\");",
+              "});",
+              "",
+              "pm.test(\"PUT /posts/1 response includes field userId\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"userId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": 1,\n  \"title\": \"qa documented replace\",\n  \"body\": \"replaced by the Postman suite from qa.config.json\",\n  \"userId\": 1\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/posts/1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts",
+            "1"
+          ],
+          "query": []
+        },
+        "description": "PUT /posts/1 (valid)\nsource=qa.config.json\nexpectedStatus=200"
+      },
+      "response": []
+    },
+    {
+      "name": "PATCH /posts/1 — partial update",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"PATCH /posts/1 returns HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"PATCH /posts/1 response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"PATCH /posts/1 response is JSON\", function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "",
+              "pm.test(\"PATCH /posts/1 response body is an object\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"object\");",
+              "});",
+              "",
+              "pm.test(\"PATCH /posts/1 response includes field id\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"id\");",
+              "});",
+              "",
+              "pm.test(\"PATCH /posts/1 response includes field title\", function () {",
+              "    pm.expect(pm.response.json()).to.have.property(\"title\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"qa documented patch\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/posts/1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts",
+            "1"
+          ],
+          "query": []
+        },
+        "description": "PATCH /posts/1 (valid)\nsource=qa.config.json\nexpectedStatus=200"
+      },
+      "response": []
+    },
+    {
+      "name": "DELETE /posts/1 — delete resource",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"DELETE /posts/1 returns HTTP 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"DELETE /posts/1 response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});",
+              "",
+              "pm.test(\"DELETE /posts/1 response is JSON\", function () {",
+              "    pm.response.to.be.json;",
+              "});",
+              "",
+              "pm.test(\"DELETE /posts/1 response body is an object\", function () {",
+              "    pm.expect(pm.response.json()).to.be.an(\"object\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/posts/1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts",
+            "1"
+          ],
+          "query": []
+        },
+        "description": "DELETE /posts/1 (valid)\nsource=qa.config.json\nexpectedStatus=200"
+      },
+      "response": []
+    },
+    {
+      "name": "POST /posts — missing body",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"POST /posts received an HTTP response (status not asserted — UNVERIFIED)\", function () {",
+              "    pm.expect(pm.response.code).to.be.a(\"number\");",
+              "});",
+              "",
+              "pm.test(\"POST /posts response time is under 15000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(15000);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/posts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "posts"
+          ],
+          "query": []
+        },
+        "description": "POST /posts (missing-parameter)\nsource=qa.config.json\nexpectedStatus=UNVERIFIED"
       },
       "response": []
     },
@@ -144,7 +538,7 @@
           ],
           "query": []
         },
-        "description": "GET /posts/999999 (invalid)\nexpectedStatus=404"
+        "description": "GET /posts/999999 (invalid)\nsource=qa.config.json\nexpectedStatus=404"
       },
       "response": []
     },
@@ -180,7 +574,7 @@
           ],
           "query": []
         },
-        "description": "GET /unknown-route (invalid)\nexpectedStatus=UNVERIFIED"
+        "description": "GET /unknown-route (invalid)\nsource=qa.config.json\nexpectedStatus=UNVERIFIED"
       },
       "response": []
     },
@@ -216,7 +610,7 @@
           ],
           "query": []
         },
-        "description": "PUT / (invalid)\nexpectedStatus=UNVERIFIED"
+        "description": "PUT / (invalid)\nsource=qa.config.json\nexpectedStatus=UNVERIFIED"
       },
       "response": []
     },
@@ -257,7 +651,7 @@
             }
           ]
         },
-        "description": "GET /posts (invalid-parameter)\nexpectedStatus=UNVERIFIED"
+        "description": "GET /posts (invalid-parameter)\nsource=qa.config.json\nexpectedStatus=UNVERIFIED"
       },
       "response": []
     }

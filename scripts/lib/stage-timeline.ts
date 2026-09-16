@@ -21,7 +21,7 @@ export type ExecutionStageKey = (typeof EXECUTION_STAGE_KEYS)[number];
 export function stagePhaseForKey(key: string): StagePhase {
   if (key === 'preflight' || key === 'dependencies') return 'setup';
   if (key === 'discovery') return 'discovery';
-  if (key === 'inventory') return 'inventory';
+  if (key === 'inventory' || key === 'coverage-planning') return 'inventory';
   if ((EXECUTION_STAGE_KEYS as readonly string[]).includes(key)) return 'execution';
   return 'post';
 }

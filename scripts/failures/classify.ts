@@ -6,6 +6,8 @@ import {
   isDurationNearTimeout,
   TIMEOUT_PROXIMITY_RATIO,
 } from './timeouts';
+import { buildEvidenceRefs } from './evidence';
+import { classifyOwner, summarizeByOwnerClass } from './owner';
 import type {
   ClassifiedFailure,
   FailureClass,
@@ -53,6 +55,9 @@ const NETWORK_TEXT =
   /econnrefused|enotfound|econnreset|etimedout|eai_again|getaddrinfo|socket hang up|net::err_|dns|network error/i;
 
 const CONSOLE_TEXT = /console\.error|pageerror|page error|uncaught (exception|error) in page/i;
+
+const BROWSER_ENGINE_TEXT =
+  /browser logs:|tearing down ["']context["']|setting up ["']page["']|rendercompositor|juggler/i;
 
 const ENVIRONMENT_TEXT =
   /browserType\.launch|executable doesn't exist|browser has been closed|playwright install|browser.*not found|enoent/i;
@@ -108,7 +113,7 @@ export function classifyFailure(evidence: FailureEvidence): ClassifiedFailure {
     ruleFired = 'ERROR_TEXT_NETWORK';
     confidence = 'high';
     rationale = 'Connection, DNS, or net::ERR_ failure detected in captured error text.';
-  } else if (CONSOLE_TEXT.test(text)) {
+  } else if (CONSOLE_TEXT.test(text) && !BROWSER_ENGINE_TEXT.test(text)) {
     classification = 'CONSOLE_ERROR';
     ruleFired = 'ERROR_TEXT_CONSOLE';
     confidence = 'medium';
@@ -145,6 +150,12 @@ export function classifyFailure(evidence: FailureEvidence): ClassifiedFailure {
     rationale = 'Assertion mismatch after reaching the page — not a timeout-proximity match.';
   }
 
+  const withRefs: FailureEvidence = {
+    ...evidence,
+    evidenceRefs: evidence.evidenceRefs ?? buildEvidenceRefs(evidence),
+  };
+  const owner = classifyOwner(withRefs, classification);
+
   return {
     id: evidence.id,
     testId: evidence.testId,
@@ -152,10 +163,14 @@ export function classifyFailure(evidence: FailureEvidence): ClassifiedFailure {
     title: evidence.title,
     classification,
     ruleFired,
+    ownerClassification: owner.ownerClassification,
+    ownerRuleFired: owner.ownerRuleFired,
+    ownerRationale: owner.ownerRationale,
     evidenceExcerpt: excerpt,
-    confidence,
+    confidence: owner.confidence !== 'low' ? owner.confidence : confidence,
     rationale,
-    evidence,
+    evidence: withRefs,
+    originalStatus: 'FAIL',
   };
 }
 
@@ -179,3 +194,4 @@ export function summarizeByClass(failures: ClassifiedFailure[]): Record<FailureC
 }
 
 export { DEFAULT_CLASSIFICATION_TIMEOUTS_MS, TIMEOUT_PROXIMITY_RATIO, isDurationNearTimeout };
+export { summarizeByOwnerClass };

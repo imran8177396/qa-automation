@@ -6,6 +6,7 @@ const RESPONSIVE_PAGES = resolveResponsivePages();
 
 /**
  * Functional behavior at each emulated viewport. Forms are filled, never submitted.
+ * This is Chromium viewport emulation — not a real device.
  */
 test.describe('responsive functional @responsive', () => {
   for (const pageDef of RESPONSIVE_PAGES) {
@@ -42,7 +43,7 @@ test.describe('responsive functional @responsive', () => {
     test.info().annotations.push({
       type: 'NOT_TESTED',
       description:
-        'NOT_TESTED: /responsive.html mobile menu, modal, and dropdown are fixture-only. Live responsive layout/functional page checks still execute from discovery.',
+        'NOT_TESTED: /responsive.html mobile menu, modal, and dropdown are fixture-only. Live responsive layout/functional page checks still execute from discovery. Emulated viewports only — not a real device.',
     });
     expect(
       isFixtureUiTarget(),

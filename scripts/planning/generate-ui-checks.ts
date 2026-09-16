@@ -7,6 +7,29 @@ import type { CheckKind, CheckStatus, ControlKind, PlannedCheck } from './types'
 
 const SKIP_HREF = /^(mailto:|tel:|javascript:|#)/i;
 
+const FORM_SUBMISSION_VARIANTS = [
+  'valid submission',
+  'empty submission',
+  'missing-field submission',
+  'invalid submission',
+  'boundary submission',
+  'server-error submission',
+  'success submission',
+  'duplicate submission',
+  'reset',
+  'cancel',
+] as const;
+
+const SUBMIT_BUTTON_VARIANTS = [
+  'click',
+  'navigation',
+  'modal',
+  'loading',
+  'success',
+  'error',
+  'duplicate-click',
+] as const;
+
 function nextId(seq: { n: number }): string {
   seq.n += 1;
   return `CHK-${String(seq.n).padStart(4, '0')}`;
@@ -95,13 +118,28 @@ export function generateUiChecks(
       });
       continue;
     }
+    if (page.access === 'gated') {
+      push('page-sanity', `${page.url} is behind authentication`, page.url, 'REQUIRES_CONFIGURATION', {
+        reason: page.gatedReason ?? 'REQUIRES_CONFIGURATION: login wall observed — content was not inventoried',
+      });
+      continue;
+    }
     if (page.status != null && page.status >= 400) {
       push('broken-link', `${page.url} should not return ${page.status}`, page.url, 'PLANNED');
       continue;
     }
-    push('page-sanity', `${page.url} should load and render a heading`, page.url, 'PLANNED', {
-      expect: { requireH1: true },
-    });
+    const hasH1 = (page.h1s ?? []).some((heading) => heading.trim().length > 0);
+    const hasHeading =
+      hasH1 || (page.headings ?? []).some((heading) => heading.text.trim().length > 0);
+    push(
+      'page-sanity',
+      hasHeading ? `${page.url} should load and render a heading` : `${page.url} should load`,
+      page.url,
+      'PLANNED',
+      {
+        expect: { requireH1: hasH1, requireHeading: hasHeading && !hasH1 },
+      }
+    );
   }
 
   const byPage = new Map<string, UiElementRecord[]>();
@@ -174,13 +212,20 @@ export function generateUiChecks(
         const label = `${pageUrl} ${element.locator ?? describe(element)} — ${scenario.id}`;
 
         if (scenario.disposition === 'blocked-safety') {
+          push(scenario.id as CheckKind, label, pageUrl, 'BLOCKED', {
+            targetElementId: element.elementId,
+            reason: `BLOCKED: ${scenario.reason}`,
+          });
+          continue;
+        }
+        if (scenario.disposition === 'not-implemented') {
           push(scenario.id as CheckKind, label, pageUrl, 'NOT_TESTED', {
             targetElementId: element.elementId,
             reason: `NOT_TESTED: ${scenario.reason}`,
           });
           continue;
         }
-        if (scenario.disposition === 'requires-configuration' || scenario.disposition === 'not-implemented') {
+        if (scenario.disposition === 'requires-configuration') {
           push(scenario.id as CheckKind, label, pageUrl, 'REQUIRES_CONFIGURATION', {
             targetElementId: element.elementId,
             reason: `REQUIRES_CONFIGURATION: ${scenario.reason}`,
@@ -208,10 +253,57 @@ export function generateUiChecks(
           stateChanging,
         });
       }
+
+      if (kind === 'form') {
+        appendBlockedVariants({
+          push,
+          pageUrl,
+          element,
+          variants: FORM_SUBMISSION_VARIANTS,
+          kind: 'form-submit',
+          reason:
+            'BLOCKED: form submission is not authorized for generated checks (safety policy — no submit)',
+        });
+      }
+      if (kind === 'button' && element.isSubmit) {
+        appendBlockedVariants({
+          push,
+          pageUrl,
+          element,
+          variants: SUBMIT_BUTTON_VARIANTS,
+          kind: 'click-behavior',
+          reason:
+            'BLOCKED: Login/submit click, navigation, modal, loading, success, error, and duplicate-click require a state-changing submit',
+        });
+      }
     }
   }
 
   return checks;
+}
+
+function appendBlockedVariants(input: {
+  push: (
+    kind: CheckKind,
+    title: string,
+    targetUrl: string,
+    status: CheckStatus,
+    extra?: Partial<PlannedCheck>
+  ) => void;
+  pageUrl: string;
+  element: UiElementRecord;
+  variants: readonly string[];
+  kind: CheckKind;
+  reason: string;
+}): void {
+  const { push, pageUrl, element, variants, kind, reason } = input;
+  const target = element.locator ?? describe(element);
+  for (const variant of variants) {
+    push(kind, `${pageUrl} ${target} — ${variant} (safety)`, pageUrl, 'BLOCKED', {
+      targetElementId: element.elementId,
+      reason: `${reason} — ${variant}`,
+    });
+  }
 }
 
 function planExecutable(input: {
@@ -275,6 +367,11 @@ function planExecutable(input: {
       }
       add(scenarioId, label, 'PLANNED');
       return;
+    case 'required-state':
+      add(scenarioId, `${label} required/optional`, 'PLANNED', {
+        expect: { ...base.expect, required: Boolean(element.required) },
+      });
+      return;
     case 'valid-input':
       if (control === 'checkbox' || control === 'radio') {
         add('toggle-state', `${label} (toggle, no submit)`, 'PLANNED');
@@ -297,10 +394,18 @@ function planExecutable(input: {
         return;
       }
       add(scenarioId, `${label} invalid input (no submit)`, 'PLANNED', {
-        expect: { ...base.expect, fillValue: values.invalid },
+        expect: {
+          ...base.expect,
+          fillValue: values.invalid,
+          constraintInvalid: hint === 'email' || hint === 'number' || hint === 'tel' || hint === 'url',
+        },
       });
       return;
     case 'empty-input':
+      add(scenarioId, `${label} empty input (no submit)`, 'PLANNED', {
+        expect: { ...base.expect, fillValue: '', required: Boolean(element.required) },
+      });
+      return;
     case 'required-validation':
       add(scenarioId, `${label} empty/required (no submit)`, 'PLANNED', {
         expect: { ...base.expect, fillValue: '', required: true, boundary: true },

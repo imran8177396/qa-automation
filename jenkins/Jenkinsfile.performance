@@ -1,0 +1,135 @@
+// Dedicated / manual Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.performance
+// Heavy JMeter (load / stress / spike / soak) only. AUTHORIZE_HEAVY defaults to false.
+// Never a production host by default. allowHeavyAgainst must still allow the API host.
+// Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
+// Never hardcode passwords, tokens, API keys, cookies, or credentials.
+
+def qa
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 90, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '14'))
+  }
+
+  parameters {
+    choice(
+      name: 'PROFILE',
+      choices: ['load', 'stress', 'spike', 'soak'],
+      description: 'Heavy JMeter profile. Not used unless AUTHORIZE_HEAVY is true.'
+    )
+    booleanParam(
+      name: 'AUTHORIZE_HEAVY',
+      defaultValue: false,
+      description: 'Must be true to run heavy JMeter. Default is false. Still requires loopback or jmeter.allowHeavyAgainst.'
+    )
+    string(
+      name: 'API_URL_OVERRIDE',
+      defaultValue: '',
+      description: 'Optional QA_API_URL override. Empty uses Jenkins credential qa-api-url or qa.config.json. Do not default this to a production host. Do not put secrets in this field.'
+    )
+  }
+
+  environment {
+    CI = 'true'
+    QA_PLAYWRIGHT_HEADLESS = 'true'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          qa = load 'jenkins/scripts/qa-pipeline.groovy'
+        }
+      }
+    }
+
+    stage('Environment validation') {
+      steps {
+        script {
+          qa.validateAgentEnvironment()
+          qa.bindQaRuntimeCredentials()
+          qa.recordAllCredentialAvailability()
+        }
+      }
+    }
+
+    stage('Install dependencies') {
+      steps {
+        script {
+          qa.npmRun('ci')
+          qa.npmRun('run qa:sync')
+          qa.installPlaywrightBrowsers('chromium')
+          qa.npmRun('run preflight')
+        }
+      }
+    }
+
+    stage('TypeScript validation') {
+      steps {
+        script {
+          qa.npmRun('run typecheck')
+        }
+      }
+    }
+
+    stage('Authorize heavy performance') {
+      steps {
+        script {
+          qa.applyApiUrlOverride(params.API_URL_OVERRIDE)
+          qa.assertHeavyAuthorized(params.AUTHORIZE_HEAVY)
+          qa.assertHeavyProfile(params.PROFILE)
+        }
+      }
+    }
+
+    stage('Heavy JMeter') {
+      steps {
+        script {
+          qa.npmRun('run test:performance -- --profile=' + params.PROFILE + ' --authorize-heavy')
+        }
+      }
+    }
+
+    stage('Allure report') {
+      steps {
+        script {
+          qa.tryNpmRun('run report:all')
+        }
+      }
+    }
+
+    stage('Artifact collection') {
+      steps {
+        script {
+          qa.archiveQaArtifacts()
+        }
+      }
+    }
+
+    stage('Notification') {
+      steps {
+        script {
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        if (qa != null && currentBuild.currentResult != 'SUCCESS') {
+          qa.tryNpmRun('run report:all')
+          qa.archiveQaArtifacts()
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+}

@@ -6,6 +6,10 @@ export interface CorrelatedWorkflow {
   uiPath: string;
   apiMethod: string;
   apiPath: string;
+  expectedStatus?: number;
+  requiredFields?: string[];
+  uiAction?: string;
+  uiResult?: string;
 }
 
 export function resolveCorrelatedWorkflows(config: QaConfig): CorrelatedWorkflow[] {
@@ -15,5 +19,9 @@ export function resolveCorrelatedWorkflows(config: QaConfig): CorrelatedWorkflow
     uiPath: row.uiPath,
     apiMethod: row.apiMethod,
     apiPath: row.apiPath,
+    expectedStatus: row.expectedStatus,
+    requiredFields: row.requiredFields,
+    uiAction: row.uiAction,
+    uiResult: row.uiResult,
   }));
 }

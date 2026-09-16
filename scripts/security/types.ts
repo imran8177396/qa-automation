@@ -1,5 +1,14 @@
+export type SecurityFindingStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'WARNING'
+  | 'NOTE'
+  | 'NOT_TESTED'
+  | 'BLOCKED'
+  | 'NOT_APPLICABLE';
+
 export interface SecurityFinding {
-  status: 'PASS' | 'FAIL' | 'NOTE' | 'NOT_APPLICABLE';
+  status: SecurityFindingStatus;
   rule: string;
   severity: 'high' | 'medium' | 'low' | 'info';
   detail: string;
@@ -16,6 +25,9 @@ export interface SecuritySummary {
   failCount: number;
   passCount: number;
   noteCount: number;
+  warningCount: number;
+  notTestedCount: number;
+  blockedCount: number;
   pagesAnalyzed: number;
   originsAnalyzed: number;
   bySeverity: Record<'high' | 'medium' | 'low' | 'info', number>;
@@ -31,4 +43,8 @@ export const SECURITY_LIMITATIONS = [
   'Observational GETs only — no attack payloads',
   'Forms are never submitted',
   'Missing rate-limit headers are NOTE, never a flood test',
+  'One GET per path in the fixed WELL_KNOWN_PATHS list',
+  'Cookie and CSRF checks run only on observed cookies/forms',
+  'Error disclosure observes existing responses — 500s are not forced',
+  'Documented API hygiene is HTTPS/headers only — not a pentest',
 ];

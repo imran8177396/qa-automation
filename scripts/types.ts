@@ -124,6 +124,14 @@ export interface QaConfig {
     /** Parallel workers for local (non-CI) runs. Unset uses Playwright's own default (~half the CPU count). */
     workers?: number;
     /**
+     * Retry attempts for a failing test. Unset keeps the defaults (2 on CI, 0 locally).
+     * Retries never convert a FAIL into a PASS — a test that fails every attempt stays FAIL,
+     * and one that only passes on retry is reported as flaky.
+     */
+    retries?: number;
+    /** Attribute `getByTestId()` resolves against. Unset uses Playwright's own default, `data-testid`. */
+    testIdAttribute?: string;
+    /**
      * Extra cross-browser targets (real devices / cloud). Local engines still
      * come from `browsers`. Extra targets are never claimed as tested unless
      * that environment actually ran.
@@ -264,6 +272,10 @@ export interface CorrelatedWorkflowConfig {
   apiPath: string;
   expectedStatus: number;
   requiredFields?: string[];
+  /** Optional locator that triggers the documented API. Never a destructive control. */
+  uiAction?: string;
+  /** Optional locator asserted after the API response. */
+  uiResult?: string;
 }
 
 export interface SafetyConfig {

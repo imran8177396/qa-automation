@@ -1,0 +1,197 @@
+// Multibranch Pipeline entry. Controller Script Path: jenkins/Jenkinsfile
+// GitHub Branch Source discovers branches and pull requests automatically.
+// PR / feature: lightweight QA (not qa:all). Protected branches: npm run qa:all.
+// Protected branches: main, master, develop
+// Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
+// Never hardcode passwords, tokens, API keys, cookies, or credentials.
+// Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
+
+def qa
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds(abortPrevious: true)
+    timeout(time: 90, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  parameters {
+    string(
+      name: 'DISCOVER_URL',
+      defaultValue: '',
+      description: 'Optional live URL for protected-branch qa:all --url=. Empty uses the in-repo fixture. Ignored on PR/feature jobs. Do not put secrets in this field.'
+    )
+  }
+
+  environment {
+    CI = 'true'
+    QA_PLAYWRIGHT_HEADLESS = 'true'
+    QA_USE_FIXTURE = 'true'
+    QA_PLAYWRIGHT_BASE_URL = 'http://127.0.0.1:4173'
+    QA_WEBSITE_URL = 'http://127.0.0.1:4173/'
+    QA_FIXTURE_PORT = '4173'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        script {
+          qa = load 'jenkins/scripts/qa-pipeline.groovy'
+        }
+      }
+    }
+
+    stage('Configure branch profile') {
+      steps {
+        script {
+          qa.protectedBranches = ['main', 'master', 'develop']
+          qa.applyPipelineProfile()
+        }
+      }
+    }
+
+    stage('Environment validation') {
+      steps {
+        script {
+          qa.validateAgentEnvironment()
+          qa.bindQaRuntimeCredentials()
+          qa.recordAllCredentialAvailability()
+          qa.restoreFixtureWebsiteIfNeeded()
+          qa.applyPipelineProfile()
+        }
+      }
+    }
+
+    stage('Install dependencies') {
+      steps {
+        script {
+          qa.npmRun('ci')
+          qa.npmRun('run qa:sync')
+          if (env.QA_PIPELINE_PROFILE == 'lightweight') {
+            qa.installPlaywrightBrowsers('chromium')
+          } else {
+            qa.installPlaywrightBrowsers('chromium firefox webkit')
+          }
+          qa.npmRun('run preflight')
+        }
+      }
+    }
+
+    stage('TypeScript validation') {
+      steps {
+        script {
+          qa.npmRun('run typecheck')
+        }
+      }
+    }
+
+    stage('Application discovery') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.startFixtureSite()
+          qa.npmRun('run discover -- http://127.0.0.1:4173/')
+        }
+      }
+    }
+
+    stage('UI functional tests') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:e2e')
+        }
+      }
+    }
+
+    stage('Accessibility tests') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:accessibility')
+        }
+      }
+    }
+
+    stage('API tests') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:api')
+        }
+      }
+    }
+
+    stage('UI performance') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        echo 'Playwright UI timing is produced by npm run test:performance in the next stage (liveness profile only).'
+      }
+    }
+
+    stage('Lightweight JMeter smoke') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:performance -- --profile=liveness')
+        }
+      }
+    }
+
+    stage('Full regression (qa:all)') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'regression' }
+      steps {
+        echo 'Protected-branch run: visual, responsive, cross-browser, accessibility, API, UI performance, JMeter liveness, security, SEO/content, failure analysis, retest, coverage, Allure, and final summary execute inside npm run qa:all. Heavy JMeter is not authorized.'
+        script {
+          qa.runFullRegression(params.DISCOVER_URL)
+        }
+      }
+    }
+
+    stage('Allure report') {
+      steps {
+        script {
+          qa.tryNpmRun('run report:all')
+        }
+      }
+    }
+
+    stage('Artifact collection') {
+      steps {
+        script {
+          qa.archiveQaArtifacts()
+        }
+      }
+    }
+
+    stage('Final QA summary') {
+      steps {
+        echo 'Final QA summary is written by report:all / qa:all to reports/summary/. Credentials are not printed.'
+      }
+    }
+
+    stage('Notification') {
+      steps {
+        script {
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        if (qa != null && currentBuild.currentResult != 'SUCCESS') {
+          qa.tryNpmRun('run report:all')
+          qa.archiveQaArtifacts()
+          qa.notifyQa()
+        }
+      }
+    }
+  }
+}

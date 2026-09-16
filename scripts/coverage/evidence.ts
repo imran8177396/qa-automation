@@ -1,7 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { PATHS } from '../lib/paths';
-import { PLAYWRIGHT_SUITE_OUTPUT_PATHS, type PlaywrightSuiteName } from '../lib/playwright-suites';
+import {
+  PLAYWRIGHT_SUITE_NAMES,
+  PLAYWRIGHT_SUITE_OUTPUT_PATHS,
+  playwrightSuiteSummaryPath,
+  type PlaywrightSuiteName,
+} from '../lib/playwright-suites';
+import type { PlaywrightSuiteSummary } from '../lib/playwright-suite-summary';
+import { readJsonIfExists } from '../discovery/write-json';
 import type { PerformanceSummary } from '../performance/types';
 import { isLivenessProfile } from '../performance/profiles';
 import type { ContentSummary } from '../content/types';
@@ -310,4 +317,26 @@ export function playwrightResultsExist(): boolean {
     fs.existsSync(PLAYWRIGHT_SUITE_OUTPUT_PATHS.e2e) ||
     fs.existsSync(PLAYWRIGHT_SUITE_OUTPUT_PATHS['generated-check'])
   );
+}
+
+/** Suite summaries with NOT_EXECUTED / skipReason — recorded, never treated as coverage. */
+export function loadSuiteExecutionNotes(): string[] {
+  const notes: string[] = [];
+  for (const suiteName of PLAYWRIGHT_SUITE_NAMES) {
+    const summary = readJsonIfExists<PlaywrightSuiteSummary>(playwrightSuiteSummaryPath(suiteName));
+    if (!summary) continue;
+    if (summary.skipReason) {
+      notes.push(
+        `Playwright suite '${suiteName}' is NOT_EXECUTED → recorded, not coverage: ${summary.skipReason}`
+      );
+    }
+    for (const browser of summary.browsers ?? []) {
+      if (browser.status === 'NOT_EXECUTED' && browser.reason) {
+        notes.push(
+          `Browser ${browser.browser} in '${suiteName}' is NOT_EXECUTED → SKIPPED WITH REASON / UNCOVERED: ${browser.reason}`
+        );
+      }
+    }
+  }
+  return notes;
 }

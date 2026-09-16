@@ -8,9 +8,12 @@ import { DEFAULT_FIXTURE_PORT, ensureFixtureChildProcess } from './testing/serve
 import { resolveUiTarget } from './lib/ui-target';
 import { printCoverageSummary, runCoverage } from './coverage/run-coverage';
 import { resolveVisualCli } from './visual/cli';
+import { planVisualChecks } from './visual/applicability';
+import { copyVisualEvidence } from './visual/evidence';
 import { loadConfig } from './lib/load-config';
 import { QA_PLAYWRIGHT_SUITE_ENV, playwrightSuiteHtmlDir, playwrightSuiteResultsPath } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
+import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
 
 const VISUAL_SKIPPED_BROWSERS = [
   { browser: 'firefox' as const, reason: 'visual suite is chromium-only; pixel comparison is not a stable cross-engine signal' },
@@ -24,7 +27,7 @@ async function main(): Promise<void> {
   const started = preparePlaywrightSuite({
     suiteName: 'visual',
     targetUrl: target.url,
-    configuredBaseUrl: config.playwright.baseURL,
+    configuredBaseUrl: resolveConfiguredPlaywrightBaseUrl(),
   });
 
   if (cli.updateBaselines) {
@@ -49,6 +52,8 @@ async function main(): Promise<void> {
   }
 
   let passed = false;
+  let evidenceFiles: string[] = [];
+  const applicability = planVisualChecks();
   try {
     const args = ['test', `--config=${path.join(PATHS.root, 'playwright.visual.config.ts')}`];
     if (cli.updateBaselines) {
@@ -67,12 +72,18 @@ async function main(): Promise<void> {
     passed = result.status === 0;
   } finally {
     if (server) await server.close();
+    evidenceFiles = copyVisualEvidence();
   }
 
   const suiteSummary = completePlaywrightSuite(started, {
     passed,
     executedBrowsers: ['chromium'],
     skippedBrowsers: VISUAL_SKIPPED_BROWSERS,
+  });
+  writeJson(path.join(PATHS.reports.visual, 'applicability.json'), {
+    generatedAt: new Date().toISOString(),
+    target: target.url,
+    checks: applicability,
   });
   writeJson(path.join(PATHS.reports.visual, 'summary.json'), {
     generatedAt: new Date().toISOString(),
@@ -85,6 +96,18 @@ async function main(): Promise<void> {
     htmlReport: playwrightSuiteHtmlDir('visual'),
     artifactsDir: path.join(PATHS.root, 'test-results', 'visual'),
     baselinesDir: PATHS.visualBaselinesDir,
+    evidenceDir: path.join(PATHS.reports.visual, 'evidence'),
+    evidenceFiles,
+    applicability,
+    applicableCount: applicability.filter((row) => row.status === 'APPLICABLE').length,
+    notApplicableCount: applicability.filter((row) => row.status === 'NOT_APPLICABLE').length,
+    baselinePolicy: {
+      comparePathNeverWrites: true,
+      updateSnapshotsConfig: 'none',
+      approveFlagRequired: '--approve-baseline-update',
+      npmCompare: 'test:visual',
+      npmApprove: 'test:visual:update',
+    },
     note: cli.updateBaselines
       ? 'Baselines were rewritten because --approve-baseline-update was passed.'
       : target.isLoopback

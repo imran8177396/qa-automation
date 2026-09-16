@@ -3,6 +3,7 @@ import { runPostman } from './runners/postman';
 import { runPlaywright } from './runners/playwright';
 import { runJmeter } from './runners/jmeter';
 import { runLighthouse } from './lighthouse/run';
+import { runUiPerformance } from './performance/run-ui';
 import { loadConfig } from './lib/load-config';
 import { logError, logStep, logSuccess, logWarn } from './lib/logger';
 import { cleanRunArtifacts, shouldKeepArtifacts } from './lib/clean-run-artifacts';
@@ -32,9 +33,10 @@ async function runStep(step: PipelineStep, config: ReturnType<typeof loadConfig>
     case 'e2e':
       return runPlaywright(config);
     case 'load': {
+      const uiOk = await runUiPerformance(config);
       const jmeterOk = await runJmeter(config);
       const lighthouseOk = await runLighthouse(config);
-      return jmeterOk && lighthouseOk;
+      return uiOk && jmeterOk && lighthouseOk;
     }
     default:
       return false;

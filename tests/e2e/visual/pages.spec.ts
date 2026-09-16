@@ -18,4 +18,13 @@ test.describe('visual pages @visual', () => {
       await visualPage.expectPageScreenshot(`${resolved.source}-${pageDef.name}-full.png`);
     });
   }
+
+  if (resolved.source !== 'fixture') {
+    for (const pageDef of resolved.pages) {
+      test(`${pageDef.name} layout at 375px is consistent`, async ({ visualPage }) => {
+        await visualPage.open(pageDef.path, { width: 375, height: 667 });
+        await visualPage.expectPageScreenshot(`${resolved.source}-${pageDef.name}-full-375.png`);
+      });
+    }
+  }
 });

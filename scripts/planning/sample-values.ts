@@ -24,8 +24,17 @@ export function sampleValues(hint: FieldHint): SampleValues {
       return { valid: '5551234567', invalid: 'not-a-phone', special, unicode, whitespace, long };
     case 'url':
       return { valid: 'https://example.com', invalid: 'not-a-url', special, unicode, whitespace, long };
+    case 'password':
+      return {
+        valid: 'SamplePass_qa',
+        invalid: 'invalid-sample',
+        special,
+        unicode,
+        whitespace,
+        long,
+      };
     default:
-      return { valid: 'Sample text', special, unicode, whitespace, long };
+      return { valid: 'Sample text', invalid: '<<<invalid>>>', special, unicode, whitespace, long };
   }
 }
 

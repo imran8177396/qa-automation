@@ -70,6 +70,7 @@ test('coverage formula publishes definition, two figures, and per-dimension cont
 
   const formula = report.formula;
   assert.equal(formula.testableItemDefinition, TESTABLE_ITEM_DEFINITION);
+  assert.match(formula.scopeDefinition, /login-only crawl cannot be reported as 100%/);
   assert.equal(formula.coverageIsNotPassRate, true);
   assert.equal(formula.denominatorAfterDedupe, true);
   assert.equal(formula.warning, COVERAGE_IS_NOT_PASS_RATE);
@@ -90,6 +91,92 @@ test('coverage formula publishes definition, two figures, and per-dimension cont
   assert.equal(formula.figures.functionalAreaCoverage.testable, 3);
   assert.ok(Array.isArray(formula.excludedItems));
   assert.notEqual(report.totals.passRatePercent, report.totals.itemCoveragePercent);
+  assert.equal(report.totals.testedCount, 0);
+  assert.equal(report.totals.failedCount, 0);
+  assert.equal(report.totals.blockedCount, 0);
+  assert.equal(report.totals.complete, false);
+});
+
+test('FAILED counts as covered; BLOCKED is not TESTED; N/A is excluded from the denominator', () => {
+  const page = item({ id: 'PAGE-0001', kind: 'page', name: 'Home', page: 'https://example.com/' });
+  const field = item({
+    id: 'UI-0001',
+    kind: 'field',
+    name: 'email',
+    page: 'https://example.com/contact.html',
+    locator: '#email',
+    elementType: 'input',
+  });
+  const blocked = item({
+    id: 'WF-0001',
+    kind: 'workflow',
+    name: 'Submit',
+    source: 'discovery',
+    projectStatus: 'NOT_TESTED',
+    applicableScenarios: [
+      {
+        id: 'form-submit',
+        disposition: 'blocked-safety',
+        reason: 'Submit is blocked by the safety policy',
+        tested: false,
+        evidenceIds: [],
+      },
+    ],
+  });
+  const notApplicable = item({
+    id: 'CAT-table',
+    kind: 'table',
+    name: 'Tables',
+    coverageHint: 'not-applicable',
+    applicableScenarios: [
+      {
+        id: 'visibility',
+        disposition: 'not-implemented',
+        reason: 'not observed in discovery',
+        tested: false,
+        evidenceIds: [],
+      },
+    ],
+  });
+  const rows = [
+    evidence({
+      id: 'PW-fail',
+      title: 'https://example.com/ should load',
+      urlHints: ['https://example.com/'],
+      status: 'FAIL',
+    }),
+    evidence({
+      id: 'PW-pass',
+      title: 'field #email is visible',
+      urlHints: ['https://example.com/contact.html'],
+      locatorHints: ['#email'],
+      status: 'PASS',
+    }),
+  ];
+
+  const report = calculateCoverage(applyEvidence([page, field, blocked, notApplicable], rows), rows, {
+    seedUrl: 'https://example.com/',
+    playwrightBaseUrl: 'https://example.com/',
+    notes: [],
+  });
+
+  assert.equal(report.records.find((row) => row.id === 'PAGE-0001')?.status, 'FAILED');
+  assert.equal(report.records.find((row) => row.id === 'UI-0001')?.status, 'TESTED');
+  assert.equal(report.records.find((row) => row.id === 'WF-0001')?.status, 'BLOCKED');
+  assert.equal(report.records.find((row) => row.id === 'CAT-table')?.status, 'NOT APPLICABLE');
+  assert.equal(report.totals.testableItems, 2);
+  assert.equal(report.totals.testedCount, 1);
+  assert.equal(report.totals.failedCount, 1);
+  assert.equal(report.totals.blockedCount, 1);
+  assert.equal(report.totals.testedItems, 2);
+  assert.equal(report.totals.itemCoveragePercent, 100);
+  assert.equal(report.totals.scopeItems, 3);
+  assert.equal(report.totals.scopeCoveragePercent, 66.7);
+  assert.equal(report.totals.complete, false);
+  assert.match(report.formula.scopeDefinition, /testable items \+ BLOCKED/);
+  assert.ok(!report.formula.excludedItems.some((row) => row.id === 'PAGE-0001'));
+  assert.ok(report.formula.excludedItems.some((row) => row.id === 'CAT-table'));
+  assert.ok(report.formula.excludedItems.some((row) => row.id === 'WF-0001'));
 });
 
 test('inventory denominator collapses Apache autoindex query variants after P2-1 normalize', () => {
@@ -140,8 +227,14 @@ test('inventory denominator collapses Apache autoindex query variants after P2-1
     discoveredItems: items.filter((row) => row.source === 'discovery').length,
     testableItems: pages.length + routes.length,
     testedItems: 0,
+    testedCount: 0,
+    failedCount: 0,
+    blockedCount: 0,
     uncoveredItems: pages.length + routes.length,
     itemCoveragePercent: 0,
+    scopeItems: pages.length + routes.length,
+    scopeCoveragePercent: 0,
+    complete: false,
     executableScenarios: 0,
     testedScenarios: 0,
     scenarioCoveragePercent: 0,

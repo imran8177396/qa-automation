@@ -1,7 +1,10 @@
 name: QA Performance Heavy
 
-# Manual only — never runs on push or pull_request.
-# Type authorize-heavy in the confirm input to proceed.
+# Manual or optional weekly schedule — never pull_request or push.
+# workflow_dispatch requires typing authorize-heavy in confirm.
+# schedule requires repository variable QA_PERF_AUTHORIZE_SCHEDULE=true.
+# allowHeavyAgainst must still allow the API host (currently often empty).
+# Never set QA_PERF_AUTHORIZE on the PR CI workflow.
 
 on:
   workflow_dispatch:
@@ -19,14 +22,35 @@ on:
         description: Type authorize-heavy to run. Anything else is refused.
         required: true
         type: string
+  schedule:
+    - cron: "0 6 * * 1"
 
 permissions:
   contents: read
 
 jobs:
+  refuse-unauthorized-dispatch:
+    name: Refuse unauthorized manual run
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm != 'authorize-heavy' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authorization refused
+        run: |
+          echo "NOT_AUTHORIZED: type authorize-heavy in the confirm input. The input value is not printed."
+          exit 1
+
+  record-schedule-not-authorized:
+    name: Record unauthorized schedule
+    if: ${{ github.event_name == 'schedule' && vars.QA_PERF_AUTHORIZE_SCHEDULE != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scheduled heavy run not authorized
+        run: |
+          echo "NOT_AUTHORIZED: scheduled heavy JMeter did not run. Set Actions variable QA_PERF_AUTHORIZE_SCHEDULE=true after jmeter.allowHeavyAgainst includes the API host."
+
   heavy:
     name: Authorized heavy performance
-    if: ${{ inputs.confirm == 'authorize-heavy' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.confirm == 'authorize-heavy') || (github.event_name == 'schedule' && vars.QA_PERF_AUTHORIZE_SCHEDULE == 'true') }}
     timeout-minutes: 90
     runs-on: ubuntu-latest
     steps:
@@ -36,20 +60,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: "20"
           cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Sync configs
-        run: npm run qa:sync
 
       - name: Install JMeter
         run: |
@@ -58,17 +79,132 @@ jobs:
           echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> "$GITHUB_ENV"
           echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
 
+      - name: Sync configs
+        run: npm run qa:sync
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Record repository secret availability
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+        run: |
+          record() {
+            if [ -z "$2" ]; then
+              echo "$1: not configured (auth-dependent checks may be REQUIRES_CONFIGURATION / NOT_TESTED)"
+            else
+              echo "$1: configured (value not printed)"
+            fi
+          }
+          record QA_WEBSITE_URL "$QA_WEBSITE_URL"
+          record QA_API_URL "$QA_API_URL"
+          record QA_USERNAME "$QA_USERNAME"
+          record QA_PASSWORD "$QA_PASSWORD"
+          record QA_API_TOKEN "$QA_API_TOKEN"
+          record QA_API_USERNAME "$QA_API_USERNAME"
+          record QA_API_PASSWORD "$QA_API_PASSWORD"
+
       - name: Run authorized heavy profile
         env:
           QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
           QA_API_URL: ${{ secrets.QA_API_URL }}
-        run: npm run test:performance -- --profile=${{ inputs.profile }} --authorize-heavy
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+          QA_HEAVY_PROFILE: ${{ github.event_name == 'schedule' && 'load' || inputs.profile }}
+        run: npm run test:performance -- --profile="$QA_HEAVY_PROFILE" --authorize-heavy
+
+      - name: Generate Allure and combined QA reports
+        if: always()
+        run: npm run report:all
 
       - name: Upload JMeter reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jmeter-heavy-${{ inputs.profile }}
+          name: jmeter-heavy-${{ github.event_name == 'schedule' && 'load' || inputs.profile }}
           path: reports/jmeter/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-heavy
+          path: reports/playwright/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots-heavy
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos-heavy
+          path: |
+            test-results/**/*.webm
+            test-results/**/*.mp4
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-heavy
+          path: test-results/**/*.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Postman reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-report-heavy
+          path: reports/postman/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-heavy
+          path: |
+            reports/allure/report/
+            reports/allure/results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload final QA summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-final-summary-heavy
+          path: |
+            reports/summary/
+            reports/orchestrator/
+            reports/coverage/
+            reports/performance/
+            reports/lighthouse/
           if-no-files-found: ignore
           retention-days: 14

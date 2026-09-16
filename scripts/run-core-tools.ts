@@ -3,6 +3,7 @@ import { runPlaywright } from './runners/playwright';
 import { runPostman } from './runners/postman';
 import { runJmeter } from './runners/jmeter';
 import { runLighthouse } from './lighthouse/run';
+import { runUiPerformance } from './performance/run-ui';
 import { loadConfig } from './lib/load-config';
 import { logError, logStep, logSuccess, logWarn } from './lib/logger';
 import { writeProfessionalSqaReport } from './reporting/write-enterprise-report';
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   const results = [
     { name: 'Playwright', passed: config.playwright.enabled ? await runPlaywright(config) : true },
     { name: 'Postman', passed: config.postman.enabled ? await runPostman(config) : true },
+    { name: 'Playwright UI performance', passed: await runUiPerformance(config) },
     { name: 'JMeter', passed: config.jmeter.enabled ? await runJmeter(config) : true },
     { name: 'Lighthouse', passed: await runLighthouse(config) },
   ];
