@@ -45,4 +45,11 @@ npm run test:security
 
 Reports: `reports/security/summary.json`, `reports/security/findings.md`.
 
-Never hide failures. A local fixture without security headers is a real observation, not a reason to weaken the check.
+Never hide failures. A local fixture without security headers is a real observation, not a reason to weaken the check. This is QA-level security — not a pentest. Inspect existing checks before changing them. After implementation, run `npm run test:security` and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never execute destructive actions without authorization.

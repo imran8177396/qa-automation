@@ -5,6 +5,8 @@ name: QA Performance Heavy
 # schedule requires repository variable QA_PERF_AUTHORIZE_SCHEDULE=true.
 # allowHeavyAgainst must still allow the API host (currently often empty).
 # Never set QA_PERF_AUTHORIZE on the PR CI workflow.
+# Load / stress / endurance (soak) live here only when authorization is satisfied.
+# Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — not part of this performance job.
 
 on:
   workflow_dispatch:
@@ -83,7 +85,7 @@ jobs:
         run: npm run qa:sync
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Record repository secret availability
         env:

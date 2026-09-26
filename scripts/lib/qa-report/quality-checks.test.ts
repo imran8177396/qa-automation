@@ -10,8 +10,10 @@ import {
   assertQualityChecksPass,
   countTautologicalAssertions,
   evaluateQualityChecks,
+  readQualityChecksArtifact,
   readTautologicalArtifact,
   reportQualityWarnings,
+  writeQualityChecksArtifact,
 } from './quality-checks';
 
 const numbered = numberSections();
@@ -208,6 +210,23 @@ test('readTautologicalArtifact consumes section-2.7 TAUTOLOGICAL_ASSERTION flags
     assert.equal(artifact?.present, true);
     assert.equal(artifact?.count, 1);
     assert.equal(artifact?.path, 'reports/postman/section-2.7.json');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('writeQualityChecksArtifact persists checks for the orchestrator quality gate', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-qcheck-'));
+  const file = path.join(root, 'quality-checks.json');
+  try {
+    writeQualityChecksArtifact(
+      [{ id: 'no-fabrication', result: 'PASS', detail: 'No fabricated results.' }],
+      file
+    );
+    const loaded = readQualityChecksArtifact(file);
+    assert.equal(loaded?.[0]?.id, 'no-fabrication');
+    assert.equal(loaded?.[0]?.result, 'PASS');
+    assert.equal(readQualityChecksArtifact(path.join(root, 'missing.json')), null);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

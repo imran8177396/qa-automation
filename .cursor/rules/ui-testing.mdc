@@ -51,4 +51,12 @@ npm run test:e2e
 npm run test:ui
 ```
 
-Investigate failures in `reports/playwright/` with traces and screenshots. Classify application vs automation defects — never weaken assertions to pass.
+Investigate failures in `reports/playwright/` with traces and screenshots. Classify application vs automation defects. Inspect existing page objects before adding new ones. After implementation, run the commands above and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never execute destructive actions without authorization.
+- Generated checks never submit forms — see `scripts/core/safety-policy.ts`.

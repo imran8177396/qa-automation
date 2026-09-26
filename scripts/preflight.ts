@@ -6,13 +6,14 @@ import { loadConfig } from './lib/load-config';
 import { logStep } from './lib/logger';
 import { resolveJmeterCommand } from './lib/jmeter';
 import {
+  ALL_PLAYWRIGHT_BROWSERS,
   isPlaywrightBrowserInstalled,
   resolvePlaywrightBrowsers,
   type PlaywrightBrowser,
 } from './lib/playwright-browsers';
 import { assertUniquePlaywrightSuitePaths } from './lib/playwright-suites';
 import { resolvePostmanCommand } from './lib/postman';
-import { captureCommand, findOnPath, localBinPath } from './lib/run-command';
+import { captureCommand, findOnPath, localBinPath, resolveNpmCommand } from './lib/run-command';
 import type { QaConfig } from './types';
 
 type CheckStatus = 'PASS' | 'FAIL' | 'WARNING';
@@ -186,11 +187,7 @@ function checkNode(): CheckResult {
 }
 
 function checkNpm(): CheckResult {
-  const npmBesideNode = path.join(
-    path.dirname(process.execPath),
-    process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  );
-  const npmCommand = fs.existsSync(npmBesideNode) ? npmBesideNode : findOnPath('npm');
+  const npmCommand = resolveNpmCommand();
   if (!npmCommand) {
     return { name: 'npm', status: 'FAIL', detail: 'not found on PATH', required: true };
   }
@@ -352,7 +349,7 @@ function checkPlaywright(): CheckResult {
 function checkBrowsers(config: QaConfig | null): CheckResult {
   const needed = config
     ? resolvePlaywrightBrowsers(config.playwright)
-    : (['chromium'] as PlaywrightBrowser[]);
+    : [...ALL_PLAYWRIGHT_BROWSERS];
 
   const pkgDir = path.join(PATHS.root, 'node_modules', '@playwright', 'test');
   if (!fs.existsSync(pkgDir)) {

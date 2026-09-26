@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { startFixtureServer } from '../testing/serve-fixture-site';
+import { isPlaywrightBrowserInstalled, MISSING_CHROMIUM_UNIT_REASON } from '../lib/playwright-browsers';
 import { runFixtureCorrelationSelfCheck } from './fixture-self-check';
 
 describe('fixture correlation self-check', () => {
@@ -24,6 +25,7 @@ describe('fixture correlation self-check', () => {
     'correlates UI click → GET /api/status → UI ok and labels it as framework self-check',
     { timeout: 120000 },
     async () => {
+    assert.ok(isPlaywrightBrowserInstalled('chromium'), MISSING_CHROMIUM_UNIT_REASON);
     const evidence = await runFixtureCorrelationSelfCheck();
     assert.equal(evidence.scope, 'framework-self-check');
     assert.equal(evidence.status, 'PASS');

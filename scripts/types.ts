@@ -74,10 +74,546 @@ export interface PostmanRequestConfig {
   assertions?: PostmanAssertionsConfig;
 }
 
-export interface QaConfig {
-  project: {
-    name: string;
+export type IntegrationCheckKind =
+  | 'service-to-service'
+  | 'api-to-database'
+  | 'api-to-redis'
+  | 'api-to-queue'
+  | 'service-to-external-api'
+  | 'worker-to-database';
+
+export interface IntegrationCheckConfig {
+  name: string;
+  kind: IntegrationCheckKind;
+  /** Absolute http(s) URL — never invent a host. */
+  url?: string;
+  /** Env var name whose value is an http(s) URL. */
+  urlEnv?: string;
+}
+
+export interface IntegrationTestsConfig {
+  enabled: boolean;
+  /** Optional integration probes. Default empty — never invent hosts. */
+  checks?: IntegrationCheckConfig[];
+}
+
+export interface ContractFieldConfig {
+  name: string;
+  type?: string;
+  enumValues?: string[];
+  minLength?: number;
+  maxLength?: number;
+  format?: string;
+  min?: number;
+  max?: number;
+}
+
+export interface ContractDefinitionConfig {
+  name: string;
+  method: HttpMethod;
+  path: string;
+  expectedStatus: number;
+  requiredFields?: string[];
+  fieldTypes?: Partial<Record<string, JsonFieldType>>;
+  responseShape?: 'array' | 'object' | 'empty';
+  /** Expected response header name substrings. */
+  headers?: string[];
+  /** Simple required request-body field names — not a full JSON Schema. */
+  requestSchema?: string[];
+  /** Simple required error-body field names — not a full JSON Schema. */
+  errorSchema?: string[];
+  /** When set, FAIL if the response lacks this header. */
+  versionHeader?: string;
+  query?: Record<string, string>;
+  body?: Record<string, unknown>;
+  /** Field constraints — drives negative/boundary case planning via testing generators. */
+  fields?: ContractFieldConfig[];
+}
+
+export interface ContractTestsConfig {
+  enabled: boolean;
+  /** Optional explicit contracts. Missing/empty does not invent endpoints. */
+  contracts?: ContractDefinitionConfig[];
+  /**
+   * When true, map `postman.requests` into the contract catalog.
+   * Default false so `npm run test:api` remains the Postman path.
+   */
+  usePostmanRequests?: boolean;
+  /**
+   * When false (default), negative/boundary cases are listed as NOT_TESTED.
+   * When true, only safe GET query mutations are executed.
+   */
+  executeNegative?: boolean;
+}
+
+export interface DatabaseTestsConfig {
+  enabled: boolean;
+  /** Env var holding the connection string. Default DATABASE_URL. */
+  urlEnv?: string;
+}
+
+/**
+ * Optional multi-tenant evidence checks. Default enabled false.
+ * Tenant / organization / user / role values are never committed here —
+ * callers supply them at runtime with captured response bodies.
+ */
+export interface MultiTenantTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional webhook flow checks. Default enabled false.
+ * No URLs or secrets in committed config — callers supply evidence at runtime.
+ */
+export interface WebhookTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional queue/async classification. Default enabled false.
+ * Generic in-memory only — no broker hosts or secrets in committed config.
+ */
+export interface QueueTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional property-based sample checks. Default enabled false.
+ * Builtin adapter only — fast-check is not installed; not a PBT framework.
+ */
+export interface PropertyTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional in-memory mutation checks. Default enabled false.
+ * Snippets and caller-supplied detection only — no file mutation, no suite re-run, no Stryker.
+ */
+export interface MutationTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional deterministic in-memory race / concurrency checks. Default enabled false.
+ * Caller-supplied interleavings only — no live multi-process races, no timers, no DB/HTTP.
+ */
+export interface RaceTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional backup/restore infrastructure checks. Default enabled false.
+ * Caller-supplied evidence only — does not take backups, restore DBs, or delete data.
+ */
+export interface BackupRestoreTestsConfig {
+  enabled: boolean;
+}
+
+/**
+ * Optional privacy checks. Default enabled false.
+ * Caller-supplied evidence only — does not scan live APIs, delete data, enforce retention, or write exports.
+ */
+export interface PrivacyTestsConfig {
+  enabled: boolean;
+}
+
+export interface SmokeDependencyConfig {
+  name: string;
+  /** Absolute http(s) URL — never invent a host. */
+  url?: string;
+  /** Env var name whose value is an http(s) URL. */
+  urlEnv?: string;
+}
+
+export interface SmokeTestsConfig {
+  enabled: boolean;
+  /** Critical page path relative to website origin. Default `/` when a website URL exists. */
+  criticalPagePath?: string;
+  /** Full auth surface URL (GET only — never submits credentials). */
+  authUrl?: string;
+  /** Env var name holding a full auth surface URL. */
+  authUrlEnv?: string;
+  /** Full workflow start URL (GET only — never clicks through). */
+  workflowUrl?: string;
+  /** Env var name holding a workflow start URL. */
+  workflowUrlEnv?: string;
+  /** External dependency probes. Default []. */
+  dependencies?: SmokeDependencyConfig[];
+  /**
+   * API path appended to the resolved API base.
+   * When omitted/empty, falls back to `jmeter.path` when that is non-empty.
+   */
+  apiPath?: string;
+}
+
+export interface SanityCheckConfig {
+  id: string;
+  name?: string;
+  /** Path joined to resolveWebsiteTarget() when url/urlEnv are absent. */
+  path?: string;
+  /** Absolute http(s) URL — never invent a host. */
+  url?: string;
+  /** Env var name whose value is an http(s) URL. */
+  urlEnv?: string;
+}
+
+export interface SanityTestsConfig {
+  enabled: boolean;
+  /**
+   * User-listed sanity scope. Default [] — never invent hosts.
+   * Sanity is not regression and not retest of prior failures.
+   */
+  checks?: SanityCheckConfig[];
+}
+
+/**
+ * Safe GET-only reliability probes. Disabled by default.
+ * Never invents hosts; never injects faults.
+ */
+export interface ReliabilityTestsConfig {
+  enabled: boolean;
+  /** Absolute http(s) health URL — never invent a host. */
+  healthUrl?: string;
+  /** Env var name whose value is an http(s) health URL. */
+  healthUrlEnv?: string;
+  /** GET timeout in ms. Default 5000; capped at 15000. */
+  timeoutMs?: number;
+}
+
+/**
+ * Safe GET-only resilience probes. Disabled by default.
+ * Never invents hosts; never takes dependencies down or injects faults.
+ */
+export interface ResilienceTestsConfig {
+  enabled: boolean;
+  /** Absolute http(s) dependency URL — never invent a host. */
+  dependencyUrl?: string;
+  /** Env var name whose value is an http(s) dependency URL. */
+  dependencyUrlEnv?: string;
+  /** Absolute http(s) health URL for resilience:service-health. */
+  healthUrl?: string;
+  /** Env var name whose value is an http(s) health URL. */
+  healthUrlEnv?: string;
+  /** Optional GET timeout in ms. Default 5000; capped at 15000. */
+  timeoutMs?: number;
+}
+
+/**
+ * Safe post-deploy GET probes + required-env name checks. Disabled by default.
+ * Never invents hosts; never runs deploy / migrate / rollback commands.
+ */
+export interface DeploymentTestsConfig {
+  enabled: boolean;
+  /** Absolute http(s) health URL — never invent a host. */
+  healthUrl?: string;
+  /** Env var name whose value is an http(s) health URL. */
+  healthUrlEnv?: string;
+  /** Absolute http(s) readiness URL — never invent a host. */
+  readinessUrl?: string;
+  /** Env var name whose value is an http(s) readiness URL. */
+  readinessUrlEnv?: string;
+  /** Absolute http(s) version URL for verification — never invent a host. */
+  versionUrl?: string;
+  /** Env var name whose value is an http(s) version URL. */
+  versionUrlEnv?: string;
+  /** Env var **names** that must be set (non-blank). Values are never logged. */
+  requiredEnv?: string[];
+}
+
+/**
+ * Intl formatter / timezone / RTL checks. Never fetches a page.
+ * Live-page language stays REQUIRES_CONFIGURATION until a page URL is configured.
+ */
+export interface LocalizationTestsConfig {
+  enabled: boolean;
+  /** BCP 47 locale tags for formatter checks (e.g. en-US). Never invents app support. */
+  locales?: string[];
+  /** IANA time zone ids (e.g. UTC, Asia/Karachi). */
+  timezones?: string[];
+}
+
+/**
+ * Explicit production verification. Disabled by default; every check flag defaults false.
+ * Never invents hosts. Does not authorize heavy, security, or destructive testing.
+ * Unknown keys are ignored and are not treated as permission.
+ */
+export interface ProductionVerificationConfig {
+  enabled: boolean;
+  health?: boolean;
+  smoke?: boolean;
+  criticalApi?: boolean;
+  criticalUi?: boolean;
+  criticalWorkflow?: boolean;
+}
+
+/** Opt-in metadata for which test categories are declared in config. Does not start runners. */
+export interface TestsConfig {
+  unit: { enabled: boolean };
+  integration: IntegrationTestsConfig;
+  contract: ContractTestsConfig;
+  database: DatabaseTestsConfig;
+  smoke: SmokeTestsConfig;
+  sanity: SanityTestsConfig;
+  regression: {
+    enabled: boolean;
+    /** Optional; `"selective"` is the committed default. */
+    mode?: 'full' | 'selective';
+    /** Optional suite include list; v1 selective/full default to `unit` when omitted. */
+    include?: ('unit' | 'api' | 'e2e')[];
   };
+  /**
+   * Opt-in metadata only. Does not authorize heavy load and must not override
+   * `jmeter` profiles, thresholds, or `allowHeavyAgainst`. Heavy profiles stay
+   * disabled here (`load` / `stress` / `spike` / `endurance` enabled false).
+   * `jmeter` remains the execution source of truth for performance.
+   */
+  performance: {
+    enabled: boolean;
+    load: { enabled: boolean };
+    stress: { enabled: boolean };
+    spike: { enabled: boolean };
+    endurance: { enabled: boolean };
+  };
+  reliability: ReliabilityTestsConfig;
+  resilience: ResilienceTestsConfig;
+  /** Optional; default enabled false when present. Never deploys or migrates. */
+  deployment?: DeploymentTestsConfig;
+  /** Optional; formatter/timezone checks only — never claims a site is translated. */
+  localization?: LocalizationTestsConfig;
+  /** Optional AI QA layer — not required for web/e2e/api/jmeter. Default enabled false. */
+  ai?: AiTestsConfig;
+  /**
+   * Optional production verification. Default enabled false; check flags default false.
+   * Never authorizes heavy / security / destructive suites.
+   */
+  productionVerification?: ProductionVerificationConfig;
+  /**
+   * Optional multi-tenant evidence comparison. Default enabled false.
+   * Not assumed for every application. No tenant ids in committed config.
+   */
+  multiTenant?: MultiTenantTestsConfig;
+  /**
+   * Optional webhook signature/delivery classification. Default enabled false.
+   * No webhook URLs or secrets in committed config.
+   */
+  webhook?: WebhookTestsConfig;
+  /**
+   * Optional queue/async classification. Default enabled false.
+   * No broker hosts or secrets in committed config.
+   */
+  queue?: QueueTestsConfig;
+  /**
+   * Optional property sample adapter. Default enabled false.
+   * fast-check is not installed — not a property-testing framework.
+   */
+  property?: PropertyTestsConfig;
+  /**
+   * Optional in-memory mutation checks. Default enabled false.
+   * Not part of the default PR suite. File mutation and suite re-run stay unimplemented.
+   */
+  mutation?: MutationTestsConfig;
+  /**
+   * Optional deterministic race / concurrency model. Default enabled false.
+   * Not part of the default PR suite. Live multi-process races are not executed.
+   */
+  race?: RaceTestsConfig;
+  /**
+   * Optional backup/restore infrastructure checks. Default enabled false.
+   * Not part of the default PR suite. Live backup/restore is not executed; production data is never deleted.
+   */
+  backupRestore?: BackupRestoreTestsConfig;
+  /**
+   * Optional privacy checks. Default enabled false.
+   * Not part of the default PR suite. Live deletion, retention enforcement, and export jobs are not executed.
+   */
+  privacy?: PrivacyTestsConfig;
+}
+
+/**
+ * Optional AI QA engine config. Disabled by default; not required for web QA.
+ * Endpoint URL comes only from env[endpointEnv] — never hardcode hosts or keys.
+ */
+export interface AiTestsConfig {
+  enabled: boolean;
+  /** Env var name for the AI HTTP endpoint. Default QA_AI_ENDPOINT. Do not set the env here. */
+  endpointEnv?: string;
+  /** User-supplied prompt body; empty → prompt regression REQUIRES_CONFIGURATION. */
+  prompt?: string;
+  /** When set, prompt regression PASS requires this substring in the response body. */
+  expectedSubstring?: string;
+  /** Required top-level JSON field names for structured output. */
+  requiredFields?: string[];
+  /** Fact substrings that must appear (not a proof of truth). */
+  requiredFacts?: string[];
+  /** Source id/string substrings for groundedness. */
+  sources?: string[];
+  /** Expected chunk/source ids for RAG retrieval against response chunks/sources. */
+  expectedChunkIds?: string[];
+  /** Expected tool name for tool-call validation. */
+  expectedTool?: string;
+  /** Expected tools sequence for agent workflow. */
+  workflowTools?: string[];
+}
+
+export type QaEnvironmentName = 'local' | 'development' | 'staging' | 'production';
+
+export interface ProjectConfig {
+  name: string;
+  /**
+   * Optional project isolation id. Default `"default"` keeps existing report roots.
+   * Non-default ids namespace under `reports/projects/<id>/` (see platform/project.ts).
+   */
+  id?: string;
+}
+
+export interface EnvironmentConfig {
+  /** Active named environment. Default `"development"`. Does not invent hosts. */
+  active?: QaEnvironmentName;
+}
+
+/**
+ * Optional per-environment endpoint overrides. Empty strings are valid.
+ * Does not replace `urls.website` / `urls.api` — used as an additional source
+ * at the config-URL tier only (see `resolveEnvironmentEndpoints`).
+ */
+export interface EnvironmentEndpointsConfig {
+  websiteUrl?: string;
+  apiUrl?: string;
+}
+
+/** Optional sibling of `environment` / `urls`. Unknown keys are ignored by the resolver. */
+export type EnvironmentsConfig = Partial<Record<QaEnvironmentName, EnvironmentEndpointsConfig>>;
+
+
+export interface ExecutionPlatformConfig {
+  /** Parallel wave planning default. Default false — sequential. Does not change qa:all spawn. */
+  parallel?: boolean;
+  /** Extra retry attempts for flaky detection config. Default 0. Detection only — no runner loop. */
+  maxExtraAttempts?: number;
+  /** Max planned concurrency. Default 1. Does not change qa:all spawn order. */
+  maxConcurrency?: number;
+  /**
+   * Optional per-item / plan timeout for dependent-plan helpers.
+   * Omit or leave unset in committed qa.config.json — a committed number would change future runs.
+   */
+  timeoutMs?: number;
+}
+
+/**
+ * Optional executor retry policy. Default enabled false — one attempt; not retest.ts.
+ * maxAttempts is total attempts including the first (2 = attempt 1 + at most attempt 2).
+ */
+export interface RetryConfig {
+  enabled?: boolean;
+  maxAttempts?: number;
+}
+
+/** Optional release-gate thresholds. Default blockRelease false — does not block. */
+export interface QualityGateConfig {
+  blockRelease?: boolean;
+  maxCriticalFailures?: number;
+  minCoveragePct?: number;
+  maxPerformanceP95Ms?: number;
+  maxSecurityHigh?: number;
+}
+
+/**
+ * Configurable quality gates over test results.
+ * When `enabled` is false or omitted, the gate does not fail the run.
+ * Threshold keys that are omitted are not checked. Not wired into run-all.
+ */
+export interface QualityGatesConfig {
+  /** When false or omitted, the gate does not fail the run. */
+  enabled?: boolean;
+  /** Max allowed; 0 means any critical failure fails the gate. */
+  criticalFailures?: number;
+  maxFailedTests?: number;
+  /** Percent; only compared when coverage was measured. */
+  minCoverage?: number;
+  maxHighSecurityFindings?: number;
+}
+
+export interface PluginConfigEntry {
+  id: string;
+  /** Relative path under `scripts/plugins/` only — never a remote URL. */
+  modulePath: string;
+}
+
+/**
+ * Optional explicit change-impact mappings. Empty / omitted does not change
+ * regression behavior. Paths are repo-relative prefixes; selection is mapping-only
+ * (no git, no AI inference).
+ */
+export interface ChangeImpactMappingConfig {
+  path: string;
+  module: string;
+  service: string;
+  feature: string;
+  testIds: string[];
+}
+
+export interface ChangeImpactConfig {
+  mappings?: ChangeImpactMappingConfig[];
+}
+
+/**
+ * Optional risk-based selection profile for callers of selectByPriority / executeByPriority.
+ * Committed default stays `"full"` so current runs are not narrowed.
+ * Not wired into run-all.ts.
+ */
+export type RiskSelectionProfileConfig = 'critical' | 'critical-high' | 'full';
+
+export interface RiskConfig {
+  profile?: RiskSelectionProfileConfig;
+}
+
+export interface QaConfig {
+  project: ProjectConfig;
+  /**
+   * Named environment only (`local` | `development` | `staging` | `production`).
+   * Optional; absent → platform helpers default to development. No hosts here.
+   * Selector for optional `environments` map — committed default remains `"development"`.
+   */
+  environment?: EnvironmentConfig;
+  /**
+   * Optional per-environment website/api URL overrides. Empty strings are valid.
+   * Does not replace `urls`. Resolved only at the config-URL tier after CLI/env/last-target.
+   * Never invent hosts — leave blank until a real target is configured.
+   */
+  environments?: EnvironmentsConfig;
+  /**
+   * Platform execution planning defaults. Optional; absent → parallel false, maxExtraAttempts 0, maxConcurrency 1.
+   * Does not change existing runner spawn order.
+   */
+  execution?: ExecutionPlatformConfig;
+  /**
+   * Optional dependent-plan retry. Default `{ enabled: false, maxAttempts: 2 }`.
+   * Committed config stays disabled — callers may pass enabled true into the executor.
+   */
+  retry?: RetryConfig;
+  /**
+   * Optional release-gate thresholds. Default `blockRelease: false` — never blocks when omitted.
+   */
+  qualityGate?: QualityGateConfig;
+  /**
+   * Optional configurable quality gates. Default `{ enabled: false }` — does not fail the run.
+   * Thresholds are caller-supplied when enabling; not wired into run-all.
+   */
+  qualityGates?: QualityGatesConfig;
+  /**
+   * Optional plugin entries. Default empty — loads nothing. Paths must be under scripts/plugins/.
+   */
+  plugins?: PluginConfigEntry[];
+  /**
+   * Optional change-impact mapping table. Default `{ mappings: [] }` — empty must not
+   * change regression's current behavior. Consumed by platform risk helpers only.
+   */
+  changeImpact?: ChangeImpactConfig;
+  /**
+   * Optional risk-based priority profile. Committed value is `"full"` — does not
+   * narrow current runs. Consumed by platform risk helpers only; not wired into run-all.
+   */
+  risk?: RiskConfig;
   urls: {
     website: string;
     api: string;
@@ -99,6 +635,8 @@ export interface QaConfig {
     /** Alias of exhaustiveExecution. */
     noSilentSkip?: boolean;
   };
+  /** Optional so older configs without `tests` still typecheck. */
+  tests?: TestsConfig;
   postman: {
     enabled: boolean;
     collectionName: string;
@@ -117,7 +655,13 @@ export interface QaConfig {
   };
   playwright: {
     enabled: boolean;
-    baseURL: string;
+    /**
+     * Optional loopback-only fixture override (127.0.0.1 / localhost / ::1).
+     * Not a general live-site / product URL — use CLI `--url`, `QA_PLAYWRIGHT_BASE_URL`,
+     * `QA_WEBSITE_URL`, last-target, or `urls.website` for that. Non-loopback values
+     * are ignored by `resolveWebsiteTarget`.
+     */
+    baseURL?: string;
     browser?: PlaywrightBrowser;
     browsers?: PlaywrightBrowser[];
     headless: boolean;

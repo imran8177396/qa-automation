@@ -9,6 +9,9 @@ node_modules/
 # Generated config (created by qa:sync — do not commit secrets)
 config/generated.env
 
+# Last CLI --url target (local persist; committed fallback stays qa.config.json)
+qa.last-target.json
+
 # Playwright runtime artifacts (keep visual-baselines/ goldens)
 test-results/
 screenshots/
@@ -20,7 +23,8 @@ playwright/.auth/
 visual-baselines/**/*-actual.png
 visual-baselines/**/*-diff.png
 
-# Ephemeral tool reports (qa:clean wipes these; historical packs do not live here)
+# Ephemeral tool reports (qa:clean deletes allowlisted current-run dirs only).
+# Historical archives reports/history and reports/allure/history are preserved.
 reports/
 
 # JMeter / tool scratch

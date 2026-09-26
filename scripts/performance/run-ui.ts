@@ -5,6 +5,12 @@ import { logError, logStep, logSuccess, logWarn } from '../lib/logger';
 import { runLocalBin } from '../lib/run-command';
 import { DEFAULT_FIXTURE_PORT, ensureFixtureChildProcess } from '../testing/serve-fixture-site';
 import { resolveUiTarget } from '../lib/ui-target';
+import { applyCliWebsiteTarget } from '../lib/suite-origin';
+import {
+  classifyCompulsoryPlaywrightBrowsers,
+  playwrightProjectArgs,
+  resolvePlaywrightBrowsers,
+} from '../lib/playwright-browsers';
 import type { QaConfig } from '../types';
 import { planUiPerformanceChecks } from './ui-applicability';
 import { loadUiTimingEvidence, uiPerformanceWorkDir, writeUiPerformanceSummary } from './ui-evidence';
@@ -34,6 +40,7 @@ function notExecuted(reason: string, extras: Partial<UiPerformanceSummary> = {})
 }
 
 export async function runUiPerformance(_config: QaConfig): Promise<boolean> {
+  applyCliWebsiteTarget();
   logStep('Playwright UI performance — page load / navigation / resource timing (not JMeter)');
 
   const target = resolveUiTarget();
@@ -78,15 +85,29 @@ export async function runUiPerformance(_config: QaConfig): Promise<boolean> {
       logStep(`UI performance target is live origin ${target.origin} — fixture site is not substituted`);
     }
 
-    runLocalBin('playwright', ['install', 'chromium']);
-    const result = runLocalBin('playwright', ['test', `--config=${configPath}`], {
-      env: {
-        ...process.env,
-        QA_PLAYWRIGHT_BASE_URL: target.url,
-        QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
-      },
-    });
-    playwrightPassed = result.status === 0;
+    const requestedBrowsers = resolvePlaywrightBrowsers(_config.playwright);
+    runLocalBin('playwright', ['install', ...requestedBrowsers]);
+    const classified = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
+    if (classified.skippedBrowsers.length > 0) {
+      logError(
+        `Missing Playwright engines after install: ${classified.skippedBrowsers.map((row) => row.browser).join(', ')}`
+      );
+    }
+    const result =
+      classified.executableBrowsers.length === 0
+        ? { status: 1 }
+        : runLocalBin(
+            'playwright',
+            ['test', `--config=${configPath}`, ...playwrightProjectArgs(classified.executableBrowsers)],
+            {
+              env: {
+                ...process.env,
+                QA_PLAYWRIGHT_BASE_URL: target.url,
+                QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
+              },
+            }
+          );
+    playwrightPassed = result.status === 0 && classified.skippedBrowsers.length === 0;
   } finally {
     await server?.close();
   }

@@ -217,3 +217,138 @@ test('API stage fails when expectedStatus contradicts the observed status', () =
   const artifact = parsePostmanReportForSection27({ report, config: mismatched, tokenPresent: false });
   assert.equal(apiStagePassed(artifact), false);
 });
+
+test('status 400 finding includes actual responseShape and expected status', () => {
+  const cfg = config();
+  cfg.postman.requests.push({
+    name: 'GET /bad-request',
+    method: 'GET',
+    path: '/bad-request',
+    expectedStatus: 200,
+    assertions: { statusCode: 200, expectJson: false },
+  });
+  const artifact = parsePostmanReportForSection27({
+    report: {
+      run: {
+        meta: { collectionName: 'QA Automation API' },
+        executions: [
+          {
+            requestExecuted: {
+              name: 'GET /bad-request',
+              method: 'GET',
+              url: { protocol: 'https', host: ['example', 'com'], path: ['bad-request'] },
+            },
+            response: {
+              code: 400,
+              responseTime: 50,
+              body: '{"error":"bad request"}',
+            },
+            tests: [{ name: 'GET /bad-request returns HTTP 200', status: 'fail' }],
+          },
+        ],
+      },
+    },
+    config: cfg,
+    tokenPresent: false,
+  });
+  const row = artifact.requests.find((item) => item.path === '/bad-request');
+  assert.ok(row);
+  assert.equal(row.result, 'FAIL');
+  assert.equal(row.actualResponseShape, 'object');
+  assert.equal(row.expectedStatus, 200);
+  assert.equal(
+    row.expectedVsActual?.actual,
+    'HTTP 400 (actual responseShape: object; expected status: 200)'
+  );
+  assert.equal(row.assertion, 'HTTP 400 (actual responseShape: object; expected status: 200)');
+});
+
+test('status 503 finding includes actual responseShape and expected status', () => {
+  const cfg = config();
+  cfg.postman.requests.push({
+    name: 'GET /upstream',
+    method: 'GET',
+    path: '/upstream',
+    expectedStatus: 200,
+    assertions: { statusCode: 200, expectJson: false },
+  });
+  const artifact = parsePostmanReportForSection27({
+    report: {
+      run: {
+        meta: { collectionName: 'QA Automation API' },
+        executions: [
+          {
+            requestExecuted: {
+              name: 'GET /upstream',
+              method: 'GET',
+              url: { protocol: 'https', host: ['example', 'com'], path: ['upstream'] },
+            },
+            response: { code: 503, responseTime: 50, body: '' },
+            tests: [{ name: 'GET /upstream returns HTTP 200', status: 'fail' }],
+          },
+        ],
+      },
+    },
+    config: cfg,
+    tokenPresent: false,
+  });
+  const row = artifact.requests.find((item) => item.path === '/upstream');
+  assert.ok(row);
+  assert.equal(row.result, 'FAIL');
+  assert.equal(row.actualResponseShape, 'empty');
+  assert.equal(
+    row.expectedVsActual?.actual,
+    'HTTP 503 (actual responseShape: empty; expected status: 200)'
+  );
+});
+
+test('status 200 does not force error-row responseShape wording', () => {
+  const artifact = parsePostmanReportForSection27({ report, config: config(), tokenPresent: false });
+  const home = artifact.requests.find((row) => row.path === '/');
+  assert.ok(home);
+  assert.equal(home.statusCode, '200');
+  assert.equal(home.actualResponseShape, undefined);
+  assert.deepEqual(home.expectedVsActual, { expected: '200', actual: '200' });
+  assert.doesNotMatch(home.assertion, /actual responseShape/);
+});
+
+test('UNVERIFIED expected status stays UNVERIFIED on 400 and still records responseShape', () => {
+  const cfg = config();
+  cfg.postman.requests.push({
+    name: 'POST /undocumented',
+    method: 'POST',
+    path: '/undocumented',
+    expectedStatus: 'UNVERIFIED',
+    assertions: { expectJson: false },
+  });
+  const artifact = parsePostmanReportForSection27({
+    report: {
+      run: {
+        meta: { collectionName: 'QA Automation API' },
+        executions: [
+          {
+            requestExecuted: {
+              name: 'POST /undocumented',
+              method: 'POST',
+              url: { protocol: 'https', host: ['example', 'com'], path: ['undocumented'] },
+            },
+            response: { code: 400, responseTime: 40, body: 'not json' },
+            tests: [{ name: 'POST /undocumented received an HTTP response', status: 'pass' }],
+          },
+        ],
+      },
+    },
+    config: cfg,
+    tokenPresent: false,
+  });
+  const row = artifact.requests.find((item) => item.path === '/undocumented');
+  assert.ok(row);
+  assert.equal(row.result, 'UNVERIFIED');
+  assert.equal(row.expectedStatus, 'UNVERIFIED');
+  assert.equal(row.includedInPassCount, false);
+  assert.equal(row.actualResponseShape, 'non-json');
+  assert.deepEqual(row.expectedVsActual, {
+    expected: 'UNVERIFIED',
+    actual: 'HTTP 400 (actual responseShape: non-json; expected status: UNVERIFIED)',
+  });
+});

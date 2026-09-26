@@ -5,9 +5,13 @@ import { logError, logStep, logSuccess, logWarn } from '../lib/logger';
 import { resolveJmeterCommand } from '../lib/jmeter';
 import { runCommand } from '../lib/run-command';
 import { writeJson } from '../discovery/write-json';
-import { gatePerformanceRun, isHeavyAuthorized } from '../performance/authorize';
 import { evaluateThresholds, NOT_AVAILABLE, parseJmeterJtl } from '../performance/metrics';
-import { normalizePerformanceProfile, resolvePerformanceProfile } from '../performance/profiles';
+import {
+  isLivenessProfile,
+  resolvePerformanceProfile,
+  type PerformanceProfileDecision,
+  type ResolvedProfile,
+} from '../performance/profiles';
 import type { PerformanceCli } from '../performance/cli';
 import type { PerformanceRunStatus, PerformanceSummary } from '../performance/types';
 import type { QaConfig } from '../types';
@@ -47,10 +51,13 @@ function renderFindings(summary: PerformanceSummary): string {
     '',
   ];
 
-  if (summary.blocked) {
+  if (summary.status === 'NOT_TESTED' && summary.skipReason) {
+    lines.push(`NOT_TESTED: ${summary.skipReason}`, '');
+  } else if (summary.status === 'REQUIRES_CONFIGURATION' && summary.blockReason) {
+    lines.push(`REQUIRES_CONFIGURATION: ${summary.blockReason}`, '');
+  } else if (summary.blocked) {
     lines.push(`BLOCKED: ${summary.blockReason}`, '');
-  }
-  if (summary.skipped) {
+  } else if (summary.skipped) {
     lines.push(`NOT_EXECUTED: ${summary.skipReason}`, '');
   }
 
@@ -93,10 +100,15 @@ function renderFindings(summary: PerformanceSummary): string {
   return `${lines.join('\n')}\n`;
 }
 
-function resolveRunStatus(summary: Pick<PerformanceSummary, 'blocked' | 'skipped' | 'profile' | 'thresholds'>): PerformanceRunStatus {
+function resolveRunStatus(
+  summary: Pick<PerformanceSummary, 'blocked' | 'skipped' | 'profile' | 'thresholds' | 'status'>
+): PerformanceRunStatus {
+  if (summary.status === 'NOT_TESTED' || summary.status === 'REQUIRES_CONFIGURATION') {
+    return summary.status;
+  }
   if (summary.blocked) return 'BLOCKED';
   if (summary.skipped) return 'NOT_EXECUTED';
-  if (summary.profile === 'liveness') return 'RECORDED';
+  if (isLivenessProfile(summary.profile)) return 'RECORDED';
   return summary.thresholds.status;
 }
 
@@ -107,63 +119,86 @@ function writeSummary(summary: PerformanceSummary): void {
   fs.writeFileSync(PATHS.jmeterFindings, renderFindings(summary), 'utf8');
 }
 
-function baseSummary(
+function emptySummaryShell(
   config: QaConfig,
-  options: Required<Pick<PerformanceCli, 'profile' | 'authorizeHeavy'>>
+  profileLabel: string,
+  authorized: boolean,
+  heavy: boolean,
+  resolved: ResolvedProfile | null
 ): PerformanceSummary {
-  const resolved = resolvePerformanceProfile(config, options.profile);
   return {
     ranAt: new Date().toISOString(),
-    profile: resolved.id,
+    profile: resolved?.id ?? profileLabel,
     status: 'NOT_EXECUTED',
-    heavy: resolved.heavy,
-    authorized: isHeavyAuthorized(options.profile, { authorizeHeavy: options.authorizeHeavy }),
+    heavy,
+    authorized,
     skipped: false,
     skipReason: null,
     blocked: false,
     blockReason: null,
     jmeterAvailable: Boolean(resolveJmeterCommand()),
-    target: resolved.target,
-    host: resolved.host,
-    method: resolved.method,
-    path: resolved.path,
-    plan: path.relative(PATHS.root, resolved.planPath).replace(/\\/g, '/'),
-    threads: resolved.threads,
-    rampUpSeconds: resolved.rampUpSeconds,
-    loopCount: resolved.loopCount,
-    durationSeconds: resolved.durationSeconds ?? null,
+    target: resolved?.target ?? config.jmeter.path,
+    host: resolved?.host ?? '',
+    method: resolved?.method ?? 'GET',
+    path: resolved?.path ?? config.jmeter.path,
+    plan: resolved
+      ? path.relative(PATHS.root, resolved.planPath).replace(/\\/g, '/')
+      : NOT_AVAILABLE,
+    threads: resolved?.threads ?? 0,
+    rampUpSeconds: resolved?.rampUpSeconds ?? 0,
+    loopCount: resolved?.loopCount ?? 0,
+    durationSeconds: resolved?.durationSeconds ?? null,
     metrics: null,
     samples: [],
-    thresholds: evaluateThresholds(null, config.jmeter.thresholds, resolved.id),
+    thresholds: evaluateThresholds(null, config.jmeter.thresholds, resolved?.id),
   };
 }
 
+function writeGateDecision(config: QaConfig, decision: Extract<PerformanceProfileDecision, { ok: false }>): void {
+  const summary = emptySummaryShell(
+    config,
+    decision.requested,
+    decision.authorized,
+    decision.heavy,
+    decision.resolved
+  );
+  summary.status = decision.status;
+  if (decision.status === 'NOT_TESTED') {
+    summary.skipped = true;
+    summary.skipReason = decision.reason;
+  } else if (decision.status === 'REQUIRES_CONFIGURATION') {
+    summary.blocked = true;
+    summary.blockReason = decision.reason;
+  } else {
+    summary.blocked = true;
+    summary.blockReason = decision.reason;
+  }
+  writeSummary(summary);
+}
+
 export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}): Promise<boolean> {
-  const profile = normalizePerformanceProfile(options.profile ?? config.jmeter.defaultProfile ?? 'liveness');
+  const requested = String(options.profile ?? config.jmeter.defaultProfile ?? 'liveness');
   const authorizeHeavy = Boolean(options.authorizeHeavy);
-  const resolved = resolvePerformanceProfile(config, profile);
 
   if (!config.jmeter.enabled) {
     logWarn('JMeter step skipped (disabled in qa.config.json).');
     return true;
   }
 
-  const summary = baseSummary(config, { profile, authorizeHeavy });
-  const gate = gatePerformanceRun({
-    profile,
-    apiUrl: config.urls.api,
-    authorizeHeavy,
-    allowHeavyAgainst: config.jmeter.allowHeavyAgainst ?? [],
-  });
+  const decision = resolvePerformanceProfile(requested, config, { authorizeHeavy });
 
-  if (!gate.ok) {
-    summary.blocked = true;
-    summary.blockReason = gate.message;
-    summary.authorized = gate.code !== 'NOT_AUTHORIZED';
-    writeSummary(summary);
-    logError(gate.message);
+  if (!decision.ok) {
+    writeGateDecision(config, decision);
+    if (decision.status === 'NOT_TESTED') {
+      logWarn(`NOT_TESTED: ${decision.reason}`);
+      return true;
+    }
+    logError(decision.reason);
     return false;
   }
+
+  const resolved = decision.resolved;
+  const summary = emptySummaryShell(config, resolved.id, decision.authorized, resolved.heavy, resolved);
 
   const jmeterCommand = resolveJmeterCommand();
   if (!jmeterCommand) {
@@ -184,10 +219,10 @@ export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}
     return false;
   }
 
-  logStep(`Performance tests (JMeter CLI) — ${profile} profile`);
+  logStep(`Performance tests (JMeter CLI) — ${resolved.id} profile`);
   if (resolved.heavy) {
     logWarn(
-      `Running authorized heavy profile "${profile}" against ${resolved.host}. This is not a CI default.`
+      `Running authorized heavy profile "${resolved.id}" against ${resolved.host}. This is not a CI default.`
     );
   }
 
@@ -217,13 +252,13 @@ export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}
   const parsed = parseJmeterJtl(resultFile);
   summary.samples = parsed?.samples ?? [];
   summary.metrics = parsed?.metrics ?? null;
-  summary.thresholds = evaluateThresholds(summary.metrics, config.jmeter.thresholds, profile);
+  summary.thresholds = evaluateThresholds(summary.metrics, config.jmeter.thresholds, resolved.id);
   writeSummary(summary);
 
   if (summary.metrics) {
     const m = summary.metrics;
     logSuccess(
-      `${profile}: ${m.requestCount} request(s), ${m.failures} failure(s), ` +
+      `${resolved.id}: ${m.requestCount} request(s), ${m.failures} failure(s), ` +
         `error rate ${m.errorRatePercent.toFixed(2)}%, avg ${m.avgMs} ms, ` +
         `p95 ${m.p95Ms == null ? NOT_AVAILABLE : `${m.p95Ms} ms`}, ` +
         `throughput ${m.throughputPerSec == null ? NOT_AVAILABLE : `${m.throughputPerSec.toFixed(2)}/s`}, ` +
@@ -234,8 +269,8 @@ export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}
   }
 
   if (result.status === 0) {
-    logSuccess(`JMeter ${profile} completed — report: ${htmlReportDir}`);
-    if (summary.profile !== 'liveness' && summary.thresholds.status === 'breached') {
+    logSuccess(`JMeter ${resolved.id} completed — report: ${htmlReportDir}`);
+    if (!isLivenessProfile(summary.profile) && summary.thresholds.status === 'breached') {
       logError('Configured performance thresholds were breached.');
       return false;
     }

@@ -28,13 +28,13 @@ import {
 import { loadConfig } from './lib/load-config';
 import { ALL_PLAYWRIGHT_ENGINES, QA_PLAYWRIGHT_SUITE_ENV, playwrightSuiteResultsPath } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
-import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import { applyCliWebsiteTarget, resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import {
+  classifyCompulsoryPlaywrightBrowsers,
+  playwrightProjectArgs,
+  resolvePlaywrightBrowsers,
+} from './lib/playwright-browsers';
 import { printCoverageSummary, runCoverage } from './coverage/run-coverage';
-
-const A11Y_SKIPPED_BROWSERS = [
-  { browser: 'firefox' as const, reason: 'accessibility suite runs axe/keyboard checks on Chromium only' },
-  { browser: 'webkit' as const, reason: 'accessibility suite runs axe/keyboard checks on Chromium only' },
-];
 
 function emptyImpact(): Record<AccessibilityImpact, number> {
   return { critical: 0, serious: 0, moderate: 0, minor: 0, info: 0 };
@@ -49,6 +49,7 @@ function countByImpact(findings: AccessibilityFinding[]): Record<AccessibilityIm
 }
 
 async function main(): Promise<void> {
+  applyCliWebsiteTarget();
   const config = loadConfig();
   const target = resolveUiTarget(config);
   const pages = resolveAccessibilityPages();
@@ -86,6 +87,8 @@ async function main(): Promise<void> {
 
   let server: { close: () => Promise<void> } | null = null;
   let playwrightPassed = false;
+  const requestedBrowsers = resolvePlaywrightBrowsers(config.playwright);
+  let classified = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
   try {
     if (target.isLoopback) {
       server = await ensureFixtureChildProcess(DEFAULT_FIXTURE_PORT);
@@ -96,15 +99,28 @@ async function main(): Promise<void> {
       logStep(`Accessibility suite target is live origin ${target.origin} — fixture site is not substituted`);
     }
 
-    runLocalBin('playwright', ['install', 'chromium']);
-    const result = runLocalBin('playwright', ['test', `--config=${configPath}`], {
-      env: {
-        ...process.env,
-        QA_PLAYWRIGHT_BASE_URL: target.url,
-        [QA_PLAYWRIGHT_SUITE_ENV]: 'accessibility',
-      },
-    });
-    playwrightPassed = result.status === 0;
+    runLocalBin('playwright', ['install', ...requestedBrowsers]);
+    classified = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
+    if (classified.skippedBrowsers.length > 0) {
+      logError(
+        `Missing Playwright engines after install: ${classified.skippedBrowsers.map((row) => row.browser).join(', ')}`
+      );
+    }
+    const result =
+      classified.executableBrowsers.length === 0
+        ? { status: 1 }
+        : runLocalBin(
+            'playwright',
+            ['test', `--config=${configPath}`, ...playwrightProjectArgs(classified.executableBrowsers)],
+            {
+              env: {
+                ...process.env,
+                QA_PLAYWRIGHT_BASE_URL: target.url,
+                [QA_PLAYWRIGHT_SUITE_ENV]: 'accessibility',
+              },
+            }
+          );
+    playwrightPassed = result.status === 0 && classified.skippedBrowsers.length === 0;
   } finally {
     await server?.close();
   }
@@ -121,8 +137,8 @@ async function main(): Promise<void> {
 
   completePlaywrightSuite(started, {
     passed,
-    executedBrowsers: ['chromium'],
-    skippedBrowsers: A11Y_SKIPPED_BROWSERS,
+    executedBrowsers: classified.executableBrowsers,
+    skippedBrowsers: classified.skippedBrowsers,
   });
 
   const structured = {

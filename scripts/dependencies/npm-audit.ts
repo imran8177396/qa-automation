@@ -1,5 +1,5 @@
-import { execFileSync } from 'child_process';
 import { PATHS } from '../lib/paths';
+import { captureCommand, resolveNpmCommand } from '../lib/run-command';
 import type { DependencyFinding, DependencySeverity } from './types';
 
 type NpmSeverity = 'info' | 'low' | 'moderate' | 'high' | 'critical';
@@ -38,24 +38,22 @@ export interface NpmAuditResult {
 
 /**
  * `npm audit --json` exits non-zero when vulnerabilities exist, but still
- * writes the report to stdout — execFileSync throws in that case, so the
- * report has to be read off the thrown error rather than the return value.
+ * writes the report to stdout. captureCommand keeps stdout on any exit code.
  */
 export function runNpmAudit(): NpmAuditResult {
-  let stdout: string;
-  try {
-    stdout = execFileSync('npm', ['audit', '--json'], {
-      cwd: PATHS.root,
-      encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 20,
-    });
-  } catch (error) {
-    const err = error as { stdout?: unknown; message?: string };
-    if (typeof err.stdout === 'string' && err.stdout.length > 0) {
-      stdout = err.stdout;
-    } else {
-      return { findings: [], packagesScanned: 0, error: err.message ?? String(error) };
-    }
+  const npmCommand = resolveNpmCommand();
+  if (!npmCommand) {
+    return { findings: [], packagesScanned: 0, error: 'npm not found beside node or on PATH' };
+  }
+
+  const captured = captureCommand(npmCommand, ['audit', '--json'], {
+    cwd: PATHS.root,
+    maxBuffer: 1024 * 1024 * 20,
+  });
+  const stdout = captured.stdout;
+  if (!stdout.trim()) {
+    const detail = captured.stderr.trim() || `npm audit exited ${captured.status ?? 'null'} with empty stdout`;
+    return { findings: [], packagesScanned: 0, error: detail };
   }
 
   let parsed: NpmAuditJson;

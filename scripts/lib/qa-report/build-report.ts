@@ -19,6 +19,7 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
     `${model.meta.reportTitle}`,
     `Project: ${model.meta.projectName}`,
     `Application: ${model.meta.applicationName}`,
+    `Execution ID: ${model.meta.executionId}`,
     `Overall QA Status: ${model.meta.overallStatus}`,
     `Execution Date: ${model.meta.executionDate}`,
     `Generated: ${model.meta.generatedAt}`,
@@ -146,6 +147,17 @@ function renderEnterpriseText(model: EnterpriseReportModel): string {
     `- Failure analysis: ${model.failureAnalysis.available ? String(model.failureAnalysis.analyzed) : model.failureAnalysis.status}`,
     `- Retest: ${model.retest.status}${model.retest.status === 'NOT_EXECUTED' ? ` — ${model.retest.reason}` : ''}`
   );
+  lines.push('', '### Engine Results');
+  lines.push(model.engineResults.sourceNote);
+  if (model.engineResults.rows.length > 0) {
+    for (const row of model.engineResults.rows) {
+      lines.push(
+        `- ${row.testType} | ${row.category} | ${row.target} | ${row.status} | ${row.severity} | ${row.duration} | ${row.expected} | ${row.actual} | ${row.error} | ${row.evidence} | ${row.configuration}`
+      );
+    }
+  } else {
+    lines.push('- No engine summary.json results were present for this execution.');
+  }
   for (const risk of model.risks) lines.push(`- ${risk}`);
   lines.push(
     '',

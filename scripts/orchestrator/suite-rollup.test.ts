@@ -114,4 +114,25 @@ describe('suite rollup', () => {
     assert.equal(orchestratorProcessExitCode('WARNING', 0), 0);
     assert.equal(orchestratorProcessExitCode('PASS', 1), 1);
   });
+
+  it('treats required-suite WARNING as OVERALL FAIL — never PASS', () => {
+    const rollup = buildSuiteRollup(
+      [
+        stage('e2e', 'PASS'),
+        stage('api', 'PASS'),
+        stage('performance', 'PASS'),
+        stage('accessibility', 'PASS'),
+        stage('visual', 'PASS'),
+        stage('responsive', 'PASS'),
+        stage('security', 'PASS'),
+        stage('seo', 'PASS'),
+        stage('content', 'PASS'),
+        stage('coverage', 'PASS'),
+      ],
+      { jmeterStatus: 'RECORDED', coveragePercent: 40, uiStatus: 'RECORDED', security: { failCount: 0, warningCount: 2, blockedCount: 0, passCount: 3 } }
+    );
+    assert.equal(rollup.lines.find((row) => row.label === 'SECURITY')?.status, 'WARNING');
+    assert.equal(rollup.overall, 'FAIL');
+    assert.notEqual(rollup.overall, 'PASS');
+  });
 });

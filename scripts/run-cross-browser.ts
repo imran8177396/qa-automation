@@ -5,7 +5,8 @@ import { logError, logStep, logSuccess, logWarn } from './lib/logger';
 import { runLocalBin } from './lib/run-command';
 import { writeJson } from './discovery/write-json';
 import {
-  isPlaywrightBrowserInstalled,
+  classifyCompulsoryPlaywrightBrowsers,
+  playwrightProjectArgs,
   resolveCrossBrowserEngines,
   resolvePlaywrightBrowsers,
 } from './lib/playwright-browsers';
@@ -19,7 +20,7 @@ import {
 } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
 import { loadPlaywrightJsonReport } from './lib/playwright-results';
-import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import { applyCliWebsiteTarget, resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
 import { printCoverageSummary, runCoverage } from './coverage/run-coverage';
 import { copyCrossBrowserEvidence } from './cross-browser/evidence';
 import {
@@ -35,10 +36,10 @@ import {
 } from './cross-browser/versions';
 
 async function main(): Promise<void> {
+  const targetUrl = applyCliWebsiteTarget();
   const config = loadConfig();
   const qaAllBrowsers = resolvePlaywrightBrowsers(config.playwright);
   const browsers = resolveCrossBrowserEngines();
-  const targetUrl = process.env.QA_PLAYWRIGHT_BASE_URL || config.playwright.baseURL;
   const started = preparePlaywrightSuite({
     suiteName: 'cross-browser',
     targetUrl,
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
   }
   if (qaAllBrowsers.join(',') !== browsers.join(',')) {
     logWarn(
-      `qa.config.json playwright.browsers is [${qaAllBrowsers.join(', ')}] for qa:all / e2e. This dedicated suite still launches ${browsers.join(', ')}.`
+      `qa.config.json playwright.browsers listed [${qaAllBrowsers.join(', ')}]; compulsory engines are still ${browsers.join(', ')}.`
     );
   }
 
@@ -60,23 +61,15 @@ async function main(): Promise<void> {
 
   runLocalBin('playwright', ['install', ...browsers]);
 
-  const missing = browsers.filter((browser) => !isPlaywrightBrowserInstalled(browser));
-  const executableBrowsers = browsers.filter((browser) => !missing.includes(browser));
-  const skippedBrowsers = missing.map((browser) => ({
-    browser,
-    reason: `Playwright browser binary not installed (${browser}) after playwright install`,
-  }));
+  const { executableBrowsers, skippedBrowsers } = classifyCompulsoryPlaywrightBrowsers(browsers);
 
-  if (missing.length > 0) {
-    logError(`Missing Playwright engines after install: ${missing.join(', ')}`);
+  if (skippedBrowsers.length > 0) {
+    logError(`Missing Playwright engines after install: ${skippedBrowsers.map((row) => row.browser).join(', ')}`);
   }
 
   let resultStatus = 1;
   if (executableBrowsers.length > 0) {
-    const args = ['test', '--grep', '@cross-browser'];
-    for (const browser of executableBrowsers) {
-      args.push(`--project=${browser}`);
-    }
+    const args = ['test', '--grep', '@cross-browser', ...playwrightProjectArgs(executableBrowsers)];
     // Dedicated 3-engine suite: serialize workers on Windows so two Firefox
     // processes do not hang on SWGL/context.close. Does not change assertions.
     if (process.platform === 'win32') {

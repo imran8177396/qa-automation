@@ -1,4 +1,5 @@
 import type { ExpectedHttpStatus, PostmanAssertionFlag } from '../../types';
+import type { ObservedResponseShape } from './response-shape';
 
 export type ApiResultStatus = 'PASS' | 'FAIL' | 'UNVERIFIED' | 'NOT_EXECUTED';
 
@@ -19,6 +20,8 @@ export interface ApiSection27Request {
   result: ApiResultStatus;
   flags: string[];
   expectedVsActual?: { expected: string; actual: string };
+  /** Observed body shape for 400 / 5xx rows (project classifier). */
+  actualResponseShape?: ObservedResponseShape;
   includedInPassCount: boolean;
   note?: string;
 }
@@ -59,6 +62,10 @@ export interface PostmanExecutionLike {
   response?: {
     code?: number;
     responseTime?: number;
+    /** Plain body when a reporter provides it. */
+    body?: string;
+    /** Newman/Postman CLI JSON reporter Buffer encoding of the body. */
+    stream?: { type?: string; data?: number[] } | string | number[];
   };
   tests?: Array<{ name?: string; status?: string }>;
 }

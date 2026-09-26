@@ -10,7 +10,7 @@ const discovery: ApiDiscoveryProvenance = {
   observedCallCount: 0,
   seedUrl: 'https://www.saucedemo.com/',
   websiteUrl: 'https://www.saucedemo.com/',
-  note: 'Sauce Demo discovery found 0 xhr/fetch/websocket APIs. Executed Postman requests are documented in qa.config.json.',
+  note: 'Discovery found 0 xhr/fetch/websocket APIs. Executed Postman requests are documented in qa.config.json.',
 };
 
 function artifact(): ApiSection27Artifact {
@@ -58,9 +58,9 @@ function artifact(): ApiSection27Artifact {
   };
 }
 
-test('findings markdown states 0 discovered Sauce Demo APIs and config source', () => {
+test('findings markdown states 0 discovered APIs and config source', () => {
   const md = renderApiFindingsMarkdown(artifact(), discovery);
-  assert.match(md, /Sauce Demo discovery found 0/);
+  assert.match(md, /Discovery found 0/);
   assert.match(md, /qa\.config\.json/);
   assert.match(md, /\| TC-API-001 \| config \| GET \| \/posts \| PASS \|/);
 });
@@ -68,7 +68,7 @@ test('findings markdown states 0 discovered Sauce Demo APIs and config source', 
 test('findings HTML is a standalone report with the same provenance', () => {
   const html = renderApiFindingsHtml(artifact(), discovery);
   assert.match(html, /<!DOCTYPE html>/);
-  assert.match(html, /Sauce Demo discovery found 0/);
+  assert.match(html, /Discovery found 0/);
   assert.match(html, /qa\.config\.json/);
   assert.match(html, /TC-API-001/);
 });

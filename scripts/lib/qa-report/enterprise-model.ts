@@ -23,6 +23,7 @@ import {
 import { formatLabelledPassRate } from './format-pass-rate';
 import { collectRunProvenance, provenanceAsRows, type RunProvenance } from './provenance';
 import { formatIsoOffset, reportTimezoneLabel, toIsoOffset } from './timestamps';
+import { loadExecutionIdentity } from './execution-archive';
 import { buildTrendRows, persistHistoryKpis, loadPreviousHistory, type HistoryKpis, type TrendDelta } from './history';
 import {
   ensureReportConfigWritten,
@@ -41,6 +42,7 @@ import {
   formatQualityCheckLine,
   readTautologicalArtifact,
   reportQualityWarnings,
+  writeQualityChecksArtifact,
   type QualityCheck,
 } from './quality-checks';
 import { numberSections } from './section-manifest';
@@ -63,6 +65,11 @@ import {
   type VisualSectionModel,
 } from './load-section-artifacts';
 import {
+  collectEngineResults,
+  type EngineReportRow,
+} from './collect-engine-results';
+import { evaluateReleaseGate } from '../../orchestrator/quality-gate';
+import {
   ALL_PLAYWRIGHT_ENGINES,
   PLAYWRIGHT_ENGINE_CAVEATS,
   assertUniquePlaywrightSuitePaths,
@@ -71,7 +78,7 @@ import {
   PLAYWRIGHT_SUITE_NAMES,
   PRODUCT_ORIGIN_SUITES,
 } from '../playwright-suites';
-import { normalizePerformanceProfile } from '../../performance/profiles';
+import { mapPerformanceProfileAlias } from '../../performance/profiles';
 import {
   loadPlaywrightJsonReport,
   parseFailedExecutionsFromFile,
@@ -86,6 +93,11 @@ import {
 import type { PlaywrightSuiteSummary } from '../playwright-suite-summary';
 import type { CrossSuiteReport } from '../quality/cross-suite';
 import { readJsonIfExists } from '../../discovery/write-json';
+
+function formatPerformanceProfileLabel(profile: string): string {
+  const mapped = mapPerformanceProfileAlias(profile);
+  return mapped.mapped ? mapped.id : profile;
+}
 
 export type QaStatus = 'PASS' | 'FAIL' | 'BLOCKED' | 'CONDITIONAL PASS';
 
@@ -150,6 +162,7 @@ export interface EnterpriseReportModel {
     distribution: string;
     confidentiality: string;
     timezone: string;
+    executionId: string;
     overallStatus: QaStatus;
     generatedAt: string;
   };
@@ -373,6 +386,29 @@ export interface EnterpriseReportModel {
   };
   failureAnalysis: FailureAnalysisSectionModel;
   retest: RetestSectionModel;
+  /** Opt-in engine summaries (smoke, contract, …) — same status vocabulary as engines. */
+  engineResults: {
+    available: boolean;
+    sourceNote: string;
+    missing: Array<{ engineId: string; path: string }>;
+    sourcesRead: string[];
+    rows: EngineReportRow[];
+    /** Single-run trends from collectEngineResults — coverage delta null, recurring empty. */
+    trends?: {
+      perRun: Array<{ passCount: number; failCount: number }>;
+      durationDeltaMs: number | null;
+      coverageDeltaPct: number | null;
+      recurringDefects: string[];
+    };
+  };
+  /**
+   * Optional release-gate recording. Default config (blockRelease false/omitted) never blocks.
+   * Does not change orchestrator exit codes when blockRelease is not true.
+   */
+  releaseGate: {
+    block: boolean;
+    reasons: string[];
+  };
   qualityCheckRows: QualityCheck[];
   crossSuite: {
     available: boolean;
@@ -899,6 +935,28 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
 
   const failureModel = loadFailureAnalysisSection();
   const retestModel = loadRetestSection({ enabled: config.retest?.enabled !== false });
+  const engineCollected = collectEngineResults();
+  const engineResultsModel = {
+    available: engineCollected.available,
+    sourceNote: engineCollected.sourceNote,
+    missing: engineCollected.missing,
+    sourcesRead: engineCollected.sourcesRead,
+    rows: engineCollected.rows,
+    trends: engineCollected.trends,
+  };
+
+  const releaseGate = evaluateReleaseGate(
+    {
+      criticalFailures: engineCollected.results.filter(
+        (row) => row.status === 'FAIL' && row.severity === 'critical'
+      ).length,
+      coveragePct:
+        typeof coverageRaw?.totals?.itemCoveragePercent === 'number'
+          ? coverageRaw.totals.itemCoveragePercent
+          : undefined,
+    },
+    config.qualityGate ?? {}
+  );
 
   const correlationModel = workflowRaw
     ? {
@@ -1553,6 +1611,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const allQuality = [...legacyReconcile, ...qualityCheckRecords];
   const qualityChecks = allQuality.map(formatQualityCheckLine);
   const qualityWarnings = reportQualityWarnings(allQuality);
+  writeQualityChecksArtifact(allQuality);
   assertQualityChecksPass(allQuality);
 
     if (originMismatches.length > 0) {
@@ -1591,6 +1650,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       distribution: reportExtras.signOff.distribution.trim() || NOT_AVAILABLE,
       confidentiality: reportExtras.signOff.confidentiality.trim() || NOT_AVAILABLE,
       timezone,
+      executionId: loadExecutionIdentity()?.executionId ?? NOT_AVAILABLE,
       overallStatus,
       generatedAt,
     },
@@ -1634,6 +1694,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
     },
     projectInfo: [
       { label: 'Project', value: config.project.name },
+      { label: 'Execution ID', value: loadExecutionIdentity()?.executionId ?? NOT_AVAILABLE },
       { label: 'Application', value: applicationName },
       { label: 'Environment', value: `Public website — ${config.urls.website}` },
       { label: 'Base URL', value: config.urls.website },
@@ -1738,7 +1799,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         result: toolSuiteStatus('Postman CLI', apiRequests.length, pmSummary?.tests?.failed ?? 0),
       },
       {
-        type: `Performance (${perfSummary ? normalizePerformanceProfile(perfSummary.profile) : NOT_AVAILABLE})`,
+        type: `Performance (${perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE})`,
         tool: 'JMeter',
         coverage: `${jmeter?.samples.length ?? 0} sample(s); ${perfSummary?.threads ?? config.jmeter.threads} thread(s); threshold ${perfSummary?.thresholds.status ?? NOT_AVAILABLE}`,
         result: jmeter?.samples.length
@@ -1914,11 +1975,11 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       maxMs: pmSummary?.timeStats?.responseMax ?? 0,
       requests: apiRequests,
       terminology:
-        'API automation via Postman CLI. Sauce Demo discovery found 0 xhr/fetch/websocket APIs; executed requests are documented in qa.config.json postman.requests, not invented from the login page. Coverage is limited to those documented requests and xhr/fetch calls observed on the same API origin. Authentication/authorization stay NOT_EXECUTED unless the target documents them and QA_API_TOKEN is provided.',
+        'API automation via Postman CLI. When discovery records 0 xhr/fetch/websocket APIs, executed requests are documented in qa.config.json postman.requests, not invented from the UI page. Coverage is limited to those documented requests and xhr/fetch calls observed on the same API origin. Authentication/authorization stay NOT_EXECUTED unless the target documents them and QA_API_TOKEN is provided.',
     },
     performance: {
       available: Boolean(jmeter),
-      profile: perfSummary ? normalizePerformanceProfile(perfSummary.profile) : NOT_AVAILABLE,
+      profile: perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE,
       heavy: Boolean(perfSummary?.heavy),
       authorized: perfSummary?.authorized ?? !perfSummary,
       skipped: Boolean(perfSummary?.skipped || perfSummary?.blocked),
@@ -1950,7 +2011,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       slaNote:
         perfSummary?.thresholds.note ??
         'Performance results are reported as observed execution metrics. Threshold keys in qa.config.json are null — status is RECORDED / NOT_AVAILABLE, not PASS. No SLA was invented.',
-      terminology: `JMeter ${perfSummary ? normalizePerformanceProfile(perfSummary.profile) : NOT_AVAILABLE} performance validation — status is RECORDED, never PASS`,
+      terminology: `JMeter ${perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE} performance validation — status is RECORDED, never PASS`,
     },
     lighthouse: lighthouseSection,
     defects: {
@@ -1977,6 +2038,8 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
     content: contentModel,
     failureAnalysis: failureModel,
     retest: retestModel,
+    engineResults: engineResultsModel,
+    releaseGate,
     accessibility: a11yModel,
     correlation: correlationModel,
     security: securityModel,
@@ -2061,6 +2124,10 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
             { name: 'Retest findings', location: 'reports/retest/latest.json' },
           ]
         : []),
+      ...engineResultsModel.sourcesRead.map((location) => ({
+        name: `Engine summary (${location})`,
+        location,
+      })),
       ...(coverageRaw
         ? [
             { name: 'Coverage JSON', location: 'reports/coverage/coverage.json' },

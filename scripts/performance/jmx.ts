@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { PATHS } from '../lib/paths';
 import type { QaConfig } from '../types';
+import { resolveApiUrl } from '../orchestrator/resolve-url';
 import { PERFORMANCE_PROFILES, type CanonicalPerformanceProfile } from './types';
 import { JMETER_PLAN_FILE_NAME, jmeterProfileDir } from './plans';
 
@@ -26,8 +27,12 @@ export interface JmeterPlanRenderInput {
 }
 
 export function documentedApiTarget(apiUrl: string, requestPath: string): { host: string; protocol: string; path: string } {
-  const api = new URL(apiUrl);
   const pathValue = requestPath.startsWith('/') ? requestPath : `/${requestPath}`;
+  const trimmed = apiUrl?.trim() ?? '';
+  if (!trimmed) {
+    return { host: '', protocol: 'https', path: pathValue };
+  }
+  const api = new URL(trimmed);
   return {
     host: api.hostname,
     protocol: api.protocol.replace(':', ''),
@@ -152,7 +157,7 @@ export function planInputFromConfig(config: QaConfig, profile: CanonicalPerforma
   };
   return {
     projectName: config.project.name,
-    apiUrl: config.urls.api,
+    apiUrl: resolveApiUrl({ apiUrl: config.urls.api }),
     requestPath: config.jmeter.path,
     profile,
     threads: plan.threads,

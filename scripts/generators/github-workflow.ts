@@ -92,8 +92,9 @@ function javaJmeterSteps(): string {
           echo "$PWD/apache-jmeter-\${JMETER_VERSION}/bin" >> "$GITHUB_PATH"`;
 }
 
-function startFixtureStep(): string {
-  return `      - name: Start fixture site
+function startFixtureStep(ifCondition?: string): string {
+  const ifLine = ifCondition ? `\n        if: \${{ ${ifCondition} }}` : '';
+  return `      - name: Start fixture site${ifLine}
         run: |
           npx tsx scripts/testing/serve-fixture-site.ts 4173 &
           for i in $(seq 1 30); do
@@ -104,7 +105,21 @@ function startFixtureStep(): string {
           exit 1`;
 }
 
-function reportAndArtifactSteps(): string {
+function typecheckAndSyncSteps(): string {
+  return `      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Sync configs from qa.config.json
+        run: npm run qa:sync`;
+}
+
+function installPlaywrightBrowsersStep(): string {
+  return `      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit`;
+}
+
+function reportAndArtifactSteps(artifactSuffix = ''): string {
+  const suffix = artifactSuffix ? `-${artifactSuffix}` : '';
   return `      - name: Generate Allure and combined QA reports
         if: always()
         run: npm run report:all
@@ -113,7 +128,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-report
+          name: allure-report${suffix}
           path: |
             reports/allure/report/
             reports/allure/results/
@@ -124,7 +139,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report${suffix}
           path: reports/playwright/
           if-no-files-found: ignore
           retention-days: 30
@@ -133,7 +148,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-screenshots
+          name: playwright-screenshots${suffix}
           path: |
             test-results/**/*.png
             test-results/**/*.jpg
@@ -144,7 +159,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-videos
+          name: playwright-videos${suffix}
           path: |
             test-results/**/*.webm
             test-results/**/*.mp4
@@ -155,7 +170,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces${suffix}
           path: test-results/**/*.zip
           if-no-files-found: ignore
           retention-days: 14
@@ -164,7 +179,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-test-results
+          name: playwright-test-results${suffix}
           path: test-results/
           if-no-files-found: ignore
           retention-days: 14
@@ -173,7 +188,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: postman-report
+          name: postman-report${suffix}
           path: reports/postman/
           if-no-files-found: ignore
           retention-days: 30
@@ -182,7 +197,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: jmeter-report
+          name: jmeter-report${suffix}
           path: reports/jmeter/
           if-no-files-found: ignore
           retention-days: 30
@@ -191,7 +206,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lighthouse-report
+          name: lighthouse-report${suffix}
           path: reports/lighthouse/
           if-no-files-found: ignore
           retention-days: 30
@@ -200,7 +215,7 @@ function reportAndArtifactSteps(): string {
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qa-final-summary
+          name: qa-final-summary${suffix}
           path: |
             reports/summary/
             reports/orchestrator/
@@ -210,6 +225,7 @@ function reportAndArtifactSteps(): string {
           retention-days: 30`;
 }
 
+/** PR tier only — unit, smoke, API, critical E2E, accessibility, security-light (+ existing liveness). */
 export function renderGithubCiWorkflow(config: QaConfig): string {
   const branches = yamlBranches(config.github.branches);
   const prTrigger = config.github.runOnPullRequest
@@ -221,9 +237,12 @@ ${branches}
 
   return `name: QA CI (Pull Request)
 
-# Lightweight PR checks only. Does NOT run qa:all (visual + 3-engine cross-browser + full pipeline).
-# Does NOT run heavy JMeter (load / stress / spike / soak). Never --authorize-heavy.
-# Full suite: qa-regression.yml. Authorized heavy load: qa-performance-heavy.yml.
+# PR tier only: unit, smoke, API, critical E2E, accessibility, security-light.
+# Does NOT run qa:all. Does NOT run visual / responsive / cross-browser / integration /
+# contract / seo / content / regression / AI / resilience / production-verification.
+# Does NOT run heavy JMeter (load / stress / spike / soak). Never authorizes heavy profiles.
+# Main/regression: qa-regression.yml. Authorized heavy: qa-performance-heavy.yml.
+# Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE (not a PR job; no separate chaos runner).
 
 on:
 ${prTrigger}  workflow_dispatch:
@@ -248,32 +267,37 @@ jobs:
     steps:
 ${checkoutNodeCiSteps()}
 
-      - name: TypeScript check
-        run: npm run typecheck
-
-      - name: Sync configs from qa.config.json
-        run: npm run qa:sync
+${typecheckAndSyncSteps()}
 
 ${recordSecretAvailabilityStep()}
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: unit
+        run: npm run test:unit
+
+${installPlaywrightBrowsersStep()}
 
 ${startFixtureStep()}
 
       - name: Discovery
         run: npm run discover -- ${FIXTURE_URL}/
 
-      - name: Run Playwright E2E tests
+      - name: smoke
+        run: npm run test:smoke
+
+      - name: critical E2E
         run: npm run test:e2e
 
-      - name: Run Postman API tests
+      - name: API
         env:
 ${yamlSecretEnv(CI_RUNTIME_SECRET_KEYS)}
         run: npm run test:api
 
-      - name: Run accessibility tests
+      - name: accessibility
         run: npm run test:accessibility
+
+      # security-light: existing QA security scan (headers/cookies/hygiene), not a pentest.
+      - name: security-light
+        run: npm run test:security
 
 ${javaJmeterSteps()}
 
@@ -286,14 +310,20 @@ ${reportAndArtifactSteps()}
 `;
 }
 
+/** Main/regression + schedule-only + manual-authorized jobs. Never pull_request. */
 export function renderGithubRegressionWorkflow(config: QaConfig): string {
   const branches = yamlBranches(config.github.branches);
 
   return `name: QA Regression
 
-# Full suite via npm run qa:all. Not a pull_request workflow (too heavy for every PR).
-# Triggers: push to protected branches, weekly schedule, and manual dispatch.
-# Still liveness/smoke JMeter only — qa:all strips --authorize-heavy / QA_PERF_AUTHORIZE.
+# Main / regression tier (push + schedule + dispatch): full E2E, API, integration, contract,
+# visual, responsive, accessibility, security, SEO, content, regression.
+# Scheduled-only extras: dependencies, compatibility matrix, AI regression, deep security
+# (still the existing QA security script — pentest coverage is NOT_IMPLEMENTED).
+# Heavy load/stress/soak stay in qa-performance-heavy.yml behind authorize-heavy gates.
+# Destructive resilience and production verification require workflow_dispatch inputs
+# (default false). Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — no chaos tool.
+# Not a pull_request workflow.
 
 on:
   push:
@@ -304,9 +334,19 @@ ${branches}
   workflow_dispatch:
     inputs:
       discover_url:
-        description: Optional live URL for qa:all --url=. Empty uses the in-repo fixture. Do not put secrets in this field.
+        description: Optional live URL for discovery/tests. Empty uses the in-repo fixture. Do not put secrets in this field.
         required: false
         type: string
+      authorize_destructive:
+        description: Set true to run destructive resilience (QA_RESILIENCE_AUTHORIZE / --authorize-destructive). Default false. Chaos remains NOT_TESTED.
+        required: false
+        type: boolean
+        default: false
+      allow_production:
+        description: Set true to run npm run test:production-verification. Default false. Runner still respects tests.productionVerification.enabled.
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: qa-regression-\${{ github.ref }}
@@ -317,7 +357,7 @@ permissions:
 
 jobs:
   qa-regression:
-    name: Full regression (qa:all)
+    name: Main / regression tier
     timeout-minutes: 90
     runs-on: ubuntu-latest
 
@@ -328,31 +368,129 @@ jobs:
     steps:
 ${checkoutNodeCiSteps()}
 
-      - name: TypeScript check
-        run: npm run typecheck
-
-      - name: Sync configs from qa.config.json
-        run: npm run qa:sync
+${typecheckAndSyncSteps()}
 
 ${recordSecretAvailabilityStep()}
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+${installPlaywrightBrowsersStep()}
 
-${javaJmeterSteps()}
+      - name: Apply optional discover URL
+        if: \${{ github.event_name == 'workflow_dispatch' && inputs.discover_url != '' }}
+        env:
+          QA_DISPATCH_URL: \${{ inputs.discover_url }}
+        run: |
+          # Value not printed (may be a non-public host). Fixture origin is replaced for this job only.
+          echo "QA_PLAYWRIGHT_BASE_URL=$QA_DISPATCH_URL" >> "$GITHUB_ENV"
+          case "$QA_DISPATCH_URL" in
+            */) echo "QA_WEBSITE_URL=$QA_DISPATCH_URL" >> "$GITHUB_ENV" ;;
+            *) echo "QA_WEBSITE_URL=$QA_DISPATCH_URL/" >> "$GITHUB_ENV" ;;
+          esac
 
-      - name: Run full regression
+${startFixtureStep("github.event_name != 'workflow_dispatch' || inputs.discover_url == ''")}
+
+      - name: Discovery
+        run: npm run discover -- "$QA_WEBSITE_URL"
+
+      - name: full E2E
+        run: npm run test:e2e
+
+      - name: API
         env:
 ${yamlSecretEnv(CI_RUNTIME_SECRET_KEYS)}
-          QA_DISPATCH_URL: \${{ github.event.inputs.discover_url }}
-        run: |
-          if [ -n "$QA_DISPATCH_URL" ]; then
-            npm run qa:all -- --url="$QA_DISPATCH_URL"
-          else
-            npm run qa:all
-          fi
+        run: npm run test:api
+
+      - name: integration
+        run: npm run test:integration
+
+      - name: contract
+        run: npm run test:contract
+
+      - name: visual
+        run: npm run test:visual
+
+      - name: responsive
+        run: npm run test:responsive
+
+      - name: accessibility
+        run: npm run test:accessibility
+
+      - name: security
+        run: npm run test:security
+
+      - name: SEO
+        run: npm run test:seo
+
+      - name: content
+        run: npm run test:content
+
+      - name: regression
+        run: npm run test:regression
+
+      # Scheduled tier — not on push. Heavy JMeter is NOT here (see qa-performance-heavy.yml).
+      - name: dependency
+        if: \${{ github.event_name == 'schedule' }}
+        run: npm run test:dependencies
+
+      - name: compatibility matrix
+        if: \${{ github.event_name == 'schedule' }}
+        run: npm run test:e2e:cross-browser
+
+      - name: AI regression
+        if: \${{ github.event_name == 'schedule' }}
+        run: npm run test:ai
+
+      # Deep security: pentest coverage is NOT_IMPLEMENTED; this is still the existing QA security script.
+      - name: deep security
+        if: \${{ github.event_name == 'schedule' }}
+        run: npm run test:security
 
 ${reportAndArtifactSteps()}
+
+  resilience-authorized:
+    name: Destructive resilience (authorized)
+    # Chaos is not a separate runner — stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE; no chaos tool.
+    if: \${{ github.event_name == 'workflow_dispatch' && inputs.authorize_destructive == true }}
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      QA_PLAYWRIGHT_BASE_URL: ${FIXTURE_URL}
+      QA_WEBSITE_URL: ${FIXTURE_URL}/
+      QA_RESILIENCE_AUTHORIZE: "true"
+    steps:
+${checkoutNodeCiSteps()}
+
+${typecheckAndSyncSteps()}
+
+${recordSecretAvailabilityStep()}
+
+${startFixtureStep()}
+
+      - name: Destructive resilience
+        run: npm run test:resilience -- --authorize-destructive
+
+${reportAndArtifactSteps('resilience')}
+
+  production-verification:
+    name: Production verification (authorized)
+    if: \${{ github.event_name == 'workflow_dispatch' && inputs.allow_production == true }}
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      QA_PLAYWRIGHT_BASE_URL: ${FIXTURE_URL}
+      QA_WEBSITE_URL: ${FIXTURE_URL}/
+    steps:
+${checkoutNodeCiSteps()}
+
+${typecheckAndSyncSteps()}
+
+${recordSecretAvailabilityStep()}
+
+      - name: Production verification
+        env:
+${yamlSecretEnv(CI_RUNTIME_SECRET_KEYS)}
+        run: npm run test:production-verification
+
+${reportAndArtifactSteps('production')}
 `;
 }
 
@@ -364,6 +502,8 @@ export function renderHeavyPerformanceWorkflow(): string {
 # schedule requires repository variable QA_PERF_AUTHORIZE_SCHEDULE=true.
 # allowHeavyAgainst must still allow the API host (currently often empty).
 # Never set QA_PERF_AUTHORIZE on the PR CI workflow.
+# Load / stress / endurance (soak) live here only when authorization is satisfied.
+# Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — not part of this performance job.
 
 on:
   workflow_dispatch:
@@ -421,7 +561,7 @@ ${javaJmeterSteps()}
         run: npm run qa:sync
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
 ${recordSecretAvailabilityStep()}
 

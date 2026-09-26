@@ -16,6 +16,10 @@ test('enterprise-model no longer falls back to shared Playwright JSON or overwri
   assert.match(source, /loadRetestSection/);
   assert.match(source, /readTautologicalArtifact/);
   assert.match(source, /cross-suite\.json/);
+  assert.match(source, /collectEngineResults/);
+  assert.match(source, /engineResults/);
+  assert.match(source, /evaluateReleaseGate/);
+  assert.match(source, /releaseGate/);
 });
 
 test('HTML and DOCX consume 2.16 / 2.17 schema columns and do not invent confidence', () => {
@@ -30,5 +34,7 @@ test('HTML and DOCX consume 2.16 / 2.17 schema columns and do not invent confide
     assert.doesNotMatch(source, /row\.confidence/);
     assert.doesNotMatch(source, /row\.recommendation/);
     assert.doesNotMatch(source, /\['ID', 'Classification', 'Confidence'/);
+    assert.match(source, /ENGINE_RESULT_COLUMN_LABELS/);
+    assert.match(source, /engine-results/);
   }
 });

@@ -1,8 +1,10 @@
 // Dedicated / manual Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.performance
 // Heavy JMeter (load / stress / spike / soak) only. AUTHORIZE_HEAVY defaults to false.
 // Never a production host by default. allowHeavyAgainst must still allow the API host.
+// Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — not part of this performance job.
 // Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
 // Never hardcode passwords, tokens, API keys, cookies, or credentials.
+// Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
 
 def qa
 
@@ -64,7 +66,7 @@ pipeline {
         script {
           qa.npmRun('ci')
           qa.npmRun('run qa:sync')
-          qa.installPlaywrightBrowsers('chromium')
+          qa.installPlaywrightBrowsers('chromium firefox webkit')
           qa.npmRun('run preflight')
         }
       }

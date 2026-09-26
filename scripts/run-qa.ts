@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { runSync } from './sync-from-config';
 import { runPostman } from './runners/postman';
 import { runPlaywright } from './runners/playwright';
@@ -6,11 +8,19 @@ import { runLighthouse } from './lighthouse/run';
 import { runUiPerformance } from './performance/run-ui';
 import { loadConfig } from './lib/load-config';
 import { logError, logStep, logSuccess, logWarn } from './lib/logger';
-import { cleanRunArtifacts, shouldKeepArtifacts } from './lib/clean-run-artifacts';
+import { PATHS } from './lib/paths';
+import { resolveNpmCommand, runCommand } from './lib/run-command';
+import {
+  executionModeUsage,
+  hasArgFlag,
+  resolveExecutionMode,
+  spawnableScripts,
+  type ExecutionModePlan,
+} from './cli/execution-mode';
 import type { PipelineStep } from './types';
 
-function parseRequestedSteps(): PipelineStep[] | null {
-  const stepArg = process.argv.find((arg) => arg.startsWith('--step='));
+function parseRequestedSteps(argv: string[]): PipelineStep[] | null {
+  const stepArg = argv.find((arg) => arg.startsWith('--step='));
   if (!stepArg) {
     return null;
   }
@@ -43,26 +53,115 @@ async function runStep(step: PipelineStep, config: ReturnType<typeof loadConfig>
   }
 }
 
-async function main(): Promise<void> {
+function printPlan(plan: ExecutionModePlan): void {
+  console.log(JSON.stringify(plan, null, 2));
+}
+
+function readDiffFile(argv: string[]): string | undefined {
+  const eq = argv.find((arg) => arg.startsWith('--diff-file='));
+  const pathValue = eq
+    ? eq.slice('--diff-file='.length)
+    : (() => {
+        const idx = argv.findIndex((arg) => arg === '--diff-file');
+        return idx >= 0 ? argv[idx + 1] : undefined;
+      })();
+  if (!pathValue) return undefined;
+  const resolved = path.isAbsolute(pathValue)
+    ? pathValue
+    : path.join(PATHS.root, pathValue);
+  return fs.readFileSync(resolved, 'utf8');
+}
+
+/**
+ * Exit code for a plan that does not spawn.
+ * Unknown / missing configuration → non-zero.
+ * A successfully produced plan (including category plan-only) → 0,
+ * but stdout always says tests were not executed (never claim PASS).
+ */
+function planOnlyExitCode(plan: ExecutionModePlan): number {
+  if (plan.mode === null) return 1;
+  if (plan.status === 'BLOCKED') return 1;
+  if (plan.status === 'REQUIRES_CONFIGURATION') return 1;
+  if (plan.status === 'NOT_IMPLEMENTED') return 1;
+  return 0;
+}
+
+function spawnNpmScripts(plan: ExecutionModePlan): number {
+  const npm = resolveNpmCommand();
+  if (!npm) {
+    logError('npm CLI not found on PATH');
+    return 1;
+  }
+
+  const toRun = spawnableScripts(plan);
+  // When items[] is empty but npmScripts is set (smoke/regression/full), spawn those.
+  const scripts =
+    toRun.length > 0
+      ? toRun.map((row) => row.npmScript)
+      : plan.npmScripts;
+
+  if (scripts.length === 0) {
+    logError(
+      plan.reason ||
+        'no spawnable scripts in plan (BLOCKED / NOT_TESTED items are not executed)'
+    );
+    return 1;
+  }
+
+  let failed = false;
+  for (const npmScript of scripts) {
+    const item = plan.items.find((row) => row.npmScript === npmScript);
+    if (
+      item &&
+      (item.status === 'BLOCKED' ||
+        item.status === 'NOT_TESTED' ||
+        item.status === 'NOT_IMPLEMENTED' ||
+        item.status === 'REQUIRES_CONFIGURATION')
+    ) {
+      logWarn(`skip ${npmScript} (${item.status}: ${item.reason ?? ''})`);
+      failed = true;
+      continue;
+    }
+
+    const extra = plan.scriptArgs[npmScript] ?? [];
+    logStep(`npm run ${npmScript}`);
+    const result = runCommand(npm, ['run', npmScript, ...extra], {
+      cwd: PATHS.root,
+    });
+    if ((result.status ?? 1) !== 0) {
+      failed = true;
+      logError(`${npmScript} exited ${result.status ?? 'null'}`);
+    } else {
+      logSuccess(`${npmScript} exited 0`);
+    }
+  }
+
+  const skipped = plan.items.filter(
+    (row) =>
+      row.status === 'BLOCKED' ||
+      row.status === 'NOT_TESTED' ||
+      row.status === 'NOT_IMPLEMENTED'
+  );
+  if (skipped.length > 0) {
+    logWarn(
+      `selected items not executed: ${skipped
+        .map((row) => `${row.npmScript}=${row.status}`)
+        .join(', ')}`
+    );
+    failed = true;
+  }
+
+  return failed ? 1 : 0;
+}
+
+async function runLegacyPipeline(argv: string[]): Promise<void> {
   const config = loadConfig();
-  const requestedSteps = parseRequestedSteps();
-  const steps = requestedSteps ?? config.pipeline.steps;
+  const requestedSteps = parseRequestedSteps(argv);
+  // Legacy --step path only — bare qa without --mode/--step never reaches here.
+  const steps = requestedSteps!;
 
   logStep(`${config.project.name} — starting pipeline`);
   console.log(`Steps: ${steps.join(' → ')}`);
-  if (!requestedSteps) {
-    if (shouldKeepArtifacts()) {
-      logWarn('Keeping previous run artifacts (--keep-artifacts)');
-    } else {
-      logStep('Cleaning previous test artifacts and cache');
-      const { removed } = cleanRunArtifacts();
-      logSuccess(
-        removed.length === 0
-          ? 'No previous run artifacts were present'
-          : `Removed ${removed.length} previous artifact path(s)`
-      );
-    }
-  }
 
   let anyFailed = false;
   for (const step of steps) {
@@ -82,6 +181,43 @@ async function main(): Promise<void> {
   }
 
   logSuccess('Pipeline finished');
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2).filter((arg) => arg !== '--');
+  const hasMode = hasArgFlag(argv, 'mode');
+  const hasStep = argv.some((arg) => arg.startsWith('--step='));
+
+  if (hasMode) {
+    const gitDiff = readDiffFile(argv);
+    const plan = resolveExecutionMode(argv, {
+      ...(gitDiff !== undefined ? { gitDiff } : {}),
+    });
+
+    printPlan(plan);
+
+    const planOnly = hasArgFlag(argv, 'plan') || !plan.spawn;
+
+    if (planOnly) {
+      console.log(`mode=${plan.mode ?? '(none)'}; plan only; tests not executed`);
+      process.exit(planOnlyExitCode(plan));
+    }
+
+    const code = spawnNpmScripts(plan);
+    process.exit(code);
+  }
+
+  if (hasStep) {
+    await runLegacyPipeline(argv);
+    return;
+  }
+
+  // No --mode and no --step: do not silently run the pipeline / qa:all.
+  console.error(executionModeUsage());
+  console.error(
+    'REQUIRES_CONFIGURATION: pass --mode=<mode> or legacy --step=<sync|api|e2e|load>'
+  );
+  process.exit(1);
 }
 
 main().catch((error: unknown) => {

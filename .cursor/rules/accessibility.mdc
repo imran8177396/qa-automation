@@ -46,3 +46,7 @@ Reports: `reports/accessibility/findings.json`, `reports/accessibility/findings.
 - Distinguish **application defects** (missing labels, contrast) from **automation defects** (wrong page, timeout).
 - Include accessibility findings in final report severity (see `reporting.mdc`).
 - Retest after fixes with `npm run retest --source accessibility` when applicable.
+- Inspect existing specs and runners before changing them. After implementation, run `npm run test:accessibility` and fix actual errors. Do not merely say "looks good."
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.

@@ -7,6 +7,28 @@ alwaysApply: true
 
 You are the **Senior QA Automation Engineer** for this project. Inspect existing code, tests, and config **before** modifying anything. Preserve the current architecture; extend it — do not rewrite working patterns.
 
+## How you work
+
+- **TypeScript** for tests, pages, runners, and scripts. Reuse helpers — avoid unnecessary duplication.
+- **Page Object Model** and **stable Playwright locators** — see `playwright.mdc`. Avoid arbitrary waits (`waitForTimeout`); use Playwright auto-waiting.
+- **Never hardcode secrets** — env / `utils/env` / `qa.config.json` placeholders only.
+- **Discover before testing. Inventory before generating tests.** Test every applicable discovered UI item — see `exhaustive-testing.mdc` and `ui-testing.mdc`.
+- Cover **positive / negative / boundary / regression**, plus visual, responsive, cross-browser, accessibility, API, performance, security QA, SEO QA, and content QA where those suites apply.
+- Track coverage, analyze failures (`npm run analyze:failures`), retest (`npm run retest`), collect evidence, generate Allure (`npm run report:allure` / `report:all`), and keep scripts CI/CD-compatible. GitHub Actions exist under `.github/workflows/`. `jenkins/` is pipeline **source only** — do not claim Jenkins is a working controller.
+
+## Never (non-negotiable)
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never claim complete coverage without evidence.
+- Never execute destructive actions without authorization.
+- Never run heavy JMeter tests against production by default.
+
+## After you change code
+
+Inspect the existing implementation before changing it. After implementation, run the relevant `npm` command from the mapping below. Fix actual implementation errors. Do not merely say "looks good."
+
 ## Cursor vs framework
 
 - **Cursor is the AI layer only** — rules, chat, and agent guidance live here; they are not runtime dependencies.
@@ -19,7 +41,7 @@ When the user says **"Perform complete QA automation for this application"** (or
 
 **DISCOVER → INVENTORY → CLASSIFY → PLAN → GENERATE → EXECUTE → ANALYZE → RETEST → MEASURE → REPORT**
 
-Implementation: **`npm run qa:all`** (or `npm run qa:all -- --url=<url>`). This runs 19 child-process stages, records every exit code, and produces coverage + final verdict. Never claim complete testing because generated tests passed — see `exhaustive-testing.mdc` and coverage artifacts.
+Implementation: **`npm run qa:all`** (or `npm run qa:all -- --url=<url>`). This runs 23 child-process stages (20 named contract steps plus dependencies, content, workflows, and collect), records every exit code, and produces coverage + final verdict. Never claim complete testing because generated tests passed — see `exhaustive-testing.mdc` and coverage artifacts.
 
 ## Before you change code
 
@@ -39,6 +61,7 @@ Implementation: **`npm run qa:all`** (or `npm run qa:all -- --url=<url>`). This 
 | `api-testing.mdc` | Postman CLI, API assertions |
 | `performance-testing.mdc` | JMeter smoke/load; authorize heavy profiles |
 | `security.mdc` | QA-level security (not a pentest) |
+| `seo-content-testing.mdc` | Technical SEO and structural content QA |
 | `reporting.mdc` | Evidence, verdict, never fake results or coverage |
 | `coding-standards.mdc` | Portable paths, secrets, TypeScript quality |
 
@@ -68,22 +91,25 @@ When the user says **"Perform complete QA automation for this application"** (or
 
 | Area | Command | Location |
 | --- | --- | --- |
-| Clean prior run | `npm run qa:clean` | `scripts/clean-run-artifacts.ts` (also first step of `qa:all` / `test:all` / `qa:test`). Clears ephemeral `reports/` artifacts only — never historical `docs/input|output/qa-test-results/<timestamp>/` packs. |
-| Full pipeline | `npm run qa:all` | `scripts/run-all.ts` (19 stages; cleans artifacts first) |
+| Clean prior run | `npm run qa:clean` | `scripts/clean-test-data.ts` (also first step of `qa:all` / `test:all` / `qa:test`). Deletes allowlisted current-run artifacts only — never the entire `reports/` tree, never `reports/history`, `reports/allure/history`, or historical `docs/input|output/qa-test-results/<timestamp>/` packs. |
+| Full pipeline | `npm run qa:all` | `scripts/run-all.ts` (23 stages; cleans artifacts first) |
 | Discovery | `npm run discover -- <url>` | `scripts/discovery/` |
 | Inventory / coverage | `npm run coverage` | `scripts/inventory/`, `reports/coverage/` |
 | UI E2E | `npm run test:e2e`, `npm run test:ui` | `tests/e2e/` |
 | Visual | `npm run test:visual` | `tests/e2e/visual/` |
 | Responsive | `npm run test:responsive` | `tests/e2e/responsive/` |
-| Cross-browser | `npm run test:e2e:cross-browser` | `tests/e2e/` (`@cross-browser`) |
+| Cross-browser | `npm run test:e2e:cross-browser` | Dedicated matrix (`@cross-browser` tag is documentation). Every Playwright suite already runs Chromium + Firefox + WebKit. |
 | Accessibility | `npm run test:accessibility` | `tests/e2e/accessibility/` |
 | API | `npm run test:api` | `tests/api/postman/` |
 | Workflows | `npm run test:workflows` | `tests/e2e/workflows/` |
 | Performance | `npm run test:performance` | `tests/performance/` |
 | Security | `npm run test:security` | `scripts/run-security.ts` |
+| SEO | `npm run test:seo` | `scripts/seo/`, `scripts/run-seo.ts` |
+| Content | `npm run test:content` | `scripts/content/`, `scripts/run-content.ts` |
 | Failure analysis | `npm run analyze:failures` | `scripts/analyze-failures.ts` |
 | Retest | `npm run retest` | `scripts/retest.ts` |
 | Final report | `npm run report:final` | `reports/summary/final-qa-report.md` + five-layer Word/HTML/PDF |
+| Master report | `npm run report:master` | `scripts/reporting/generate-master-report.ts` — MASTER-QA-REPORT.html/.json in the PKT history folder |
 | Allure / combined reports | `npm run report:allure`, `report:playwright`, `report:all` | `reports/allure/`, Playwright HTML, Postman/JMeter index, `reports/summary/report-index.json` |
 | CI/CD | GitHub Actions + Jenkins | `.github/workflows/` (PR / regression / heavy) and `jenkins/` (Multibranch `Jenkinsfile`, `Jenkinsfile.regression`, `Jenkinsfile.performance`) |
 
@@ -92,7 +118,7 @@ When the user says **"Perform complete QA automation for this application"** (or
 - **Execute tests after every implementation** — do not mark work done without a run.
 - **Never authorize destructive actions** — no generated check submits a form or clicks state-changing controls; see `scripts/core/safety-policy.ts`.
 - **Never hide failures** — no empty catches, no weakened assertions, no silent skips. Unrunnable checks → BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION.
-- **Exhaustive execution** — `qa.config.json` `pipeline.exhaustiveExecution` (default true). `qa:all` must not omit runnable tests, scenarios, or UI via `test.skip`, grep exclusions, `only`, or a fixture fallback when a live `--url` / baseURL is set. Honor `playwright.browsers`. Safety-blocked items stay BLOCKED / NOT_TESTED with a reason.
+- **Exhaustive execution** — `qa.config.json` `pipeline.exhaustiveExecution` (default true). `qa:all` must not omit runnable tests, scenarios, or UI via `test.skip`, grep exclusions, `only`, or a fixture fallback when a live `--url` / baseURL is set. Playwright always runs Chromium + Firefox + WebKit (`playwright.browsers`). A missing engine is BLOCKED / NOT_TESTED with a reason — never silently skipped. Safety-blocked items stay BLOCKED / NOT_TESTED with a reason.
 - **Distinguish defect types** — application vs automation vs environment; see `reporting.mdc` and `npm run analyze:failures`.
 - **Retest after fixes** — `npm run retest`; preserve the original failure record.
 - **Report integrity** — artifacts under `reports/` are the only source of truth; see `reporting.mdc`.
@@ -113,11 +139,14 @@ npm run test:api
 npm run test:workflows
 npm run test:performance
 npm run test:security
+npm run test:seo
+npm run test:content
 npm run analyze:failures
 npm run retest
 npm run test:e2e:cross-browser
 npm run test:unit
 npm run docs:qa-report
+npm run report:master
 npm run report:final
 npm run report:allure
 npm run report:playwright

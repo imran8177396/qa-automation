@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { resolveDiscoveredPageTargets } from './discovered-page-targets';
+import { discoveryLandingHasLoginForm, resolveDiscoveredPageTargets } from './discovered-page-targets';
 import type { PageMap } from '../discovery/page-map';
+import type { UiInventory } from '../discovery/ui-scan';
 
 const liveTarget = {
   url: 'https://example.com',
@@ -51,6 +52,23 @@ describe('resolveDiscoveredPageTargets', () => {
     assert.equal(resolved.pages[0]?.path, '/');
     assert.ok(resolved.reason);
     assert.equal(resolved.pages.some((page) => page.path === '/contact.html'), false);
+  });
+
+  it('detects an observed login form and does not invent one', () => {
+    assert.equal(discoveryLandingHasLoginForm(null), false);
+    assert.equal(discoveryLandingHasLoginForm({ elements: [] } as unknown as UiInventory), false);
+    assert.equal(
+      discoveryLandingHasLoginForm({
+        elements: [{ elementType: 'form', accessibleName: 'Contact', locator: '#contact' }],
+      } as unknown as UiInventory),
+      false
+    );
+    assert.equal(
+      discoveryLandingHasLoginForm({
+        elements: [{ elementType: 'form', accessibleName: 'Login', locator: '#login-form' }],
+      } as unknown as UiInventory),
+      true
+    );
   });
 
   it('uses fixture pages only when the UI target is loopback', () => {

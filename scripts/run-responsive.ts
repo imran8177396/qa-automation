@@ -7,13 +7,22 @@ import { writeJson } from './discovery/write-json';
 import { DEFAULT_FIXTURE_PORT, ensureFixtureChildProcess } from './testing/serve-fixture-site';
 import { resolveUiTarget } from './lib/ui-target';
 import { printCoverageSummary, runCoverage } from './coverage/run-coverage';
-import { RESPONSIVE_LIMITATIONS, VIEWPORT_NAMES, VIEWPORTS } from './responsive/viewports';
+import {
+  RESPONSIVE_LIMITATIONS,
+  VIEWPORT_NAMES,
+  VIEWPORTS,
+  responsiveProjectArgs,
+} from './responsive/viewports';
 import { planResponsiveChecks } from './responsive/applicability';
 import type { ResponsiveFinding } from './responsive/findings';
 import { loadConfig } from './lib/load-config';
 import { QA_PLAYWRIGHT_SUITE_ENV, playwrightSuiteHtmlDir, playwrightSuiteResultsPath } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
-import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import { applyCliWebsiteTarget, resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import {
+  classifyCompulsoryPlaywrightBrowsers,
+  resolvePlaywrightBrowsers,
+} from './lib/playwright-browsers';
 
 function loadFindings(): ResponsiveFinding[] {
   const dir = path.join(PATHS.root, 'test-results', 'responsive', 'findings');
@@ -34,7 +43,7 @@ function renderFindingsMarkdown(findings: ResponsiveFinding[]): string {
     '',
     '## Testing mode',
     '',
-    'This run used **emulated viewports** in Chromium (`page.setViewportSize` and Playwright project viewport/touch flags). It is **not a real device**. No real iOS Safari, real Android Chrome, or device-cloud session was executed.',
+    'This run used **emulated viewports** on Chromium, Firefox, and WebKit (`page.setViewportSize` and Playwright project viewport/touch flags). It is **not a real device**. No real iOS Safari, real Android Chrome, or device-cloud session was executed.',
     '',
     ...RESPONSIVE_LIMITATIONS.map((line) => `- ${line}`),
     '',
@@ -86,12 +95,8 @@ function renderFindingsMarkdown(findings: ResponsiveFinding[]): string {
   return `${lines.join('\n')}\n`;
 }
 
-const RESPONSIVE_SKIPPED_BROWSERS = [
-  { browser: 'firefox' as const, reason: 'responsive suite uses Chromium emulated viewports only — not a real device, not iOS Safari, not Android Chrome' },
-  { browser: 'webkit' as const, reason: 'responsive suite uses Chromium emulated viewports only — not a real device, not Mobile Safari' },
-];
-
 async function main(): Promise<void> {
+  applyCliWebsiteTarget();
   const config = loadConfig();
   const target = resolveUiTarget(config);
   const started = preparePlaywrightSuite({
@@ -101,7 +106,7 @@ async function main(): Promise<void> {
   });
   const applicability = planResponsiveChecks();
 
-  logStep('Responsive viewport matrix (Chromium emulated viewports — not a real device, not iOS Safari, not Android Chrome)');
+  logStep('Responsive viewport matrix (Chromium / Firefox / WebKit emulated viewports — not a real device, not iOS Safari, not Android Chrome)');
   for (const line of RESPONSIVE_LIMITATIONS) {
     logWarn(line);
   }
@@ -112,7 +117,12 @@ async function main(): Promise<void> {
   fs.rmSync(findingsDir, { recursive: true, force: true });
   fs.mkdirSync(findingsDir, { recursive: true });
 
-  runLocalBin('playwright', ['install', 'chromium']);
+  const requestedBrowsers = resolvePlaywrightBrowsers(config.playwright);
+  runLocalBin('playwright', ['install', ...requestedBrowsers]);
+  const { executableBrowsers, skippedBrowsers } = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
+  if (skippedBrowsers.length > 0) {
+    logError(`Missing Playwright engines after install: ${skippedBrowsers.map((row) => row.browser).join(', ')}`);
+  }
 
   let server: Awaited<ReturnType<typeof ensureFixtureChildProcess>> = null;
   if (target.isLoopback) {
@@ -125,19 +135,26 @@ async function main(): Promise<void> {
 
   let passed = false;
   try {
-    const result = runLocalBin(
-      'playwright',
-      ['test', `--config=${path.join(PATHS.root, 'playwright.responsive.config.ts')}`],
-      {
-        env: {
-          ...process.env,
-          QA_PLAYWRIGHT_BASE_URL: target.url,
-          QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
-          [QA_PLAYWRIGHT_SUITE_ENV]: 'responsive',
-        },
-      }
-    );
-    passed = result.status === 0;
+    const result =
+      executableBrowsers.length === 0
+        ? { status: 1 }
+        : runLocalBin(
+            'playwright',
+            [
+              'test',
+              `--config=${path.join(PATHS.root, 'playwright.responsive.config.ts')}`,
+              ...responsiveProjectArgs(executableBrowsers),
+            ],
+            {
+              env: {
+                ...process.env,
+                QA_PLAYWRIGHT_BASE_URL: target.url,
+                QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
+                [QA_PLAYWRIGHT_SUITE_ENV]: 'responsive',
+              },
+            }
+          );
+    passed = result.status === 0 && skippedBrowsers.length === 0;
   } finally {
     if (server) await server.close();
   }
@@ -164,8 +181,8 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(PATHS.reports.responsive, 'findings.md'), renderFindingsMarkdown(findings), 'utf8');
   const suiteSummary = completePlaywrightSuite(started, {
     passed,
-    executedBrowsers: ['chromium'],
-    skippedBrowsers: RESPONSIVE_SKIPPED_BROWSERS,
+    executedBrowsers: executableBrowsers,
+    skippedBrowsers,
   });
   writeJson(path.join(PATHS.reports.responsive, 'summary.json'), {
     generatedAt: new Date().toISOString(),
@@ -178,7 +195,7 @@ async function main(): Promise<void> {
     testingMode: 'emulated viewport',
     realDeviceTesting: false,
     deviceCloud: false,
-    engine: 'chromium',
+    engines: executableBrowsers,
     note: 'Emulated viewports only — not a real device. Visual may include a 375px login screenshot; this suite owns the desktop/laptop/tablet/mobile matrix and does not replace visual baselines.',
     viewports: VIEWPORT_NAMES.map((name) => ({
       name,

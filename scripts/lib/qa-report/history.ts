@@ -26,16 +26,11 @@ export interface TrendDelta {
 }
 
 function historyDir(): string {
-  return path.join(PATHS.reports.root, 'history');
+  return PATHS.reports.history;
 }
 
 function parseStamp(fileName: string): number {
-  const iso = fileName.replace(/\.json$/, '').replace('_', 'T').replace(/-/g, (m, offset) => {
-    // keep date dashes; convert time separators already handled
-    return offset < 10 ? m : m;
-  });
   const ms = Date.parse(fileName.slice(0, 19).replace('_', 'T'));
-  void iso;
   return Number.isFinite(ms) ? ms : 0;
 }
 

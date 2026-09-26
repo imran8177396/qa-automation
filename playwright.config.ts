@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import {
-  ALL_PLAYWRIGHT_ENGINES,
   PLAYWRIGHT_FAILURE_ARTIFACTS,
   playwrightAllureReporterConfig,
   playwrightHtmlReporterConfig,
@@ -12,27 +11,34 @@ import {
   resolvePlaywrightSuiteNameFromEnv,
 } from './scripts/lib/playwright-suites';
 import type { PlaywrightConfig } from './scripts/lib/playwright-browsers';
-import { engineProject } from './scripts/cross-browser/projects';
+import { engineProjects } from './scripts/cross-browser/projects';
 import { getEnv } from './utils/env';
+import {
+  captureShellPlaywrightUrls,
+  configFallbackPlaywrightBaseUrl,
+  resolveConfiguredPlaywrightBaseUrl,
+} from './scripts/lib/suite-origin';
 
 const rootDir = __dirname;
 const generatedEnvPath = path.join(rootDir, 'config', 'generated.env');
 const localEnvPath = path.join(rootDir, '.env');
 
 /** Orchestrator / CI / shell — captured before dotenv so generated.env cannot clobber it. */
-const cliOrShellBaseUrl = process.env.QA_PLAYWRIGHT_BASE_URL?.trim() ?? '';
+const capturedShellUrls = captureShellPlaywrightUrls();
 
 if (fs.existsSync(localEnvPath)) {
   dotenv.config({ path: localEnvPath });
 }
 
-const userBaseUrl = cliOrShellBaseUrl || process.env.QA_PLAYWRIGHT_BASE_URL?.trim() || '';
+const userBaseUrl = capturedShellUrls.capturedEnvUrl || process.env.QA_PLAYWRIGHT_BASE_URL?.trim() || '';
+const userWebsiteUrl = capturedShellUrls.capturedWebsiteUrl || process.env.QA_WEBSITE_URL?.trim() || '';
 
 if (fs.existsSync(generatedEnvPath)) {
   dotenv.config({ path: generatedEnvPath });
 }
 
 let qaConfig: {
+  urls?: { website?: string; api?: string };
   playwright?: Partial<PlaywrightConfig> & {
     baseURL?: string;
     headless?: boolean;
@@ -47,21 +53,27 @@ if (fs.existsSync(qaConfigPath)) {
   qaConfig = JSON.parse(fs.readFileSync(qaConfigPath, 'utf8'));
 }
 
-const playwrightConfig: PlaywrightConfig = {
+const playwrightConfig: Pick<PlaywrightConfig, 'enabled' | 'browser' | 'browsers' | 'headless'> = {
   enabled: true,
-  baseURL: qaConfig.playwright?.baseURL ?? 'http://localhost',
   browser: qaConfig.playwright?.browser,
   browsers: qaConfig.playwright?.browsers,
   headless: qaConfig.playwright?.headless ?? true,
 };
 
 /**
- * `qa.config.json` is the Playwright origin SSOT. A stale `config/generated.env`
- * from a previous qa:sync must not retarget the suite at leftover hosts.
- * CLI / CI / local `.env` still override when they set QA_PLAYWRIGHT_BASE_URL
- * before generated.env is applied.
+ * Origin: shell / orchestrator `QA_PLAYWRIGHT_BASE_URL`, then `QA_WEBSITE_URL`,
+ * then persisted last-target, then `urls.website` (optional `playwright.baseURL`
+ * only when explicitly set). A stale `config/generated.env` from a previous
+ * qa:sync must not retarget the suite at leftover hosts.
  */
-const resolvedBaseUrl = userBaseUrl || playwrightConfig.baseURL;
+const resolvedBaseUrl = resolveConfiguredPlaywrightBaseUrl({
+  capturedEnvUrl: userBaseUrl,
+  capturedWebsiteUrl: userWebsiteUrl,
+  configBaseUrl: configFallbackPlaywrightBaseUrl({
+    playwright: qaConfig.playwright,
+    urls: qaConfig.urls,
+  }),
+});
 process.env.QA_PLAYWRIGHT_BASE_URL = resolvedBaseUrl;
 
 const headlessOverride = getEnv('QA_PLAYWRIGHT_HEADLESS');
@@ -95,7 +107,7 @@ const testIdAttribute = qaConfig.playwright?.testIdAttribute ?? DEFAULT_TEST_ID_
  *
  * Caveats: WebKit is not iOS Safari. Chromium is not Android Chrome.
  */
-const projects = ALL_PLAYWRIGHT_ENGINES.map((browser) => engineProject(browser));
+const projects = engineProjects();
 
 export default defineConfig({
   testDir: './tests/e2e',

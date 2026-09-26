@@ -1,7 +1,11 @@
 // Dedicated Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.regression
-// Always runs npm run qa:all (liveness JMeter only). Not a pull-request job.
+// Main/regression tier + scheduled-tier commands. Not a pull-request job.
+// AUTHORIZE_DESTRUCTIVE / ALLOW_PRODUCTION default false (manual authorization).
+// Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — no separate chaos runner.
+// Heavy JMeter is not authorized here (use Jenkinsfile.performance).
 // Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
 // Never hardcode passwords, tokens, API keys, cookies, or credentials.
+// Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
 
 def qa
 
@@ -19,7 +23,17 @@ pipeline {
     string(
       name: 'DISCOVER_URL',
       defaultValue: '',
-      description: 'Optional live URL for qa:all --url=. Empty uses the in-repo fixture. Do not put secrets in this field.'
+      description: 'Optional live URL for discovery/tests. Empty uses the in-repo fixture. Do not put secrets in this field.'
+    )
+    booleanParam(
+      name: 'AUTHORIZE_DESTRUCTIVE',
+      defaultValue: false,
+      description: 'Must be true to run destructive resilience (QA_RESILIENCE_AUTHORIZE / --authorize-destructive). Default false. Chaos remains NOT_TESTED.'
+    )
+    booleanParam(
+      name: 'ALLOW_PRODUCTION',
+      defaultValue: false,
+      description: 'Must be true to run npm run test:production-verification. Default false. Runner still respects tests.productionVerification.enabled.'
     )
   }
 
@@ -72,11 +86,160 @@ pipeline {
       }
     }
 
-    stage('Full regression (qa:all)') {
+    stage('Discovery') {
       steps {
-        echo 'Runs npm run qa:all (complete orchestrator: discovery through Allure and final summary). Heavy JMeter is not authorized.'
         script {
-          qa.runFullRegression(params.DISCOVER_URL)
+          qa.startFixtureSite()
+          qa.applyDiscoverUrl(params.DISCOVER_URL)
+          qa.npmRun('run discover -- ' + env.QA_WEBSITE_URL)
+        }
+      }
+    }
+
+    stage('full E2E') {
+      steps {
+        script {
+          qa.npmRun('run test:e2e')
+        }
+      }
+    }
+
+    stage('API') {
+      steps {
+        script {
+          qa.npmRun('run test:api')
+        }
+      }
+    }
+
+    stage('integration') {
+      steps {
+        script {
+          qa.npmRun('run test:integration')
+        }
+      }
+    }
+
+    stage('contract') {
+      steps {
+        script {
+          qa.npmRun('run test:contract')
+        }
+      }
+    }
+
+    stage('visual') {
+      steps {
+        script {
+          qa.npmRun('run test:visual')
+        }
+      }
+    }
+
+    stage('responsive') {
+      steps {
+        script {
+          qa.npmRun('run test:responsive')
+        }
+      }
+    }
+
+    stage('accessibility') {
+      steps {
+        script {
+          qa.npmRun('run test:accessibility')
+        }
+      }
+    }
+
+    stage('security') {
+      steps {
+        script {
+          qa.npmRun('run test:security')
+        }
+      }
+    }
+
+    stage('SEO') {
+      steps {
+        script {
+          qa.npmRun('run test:seo')
+        }
+      }
+    }
+
+    stage('content') {
+      steps {
+        script {
+          qa.npmRun('run test:content')
+        }
+      }
+    }
+
+    stage('regression') {
+      steps {
+        script {
+          qa.npmRun('run test:regression')
+        }
+      }
+    }
+
+    stage('dependency') {
+      steps {
+        script {
+          qa.npmRun('run test:dependencies')
+        }
+      }
+    }
+
+    stage('compatibility matrix') {
+      steps {
+        script {
+          qa.npmRun('run test:e2e:cross-browser')
+        }
+      }
+    }
+
+    stage('AI regression') {
+      steps {
+        echo 'AI engine may be disabled in qa.config.json (tests.ai.enabled); runner exits NOT_TESTED / 0. Do not flip the flag here.'
+        script {
+          qa.npmRun('run test:ai')
+        }
+      }
+    }
+
+    stage('deep security') {
+      steps {
+        echo 'Deep/pentest coverage is NOT_IMPLEMENTED — this is still the existing QA security script, not a new scanner.'
+        script {
+          qa.npmRun('run test:security')
+        }
+      }
+    }
+
+
+    stage('Destructive resilience') {
+      when {
+        expression { return params.AUTHORIZE_DESTRUCTIVE == true }
+      }
+      steps {
+        echo 'Chaos is not a separate runner — stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE; no chaos tool.'
+        script {
+          withEnv(['QA_RESILIENCE_AUTHORIZE=true']) {
+            qa.npmRun('run test:resilience -- --authorize-destructive')
+          }
+        }
+      }
+    }
+
+    stage('Production verification') {
+      when {
+        expression { return params.ALLOW_PRODUCTION == true }
+      }
+      steps {
+        script {
+          qa.npmRun('run test:production-verification')
         }
       }
     }
@@ -99,7 +262,7 @@ pipeline {
 
     stage('Final QA summary') {
       steps {
-        echo 'Final QA summary is written by report:all / qa:all to reports/summary/. Credentials are not printed.'
+        echo 'Final QA summary is written by report:all to reports/summary/. Credentials are not printed.'
       }
     }
 

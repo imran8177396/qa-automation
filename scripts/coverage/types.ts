@@ -265,6 +265,24 @@ export interface RiskArea {
   itemCount: number;
 }
 
+export type TestTypeDimensionStatus =
+  | 'MEASURED'
+  | 'NOT_MEASURED'
+  | 'REQUIRES_CONFIGURATION'
+  | 'NOT_IMPLEMENTED';
+
+/** Registry-aligned dimension row — coveragePct is null when not MEASURED. */
+export interface TestTypeDimensionCoverage {
+  dimension: string;
+  status: TestTypeDimensionStatus;
+  testable: number;
+  /** Exercised items (TESTED + FAILED) — not pass count alone. */
+  tested: number;
+  failed: number;
+  coveragePct: number | null;
+  reason?: string;
+}
+
 export interface CoverageSummary {
   generatedAt: string;
   seedUrl: string | null;
@@ -283,6 +301,10 @@ export interface CoverageSummary {
   complete: boolean;
   passRatePercent: number | null;
   dimensions: DimensionCoverage[];
+  /** Registry-aligned dimensions (functional, api, ui, …). */
+  testTypeDimensions?: TestTypeDimensionCoverage[];
+  /** Mean of MEASURED test-type coveragePct only; null when none measured. */
+  overallTestTypeCoveragePct?: number | null;
   riskAreas: RiskArea[];
 }
 
@@ -357,6 +379,10 @@ export interface CoverageReport {
   totals: CoverageTotals;
   byKind: KindCoverage[];
   dimensions: DimensionCoverage[];
+  /** Registry-aligned dimensions beside inventory advanced dimensions. */
+  testTypeDimensions: TestTypeDimensionCoverage[];
+  /** Mean of MEASURED test-type coveragePct only; null when none measured. */
+  overallTestTypeCoveragePct: number | null;
   formula: CoverageFormula;
   riskAreas: RiskArea[];
   records: CoverageRecord[];

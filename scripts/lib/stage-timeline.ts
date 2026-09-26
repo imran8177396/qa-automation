@@ -16,18 +16,37 @@ export const EXECUTION_STAGE_KEYS = [
   'workflows',
 ] as const;
 
+/** Opt-in engines that join EXECUTE when tests.<id>.enabled is true. */
+export const OPT_IN_EXECUTION_STAGE_KEYS = [
+  'integration',
+  'contract',
+  'database',
+  'smoke',
+  'sanity',
+  'regression',
+  'reliability',
+  'resilience',
+  'deployment',
+  'localization',
+  'ai',
+  'productionVerification',
+] as const;
+
 export type ExecutionStageKey = (typeof EXECUTION_STAGE_KEYS)[number];
 
 export function stagePhaseForKey(key: string): StagePhase {
   if (key === 'preflight' || key === 'dependencies') return 'setup';
   if (key === 'discovery') return 'discovery';
   if (key === 'inventory' || key === 'coverage-planning') return 'inventory';
-  if ((EXECUTION_STAGE_KEYS as readonly string[]).includes(key)) return 'execution';
+  if (isExecutionStageKey(key)) return 'execution';
   return 'post';
 }
 
 export function isExecutionStageKey(key: string): boolean {
-  return (EXECUTION_STAGE_KEYS as readonly string[]).includes(key);
+  return (
+    (EXECUTION_STAGE_KEYS as readonly string[]).includes(key) ||
+    (OPT_IN_EXECUTION_STAGE_KEYS as readonly string[]).includes(key)
+  );
 }
 
 export interface StageTimelineRow {

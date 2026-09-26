@@ -17,14 +17,15 @@ import { DEFAULT_FIXTURE_PORT, ensureFixtureChildProcess } from './testing/serve
 import { resolveUiTarget } from './lib/ui-target';
 import { QA_PLAYWRIGHT_SUITE_ENV, playwrightSuiteResultsPath } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
-import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
-
-const WORKFLOW_SKIPPED_BROWSERS = [
-  { browser: 'firefox' as const, reason: 'workflow suite runs on Chromium only' },
-  { browser: 'webkit' as const, reason: 'workflow suite runs on Chromium only' },
-];
+import { applyCliWebsiteTarget, resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import {
+  classifyCompulsoryPlaywrightBrowsers,
+  playwrightProjectArgs,
+  resolvePlaywrightBrowsers,
+} from './lib/playwright-browsers';
 
 async function main(): Promise<void> {
+  applyCliWebsiteTarget();
   const config = loadConfig();
   const plan = buildWorkflowExecutionPlan(config);
   const target = resolveUiTarget(config);
@@ -57,15 +58,29 @@ async function main(): Promise<void> {
       logStep(`Workflow suite target is live origin ${target.origin} — fixture site is not substituted`);
     }
 
-    runLocalBin('playwright', ['install', 'chromium']);
-    const result = runLocalBin('playwright', ['test', `--config=${configPath}`], {
-      env: {
-        ...process.env,
-        QA_PLAYWRIGHT_BASE_URL: target.url,
-        QA_API_URL: config.urls.api,
-        [QA_PLAYWRIGHT_SUITE_ENV]: 'workflows',
-      },
-    });
+    const requestedBrowsers = resolvePlaywrightBrowsers(config.playwright);
+    runLocalBin('playwright', ['install', ...requestedBrowsers]);
+    const classified = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
+    if (classified.skippedBrowsers.length > 0) {
+      logError(
+        `Missing Playwright engines after install: ${classified.skippedBrowsers.map((row) => row.browser).join(', ')}`
+      );
+    }
+    const result =
+      classified.executableBrowsers.length === 0
+        ? { status: 1 }
+        : runLocalBin(
+            'playwright',
+            ['test', `--config=${configPath}`, ...playwrightProjectArgs(classified.executableBrowsers)],
+            {
+              env: {
+                ...process.env,
+                QA_PLAYWRIGHT_BASE_URL: target.url,
+                QA_API_URL: config.urls.api,
+                [QA_PLAYWRIGHT_SUITE_ENV]: 'workflows',
+              },
+            }
+          );
 
     const fixtureEvidence = await runFixtureCorrelationSelfCheck();
     recordRuntimeCorrelation(fixtureEvidence);
@@ -82,9 +97,9 @@ async function main(): Promise<void> {
     );
 
     const suiteSummary = completePlaywrightSuite(started, {
-      passed: result.status === 0,
-      executedBrowsers: ['chromium'],
-      skippedBrowsers: WORKFLOW_SKIPPED_BROWSERS,
+      passed: result.status === 0 && classified.skippedBrowsers.length === 0,
+      executedBrowsers: classified.executableBrowsers,
+      skippedBrowsers: classified.skippedBrowsers,
     });
 
     const recorded = [...plan.executable, ...plan.gated];
@@ -94,7 +109,7 @@ async function main(): Promise<void> {
       target: target.url,
       targetOrigin: suiteSummary.targetOrigin,
       originStatus: suiteSummary.originStatus,
-      passed: result.status === 0 && fixtureEvidence.status !== 'FAIL',
+      passed: result.status === 0 && classified.skippedBrowsers.length === 0 && fixtureEvidence.status !== 'FAIL',
       resultsFile: playwrightSuiteResultsPath('workflows'),
       evidenceFile: evidence.evidenceFile,
       findingsFile: evidence.findingsFile,
@@ -117,12 +132,14 @@ async function main(): Promise<void> {
       note: plan.note,
     });
 
-    if (result.status === 0 && fixtureEvidence.status !== 'FAIL') {
+    const workflowsPassed =
+      result.status === 0 && classified.skippedBrowsers.length === 0 && fixtureEvidence.status !== 'FAIL';
+    if (workflowsPassed) {
       logSuccess('Workflow checks recorded (correlated + inferred + N/A reasons; gated items are not silent skips)');
     } else {
       logError('Workflow checks failed');
     }
-    exitCode = result.status === 0 && fixtureEvidence.status !== 'FAIL' ? 0 : 1;
+    exitCode = workflowsPassed ? 0 : 1;
   } finally {
     await server?.close();
   }

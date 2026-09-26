@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chromium } from '@playwright/test';
+import { chromium, type Browser } from '@playwright/test';
 import { startFixtureServer } from '../testing/serve-fixture-site';
+import { isPlaywrightBrowserInstalled, MISSING_CHROMIUM_UNIT_REASON } from '../lib/playwright-browsers';
 import { scanPageUi } from './ui-scan';
 import { mergeCategoryStatus, rollupCategory } from './categories';
 
@@ -22,10 +23,12 @@ test(
   'scanPageUi() records fixture elements that actually exist and does not invent the rest',
   { timeout: 60000 },
   async () => {
+    assert.ok(isPlaywrightBrowserInstalled('chromium'), MISSING_CHROMIUM_UNIT_REASON);
     const server = await startFixtureServer();
-    const browser = await chromium.launch();
+    let browser: Browser | undefined;
 
     try {
+      browser = await chromium.launch({ timeout: 30000 });
       const page = await browser.newPage();
       await page.goto(`${server.url}/contact.html`, { waitUntil: 'load' });
       const elements = await scanPageUi(page, `${server.url}/contact.html`);
@@ -71,7 +74,7 @@ test(
       assert.ok(homeLinks.includes('Account settings'));
       await home.close();
     } finally {
-      await browser.close();
+      await browser?.close();
       await server.close();
     }
   }

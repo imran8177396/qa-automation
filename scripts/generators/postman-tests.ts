@@ -23,6 +23,11 @@ export interface PostmanTestContext {
   method: string;
   path: string;
   assertionFlags?: PostmanAssertionFlag[];
+  /**
+   * Documented expectedStatus from expectationPolicy (may be UNVERIFIED).
+   * Never used to overwrite assertions.statusCode.
+   */
+  expectedStatus?: ExpectedHttpStatus;
 }
 
 const DEFAULT_EXPECT_JSON = true;
@@ -75,6 +80,69 @@ function statusFlagSuffix(context: PostmanTestContext): string {
   return ` [FLAGGED: ${names.join('; ')}]`;
 }
 
+function expectedStatusLabel(context: PostmanTestContext): string {
+  if (context.expectedStatus === 'UNVERIFIED') return 'UNVERIFIED';
+  if (typeof context.expectedStatus === 'number') return String(context.expectedStatus);
+  return 'UNVERIFIED';
+}
+
+/** Runtime classifier embedded in generated Postman tests (same labels as scripts/lib/api/response-shape.ts). */
+function buildClassifyResponseShapeSnippet(): string[] {
+  return [
+    'function qaClassifyResponseShape(text) {',
+    '    if (text === "") return "empty";',
+    '    try {',
+    '        const body = JSON.parse(text);',
+    '        if (Array.isArray(body)) return "array";',
+    '        if (body !== null && typeof body === "object") return "object";',
+    '        return "non-json";',
+    '    } catch (e) {',
+    '        return "non-json";',
+    '    }',
+    '}',
+  ];
+}
+
+function buildStatusTestLines(
+  assertions: ResolvedPostmanAssertions,
+  context: PostmanTestContext
+): string[] {
+  const label = requestLabel(context);
+  const suffix = statusFlagSuffix(context);
+  const expectedLabel = escapeJsString(expectedStatusLabel(context));
+  const defaultName =
+    assertions.statusCode != null
+      ? escapeJsString(`${label} returns HTTP ${assertions.statusCode}${suffix}`)
+      : escapeJsString(`${label} received an HTTP response (status not asserted — UNVERIFIED)`);
+
+  const lines: string[] = [
+    ...buildClassifyResponseShapeSnippet(),
+    '(function () {',
+    '    const qaCode = pm.response.code;',
+    '    const qaResponseShape = qaClassifyResponseShape(pm.response.text());',
+    `    const qaExpectedStatus = "${expectedLabel}";`,
+    '    const qaNeedsShapeDetail = qaCode === 400 || (qaCode >= 500 && qaCode <= 599);',
+    '    const qaDetail = "HTTP " + qaCode + " (actual responseShape: " + qaResponseShape + "; expected status: " + qaExpectedStatus + ")";',
+    `    const qaTestName = qaNeedsShapeDetail ? ${JSON.stringify(`${label} `)} + qaDetail : "${defaultName}";`,
+    '    pm.test(qaTestName, function () {',
+  ];
+
+  if (assertions.statusCode != null) {
+    lines.push(
+      '        if (qaNeedsShapeDetail) {',
+      `            pm.expect(qaCode, qaDetail).to.eql(${assertions.statusCode});`,
+      '        } else {',
+      `            pm.response.to.have.status(${assertions.statusCode});`,
+      '        }'
+    );
+  } else {
+    lines.push('        pm.expect(qaCode).to.be.a("number");');
+  }
+
+  lines.push('    });', '})();');
+  return lines;
+}
+
 export function buildPostmanTestScript(
   assertions: ResolvedPostmanAssertions,
   context: PostmanTestContext
@@ -82,20 +150,7 @@ export function buildPostmanTestScript(
   const label = requestLabel(context);
   const lines: string[] = [];
 
-  if (assertions.statusCode != null) {
-    const suffix = statusFlagSuffix(context);
-    lines.push(
-      `pm.test("${escapeJsString(`${label} returns HTTP ${assertions.statusCode}${suffix}`)}", function () {`,
-      `    pm.response.to.have.status(${assertions.statusCode});`,
-      `});`
-    );
-  } else {
-    lines.push(
-      `pm.test("${escapeJsString(`${label} received an HTTP response (status not asserted — UNVERIFIED)`)}", function () {`,
-      `    pm.expect(pm.response.code).to.be.a("number");`,
-      `});`
-    );
-  }
+  lines.push(...buildStatusTestLines(assertions, context));
 
   if (assertions.maxResponseTimeMs != null) {
     if (lines.length > 0) lines.push('');
@@ -121,9 +176,9 @@ export function buildPostmanTestScript(
     lines.push(
       '',
       `pm.test("${escapeJsString(`${label} body is an HTML document`)}", function () {`,
-      `    const body = pm.response.text().toLowerCase();`,
-      `    pm.expect(body).to.match(/<!doctype html|<html/);`,
-      `});`
+      '    const body = pm.response.text().toLowerCase();',
+      '    pm.expect(body).to.match(/<!doctype html|<html/);',
+      '});'
     );
   }
 

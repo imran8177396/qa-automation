@@ -17,7 +17,7 @@ export const NO_SKIP_POLICY_STATEMENT =
 
 export interface ExhaustiveExecutionPolicy {
   enabled: boolean;
-  /** Configured Playwright engines only — do not add or drop browsers silently. */
+  /** Compulsory Chromium + Firefox + WebKit — do not drop engines silently. */
   honorConfiguredBrowsers: boolean;
   /** UI suites hit the resolved target URL; fixture is used only when that target is loopback. */
   requireLiveUiWhenConfigured: boolean;

@@ -2,6 +2,10 @@ import { REQUIRED_TRACKED_TYPES, displayCoverageStatus } from './project-status'
 import { percent } from './status';
 import type { AssignedScenario, CoverageReport, CoverageRecord, CoverageStatus } from './types';
 
+function formatCoveragePct(value: number | null | undefined): string {
+  return value == null ? 'n/a (not measured)' : `${value}%`;
+}
+
 function cell(value: string | number | boolean | null | undefined): string {
   return String(value ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
@@ -220,6 +224,26 @@ export function renderCoverageMatrix(report: CoverageReport): string {
         row.byStatus.SKIPPED,
         row.byStatus['NOT APPLICABLE'],
         row.byStatus.UNTESTABLE,
+      ])
+    ),
+    '',
+    '## Test-type dimensions',
+    '',
+    'Registry-aligned dimensions. Coverage = exercised (TESTED/PASS + FAILED/FAIL) ÷ testable — not pass rate.',
+    'Overall = arithmetic mean of MEASURED coveragePct only; NOT_MEASURED / REQUIRES_CONFIGURATION / NOT_IMPLEMENTED are excluded (never 100% by default).',
+    '',
+    `- Overall test-type coverage: ${formatCoveragePct(report.overallTestTypeCoveragePct)}`,
+    '',
+    table(
+      ['Dimension', 'Status', 'Testable', 'Tested (exercised)', 'Failed', 'Coverage %', 'Reason'],
+      report.testTypeDimensions.map((row) => [
+        row.dimension,
+        row.status,
+        row.testable,
+        row.tested,
+        row.failed,
+        formatCoveragePct(row.coveragePct),
+        row.reason ?? '',
       ])
     ),
     '',

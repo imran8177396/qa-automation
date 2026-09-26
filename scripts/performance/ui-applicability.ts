@@ -15,7 +15,7 @@ function observedXhrCount(api: ApiInventory | null): number {
 
 /**
  * Playwright UI performance checks for the discovered login (or fixture login) page.
- * Sauce Demo REST is not invented — XHR/fetch stay NOT_APPLICABLE when discovery saw none.
+ * Undocumented product REST is not invented — XHR/fetch stay NOT_APPLICABLE when discovery saw none.
  */
 export function planUiPerformanceChecks(): UiPerformanceCheckPlan[] {
   const pages = resolveUiPerformancePages();
@@ -56,7 +56,7 @@ export function planUiPerformanceChecks(): UiPerformanceCheckPlan[] {
       reason:
         xhrCount > 0
           ? `Discovery observed ${xhrCount} xhr/fetch call(s).`
-          : 'Discovery found 0 XHR/fetch on the login page. Sauce Demo REST is not invented for JMeter or Playwright. Documented API load uses JSONPlaceholder from qa.config.json.',
+          : 'Discovery found 0 XHR/fetch on the login page. Undocumented product REST is not invented for JMeter or Playwright. Documented API load uses qa.config.json urls.api (and jmeter.path) only.',
     },
     {
       id: 'PERF-UI-web-vitals',
@@ -80,12 +80,12 @@ export function planUiPerformanceChecks(): UiPerformanceCheckPlan[] {
         'Official CWV / category scores are collected by scripts/lighthouse when the Lighthouse CLI is present. They are not merged into Playwright UI timings and are never fabricated.',
     },
     {
-      id: 'PERF-UI-saucedemo-rest',
-      name: 'Sauce Demo REST load plan',
+      id: 'PERF-UI-undocumented-rest',
+      name: 'Undocumented product REST load plan',
       status: 'NOT_APPLICABLE',
       reason: isFixtureUiTarget()
-        ? 'Fixture target has no Sauce Demo REST surface.'
-        : 'Sauce Demo login exposes no documented XHR API. JMeter plans target qa.config.json urls.api (JSONPlaceholder) only.',
+        ? 'Fixture target has no undocumented product REST surface for JMeter.'
+        : 'Discovery recorded no documented XHR API on the UI target. JMeter plans target qa.config.json urls.api only — product REST paths are never invented.',
     },
   ];
 }

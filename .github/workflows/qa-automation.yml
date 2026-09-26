@@ -1,8 +1,11 @@
 name: QA CI (Pull Request)
 
-# Lightweight PR checks only. Does NOT run qa:all (visual + 3-engine cross-browser + full pipeline).
-# Does NOT run heavy JMeter (load / stress / spike / soak). Never --authorize-heavy.
-# Full suite: qa-regression.yml. Authorized heavy load: qa-performance-heavy.yml.
+# PR tier only: unit, smoke, API, critical E2E, accessibility, security-light.
+# Does NOT run qa:all. Does NOT run visual / responsive / cross-browser / integration /
+# contract / seo / content / regression / AI / resilience / production-verification.
+# Does NOT run heavy JMeter (load / stress / spike / soak). Never authorizes heavy profiles.
+# Main/regression: qa-regression.yml. Authorized heavy: qa-performance-heavy.yml.
+# Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE (not a PR job; no separate chaos runner).
 
 on:
   pull_request:
@@ -72,8 +75,11 @@ jobs:
           record QA_API_USERNAME "$QA_API_USERNAME"
           record QA_API_PASSWORD "$QA_API_PASSWORD"
 
+      - name: unit
+        run: npm run test:unit
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Start fixture site
         run: |
@@ -88,10 +94,13 @@ jobs:
       - name: Discovery
         run: npm run discover -- http://127.0.0.1:4173/
 
-      - name: Run Playwright E2E tests
+      - name: smoke
+        run: npm run test:smoke
+
+      - name: critical E2E
         run: npm run test:e2e
 
-      - name: Run Postman API tests
+      - name: API
         env:
           QA_API_URL: ${{ secrets.QA_API_URL }}
           QA_USERNAME: ${{ secrets.QA_USERNAME }}
@@ -101,8 +110,12 @@ jobs:
           QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
         run: npm run test:api
 
-      - name: Run accessibility tests
+      - name: accessibility
         run: npm run test:accessibility
+
+      # security-light: existing QA security scan (headers/cookies/hygiene), not a pentest.
+      - name: security-light
+        run: npm run test:security
 
       - name: Setup Java
         uses: actions/setup-java@v4

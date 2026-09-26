@@ -7,7 +7,7 @@ import { runUiPerformance } from './performance/run-ui';
 import { loadConfig } from './lib/load-config';
 import { logError, logStep, logSuccess, logWarn } from './lib/logger';
 import { writeProfessionalSqaReport } from './reporting/write-enterprise-report';
-import { cleanRunArtifacts, shouldKeepArtifacts } from './lib/clean-run-artifacts';
+import { cleanTestData, shouldKeepArtifacts } from './lib/clean-test-data';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -16,7 +16,7 @@ async function main(): Promise<void> {
     logWarn('Keeping previous run artifacts (--keep-artifacts)');
   } else {
     logStep('Cleaning previous test artifacts and cache');
-    const { removed } = cleanRunArtifacts();
+    const { removed } = cleanTestData();
     logSuccess(
       removed.length === 0
         ? 'No previous run artifacts were present'

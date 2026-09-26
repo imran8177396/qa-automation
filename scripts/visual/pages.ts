@@ -1,4 +1,8 @@
-import { resolveDiscoveredPageTargets, type UiPageTarget } from '../lib/discovered-page-targets';
+import {
+  discoveryLandingHasLoginForm,
+  resolveDiscoveredPageTargets,
+  type UiPageTarget,
+} from '../lib/discovered-page-targets';
 import { resolveUiTarget } from '../lib/ui-target';
 import { PATHS } from '../lib/paths';
 import { readJsonIfExists } from '../discovery/write-json';
@@ -20,10 +24,7 @@ function visualPageName(page: UiPageTarget, source: UiPageTarget['source']): str
   if (source !== 'discovery') return page.name;
   if (page.path !== '/' && page.path !== '') return page.name;
   const ui = readJsonIfExists<UiInventory>(PATHS.uiInventoryFile);
-  const hasLogin = ui?.elements.some(
-    (el) => el.elementType === 'form' && /login/i.test(`${el.accessibleName ?? ''} ${el.locator ?? ''}`)
-  );
-  return hasLogin ? 'login' : page.name;
+  return discoveryLandingHasLoginForm(ui) ? 'login' : page.name;
 }
 
 export function resolveVisualPages(): { pages: VisualPageDef[]; source: UiPageTarget['source']; reason?: string } {

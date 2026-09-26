@@ -25,10 +25,6 @@ export function rowsOrUnavailable(rows: string[][], columnCount: number, reason:
   return [emptyTablePlaceholder(columnCount, reason).cells];
 }
 
-export function isUnavailableTableRow(row: string[] | undefined): boolean {
-  return Boolean(row?.[0]?.startsWith(`${NOT_AVAILABLE} —`));
-}
-
 export class EmptyTableError extends Error {
   constructor(message: string) {
     super(message);

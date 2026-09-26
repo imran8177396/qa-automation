@@ -116,9 +116,11 @@ describe('liveness → RECORDED status', () => {
     assert.notEqual(result.status, 'met');
   });
 
-  it('normalizes smoke to liveness', () => {
+  it('normalizes smoke and baseline aliases to liveness', () => {
     assert.equal(normalizePerformanceProfile('smoke'), 'liveness');
+    assert.equal(normalizePerformanceProfile('baseline'), 'liveness');
     assert.equal(normalizePerformanceProfile(undefined), 'liveness');
+    assert.equal(normalizePerformanceProfile('endurance'), 'soak');
   });
 
   it('still evaluates heavy-profile thresholds when numeric SLAs are set', () => {

@@ -10,6 +10,7 @@ import {
   shouldArchiveAllureReport,
   toPosixRelative,
 } from '../lib/report-kinds';
+import { collectEngineResults, writeEngineAllureResults } from '../lib/qa-report/collect-engine-results';
 
 export type AllureGenerateStatus = 'PRESENT' | 'NOT_EXECUTED' | 'BLOCKED';
 
@@ -39,6 +40,11 @@ export function generateAllureReport(): AllureGenerateResult {
   const resultsDir = PATHS.allureResults;
   fs.mkdirSync(resultsDir, { recursive: true });
   fs.mkdirSync(reportDir, { recursive: true });
+
+  // Feed existing engine summaries into the same Allure results dir Playwright uses.
+  // Missing engine files stay missing — never invent PASS rows.
+  const engineCollected = collectEngineResults();
+  writeEngineAllureResults(engineCollected.results, resultsDir);
 
   const empty: Omit<AllureGenerateResult, 'status' | 'attempted' | 'reason'> = {
     stdout: '',

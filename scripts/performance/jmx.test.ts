@@ -29,7 +29,7 @@ function config(): QaConfig {
 }
 
 describe('JMeter documented-API plans', () => {
-  it('targets JSONPlaceholder GET /posts and never invents Sauce Demo REST', () => {
+  it('targets the documented API path from config and never invents Sauce Demo REST', () => {
     const target = documentedApiTarget('https://jsonplaceholder.typicode.com', '/posts');
     assert.equal(target.host, 'jsonplaceholder.typicode.com');
     assert.equal(target.path, '/posts');
@@ -40,6 +40,23 @@ describe('JMeter documented-API plans', () => {
     assert.doesNotMatch(xml, /saucedemo/i);
     assert.match(xml, /0 XHR/);
     assert.match(xml, /RECORDED, never PASS/);
+  });
+
+  it('writes an empty host when the API URL is empty (runner must refuse)', () => {
+    const empty = documentedApiTarget('', '/posts');
+    assert.equal(empty.host, '');
+    assert.equal(empty.path, '/posts');
+    const xml = renderJmeterPlan({
+      projectName: 'QA Automation',
+      apiUrl: '',
+      requestPath: '/posts',
+      profile: 'liveness',
+      threads: 1,
+      rampUpSeconds: 1,
+      loopCount: 1,
+    });
+    assert.match(xml, /<stringProp name="HTTPSampler.domain"><\/stringProp>/);
+    assert.doesNotMatch(xml, /jsonplaceholder|typicode|saucedemo/i);
   });
 
   it('writes soak duration and marks heavy plans as authorized-only', () => {

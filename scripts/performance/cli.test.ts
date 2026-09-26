@@ -9,9 +9,22 @@ describe('performance CLI', () => {
     assert.equal(cli.authorizeHeavy, false);
   });
 
-  it('treats smoke as the liveness alias and still does not authorize heavy', () => {
-    const cli = resolvePerformanceCli(['--profile=smoke']);
-    assert.equal(cli.profile, 'liveness');
+  it('treats smoke and baseline as the liveness alias and still does not authorize heavy', () => {
+    assert.equal(resolvePerformanceCli(['--profile=smoke']).profile, 'liveness');
+    assert.equal(resolvePerformanceCli(['--profile=baseline']).profile, 'liveness');
+    assert.equal(resolvePerformanceCli(['--profile=smoke']).authorizeHeavy, false);
+  });
+
+  it('maps endurance to soak for CLI profile without authorizing heavy', () => {
+    const cli = resolvePerformanceCli(['--profile=endurance']);
+    assert.equal(cli.profile, 'soak');
+    assert.equal(cli.rawProfile, 'endurance');
+    assert.equal(cli.authorizeHeavy, false);
+  });
+
+  it('passes volume through without inventing a plan id', () => {
+    const cli = resolvePerformanceCli(['--profile=volume']);
+    assert.equal(cli.profile, 'volume');
     assert.equal(cli.authorizeHeavy, false);
   });
 

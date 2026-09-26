@@ -2,6 +2,7 @@ import { loadConfig } from '../lib/load-config';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
 import { writeJson } from '../discovery/write-json';
 import { PATHS } from '../lib/paths';
+import { loadExecutionIdentity } from '../lib/qa-report/execution-archive';
 import path from 'path';
 import type { EnterpriseReportModel } from '../lib/qa-report/enterprise-model';
 import { reportQualityWarnings } from '../lib/qa-report/quality-checks';
@@ -52,6 +53,7 @@ export async function writeProfessionalSqaReport(): Promise<ProfessionalReportPa
     const { model: _model, ...manifest } = paths;
     writeJson(path.join(PATHS.reports.summary, 'professional-report.json'), {
       generatedAt: new Date().toISOString(),
+      executionId: loadExecutionIdentity()?.executionId ?? result.model.meta.executionId,
       ...manifest,
     });
 

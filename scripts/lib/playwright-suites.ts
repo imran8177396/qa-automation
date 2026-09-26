@@ -23,8 +23,9 @@ export const PLAYWRIGHT_SUITE_NAMES = [
 export type PlaywrightSuiteName = (typeof PLAYWRIGHT_SUITE_NAMES)[number];
 
 /**
- * Product suites must match `qa.config.json` playwright.baseURL (or the
- * orchestrator `--url` / QA_PLAYWRIGHT_BASE_URL) or the run fails.
+ * Product suites must match the resolved Playwright origin (`--url` /
+ * QA_PLAYWRIGHT_BASE_URL / QA_WEBSITE_URL / last-target / urls.website)
+ * or the run fails.
  * Visual / responsive / accessibility / workflows are product suites so a live
  * target is never silently replaced by the local fixture.
  */
@@ -167,6 +168,7 @@ export function playwrightAllureReporterConfig(suiteName?: PlaywrightSuiteName):
     suiteTitle: true,
     environmentInfo: {
       suite,
+      executionId: process.env.QA_EXECUTION_ID?.trim() || 'NOT_SET',
       node_version: process.version,
       os_platform: os.platform(),
       os_release: os.release(),

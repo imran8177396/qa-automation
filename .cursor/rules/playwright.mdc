@@ -27,21 +27,21 @@ Avoid auto-generated IDs, deep DOM chains, index-only locators.
 ## Visual automation
 
 - Specs: `tests/e2e/visual/` — config: `playwright.visual.config.ts`.
-- Target is `QA_PLAYWRIGHT_BASE_URL` or `qa.config.json` `playwright.baseURL`. Do not silently run only the local fixture when a live origin is set.
+- Target is the resolved site URL (`--url` / `QA_PLAYWRIGHT_BASE_URL` / `QA_WEBSITE_URL` / last-target / `urls.website`). Do not silently run only the local fixture when a live origin is set.
 - Excluded from `npm run test:e2e`. Do not put `toHaveScreenshot` in functional specs.
-- Mismatch = failure. Update baselines **only** via `npm run test:visual:update`.
+- Runs on Chromium + Firefox + WebKit. Mismatch = failure. Update baselines **only** via `npm run test:visual:update`.
 - Reports: `reports/visual/`.
 
 ## Responsive testing
 
 - Specs: `tests/e2e/responsive/` — config: `playwright.responsive.config.ts`.
-- Viewport matrix on Chromium emulation — **not** real devices or Mobile Safari.
+- Viewport matrix on Chromium + Firefox + WebKit emulation — **not** real devices or Mobile Safari.
 - Reports: `reports/responsive/`.
 
 ## Cross-browser testing
 
-- Tag representative specs `@cross-browser`.
-- Run: `npm run test:e2e:cross-browser` (Chromium, Firefox, WebKit).
+- Every Playwright suite runs on Chromium, Firefox, and WebKit (desktop engines). `@cross-browser` is documentation for the dedicated matrix; execution does not depend on that tag.
+- Dedicated matrix: `npm run test:e2e:cross-browser`.
 - WebKit ≠ iOS Safari; Chromium ≠ Android Chrome.
 - Reports: `reports/cross-browser/matrix.md`.
 
@@ -54,7 +54,7 @@ Avoid auto-generated IDs, deep DOM chains, index-only locators.
 ## Implementation rules
 
 - URLs/credentials from env or `qa.config.json` — never hardcode secrets.
-- Use Playwright auto-waiting; explicit waits only when necessary.
+- Use Playwright auto-waiting; avoid arbitrary waits (`waitForTimeout`). Explicit waits only when necessary.
 - Independent specs — no order dependency.
 - Positive, negative, boundary mix per `exhaustive-testing.mdc`.
 
@@ -68,4 +68,10 @@ npm run test:e2e:cross-browser
 npm run test:workflows
 ```
 
-Distinguish application defects from automation defects. Never weaken assertions to pass.
+Distinguish application defects from automation defects. Inspect existing specs and page objects before changing them. After implementation, run the relevant command above and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.

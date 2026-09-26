@@ -10,6 +10,11 @@ import { buildPageMap, type PageMap } from './page-map';
 import { attachApiObserver, buildApiInventory, type ApiCallRecord, type ApiInventory } from './api-observe';
 import { buildUiInventory, scanPageUi, type UiElementRecord, type UiInventory } from './ui-scan';
 import { inferWorkflows, type WorkflowInventory } from './workflows';
+import {
+  apiCallsToInventoryInputs,
+  buildDiscoveryInventory,
+  type DiscoveryInventory,
+} from './inventory';
 import { readJsonIfExists, writeJson } from './write-json';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
 import { analyzeSeo, isSeoSkippedPage } from '../seo/analyze-seo';
@@ -21,6 +26,7 @@ export interface DiscoverResult {
   ui: UiInventory;
   api: ApiInventory;
   workflows: WorkflowInventory;
+  discoveryInventory: DiscoveryInventory;
 }
 
 export interface PageDiscoveryOutput {
@@ -157,5 +163,19 @@ export async function runFullDiscovery(url: string, maxPages?: number): Promise<
   writeJson(PATHS.workflowInventoryFile, workflows);
   logSuccess(`Workflow inventory: ${workflows.workflows.length} evidence-based workflow(s)`);
 
-  return { pageMap, ui, api, workflows };
+  const discoveryInventory = buildDiscoveryInventory({
+    pages: pageMap.pages.map((page) => ({
+      url: page.url,
+      title: page.title,
+      route: page.route,
+      source: 'crawl',
+    })),
+    uiElements: ui.elements,
+    apiRequests: apiCallsToInventoryInputs(api.calls),
+    auth: auth ?? pageMap.auth,
+  });
+  writeJson(PATHS.discoveryInventoryFile, discoveryInventory);
+  logSuccess(`Discovery inventory: ten-category normalized inventory → ${PATHS.discoveryInventoryFile}`);
+
+  return { pageMap, ui, api, workflows, discoveryInventory };
 }

@@ -35,23 +35,45 @@ export const MULTIBRANCH_ALWAYS_STAGES = [
   'Notification',
 ] as const;
 
+/** PR / feature lightweight tier (mirrors GitHub PR workflow). */
 export const MULTIBRANCH_LIGHTWEIGHT_STAGES = [
   'Application discovery',
-  'UI functional tests',
-  'Accessibility tests',
+  'unit',
+  'smoke',
+  'critical E2E',
   'API tests',
+  'Accessibility tests',
+  'security-light',
   'UI performance',
   'Lightweight JMeter smoke',
 ] as const;
 
-export const MULTIBRANCH_REGRESSION_STAGE = 'Full regression (qa:all)';
+export const MULTIBRANCH_REGRESSION_STAGE = 'Main / regression tier';
 
+/** Dedicated regression job: main tier + scheduled tier (not a PR job). */
 export const REGRESSION_JOB_STAGES = [
   'Checkout',
   'Environment validation',
   'Install dependencies',
   'TypeScript validation',
-  'Full regression (qa:all)',
+  'Discovery',
+  'full E2E',
+  'API',
+  'integration',
+  'contract',
+  'visual',
+  'responsive',
+  'accessibility',
+  'security',
+  'SEO',
+  'content',
+  'regression',
+  'dependency',
+  'compatibility matrix',
+  'AI regression',
+  'deep security',
+  'Destructive resilience',
+  'Production verification',
   'Allure report',
   'Artifact collection',
   'Final QA summary',
@@ -135,19 +157,8 @@ function environmentValidationStageStandalone(restoreFixture: boolean, applyProf
     }`;
 }
 
-function installStage(browserMode: 'profile' | 'full' | 'chromium'): string {
-  let browsers: string;
-  if (browserMode === 'profile') {
-    browsers = `          if (env.QA_PIPELINE_PROFILE == 'lightweight') {
-            qa.installPlaywrightBrowsers('chromium')
-          } else {
-            qa.installPlaywrightBrowsers('chromium firefox webkit')
-          }`;
-  } else if (browserMode === 'full') {
-    browsers = `          qa.installPlaywrightBrowsers('chromium firefox webkit')`;
-  } else {
-    browsers = `          qa.installPlaywrightBrowsers('chromium')`;
-  }
+function installStage(_browserMode: 'profile' | 'full' | 'chromium'): string {
+  const browsers = `          qa.installPlaywrightBrowsers('chromium firefox webkit')`;
 
   return `    stage('Install dependencies') {
       steps {
@@ -190,7 +201,7 @@ function reportArchiveNotifyStages(): string {
 
     stage('Final QA summary') {
       steps {
-        echo 'Final QA summary is written by report:all / qa:all to reports/summary/. Credentials are not printed.'
+        echo 'Final QA summary is written by report:all to reports/summary/. Credentials are not printed.'
       }
     }
 
@@ -228,16 +239,160 @@ function fixtureEnvBlock(): string {
   }`;
 }
 
+function mainRegressionStages(whenLightweight: boolean, includeScheduled: boolean): string {
+  const whenBlock = whenLightweight
+    ? `      when { environment name: 'QA_PIPELINE_PROFILE', value: 'regression' }\n`
+    : '';
+  const scheduledNote = includeScheduled
+    ? `
+    stage('dependency') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:dependencies')
+        }
+      }
+    }
+
+    stage('compatibility matrix') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:e2e:cross-browser')
+        }
+      }
+    }
+
+    stage('AI regression') {
+${whenBlock}      steps {
+        echo 'AI engine may be disabled in qa.config.json (tests.ai.enabled); runner exits NOT_TESTED / 0. Do not flip the flag here.'
+        script {
+          qa.npmRun('run test:ai')
+        }
+      }
+    }
+
+    stage('deep security') {
+${whenBlock}      steps {
+        echo 'Deep/pentest coverage is NOT_IMPLEMENTED — this is still the existing QA security script, not a new scanner.'
+        script {
+          qa.npmRun('run test:security')
+        }
+      }
+    }
+`
+    : '';
+
+  return `    stage('Discovery') {
+${whenBlock}      steps {
+        script {
+          qa.startFixtureSite()
+          qa.applyDiscoverUrl(params.DISCOVER_URL)
+          qa.npmRun('run discover -- ' + env.QA_WEBSITE_URL)
+        }
+      }
+    }
+
+    stage('full E2E') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:e2e')
+        }
+      }
+    }
+
+    stage('API') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:api')
+        }
+      }
+    }
+
+    stage('integration') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:integration')
+        }
+      }
+    }
+
+    stage('contract') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:contract')
+        }
+      }
+    }
+
+    stage('visual') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:visual')
+        }
+      }
+    }
+
+    stage('responsive') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:responsive')
+        }
+      }
+    }
+
+    stage('accessibility') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:accessibility')
+        }
+      }
+    }
+
+    stage('security') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:security')
+        }
+      }
+    }
+
+    stage('SEO') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:seo')
+        }
+      }
+    }
+
+    stage('content') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:content')
+        }
+      }
+    }
+
+    stage('regression') {
+${whenBlock}      steps {
+        script {
+          qa.npmRun('run test:regression')
+        }
+      }
+    }
+${scheduledNote}`;
+}
+
 export function renderMultibranchJenkinsfile(config: QaConfig): string {
   const branches = groovyStringList(jenkinsProtectedBranches(config));
 
   return `// Multibranch Pipeline entry. Controller Script Path: jenkins/Jenkinsfile
 // GitHub Branch Source discovers branches and pull requests automatically.
-// PR / feature: lightweight QA (not qa:all). Protected branches: npm run qa:all.
+// PR / feature: PR tier (unit, smoke, API, critical E2E, accessibility, security-light).
+// Protected branches: main/regression tier (not qa:all). Heavy JMeter is never authorized here.
 // Protected branches: ${jenkinsProtectedBranches(config).join(', ')}
 // Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
 // Never hardcode passwords, tokens, API keys, cookies, or credentials.
 // Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
+// Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — not a PR stage; no separate chaos runner.
 
 def qa
 
@@ -255,7 +410,7 @@ pipeline {
     string(
       name: 'DISCOVER_URL',
       defaultValue: '',
-      description: 'Optional live URL for protected-branch qa:all --url=. Empty uses the in-repo fixture. Ignored on PR/feature jobs. Do not put secrets in this field.'
+      description: 'Optional live URL for protected-branch discovery/tests. Empty uses the in-repo fixture. Ignored on PR/feature jobs. Do not put secrets in this field.'
     )
   }
 
@@ -289,7 +444,25 @@ ${typecheckStage()}
       }
     }
 
-    stage('UI functional tests') {
+    stage('unit') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:unit')
+        }
+      }
+    }
+
+    stage('smoke') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        script {
+          qa.npmRun('run test:smoke')
+        }
+      }
+    }
+
+    stage('critical E2E') {
       when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
       steps {
         script {
@@ -316,6 +489,16 @@ ${typecheckStage()}
       }
     }
 
+    stage('security-light') {
+      when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
+      steps {
+        echo 'security-light: existing QA security scan (not a pentest).'
+        script {
+          qa.npmRun('run test:security')
+        }
+      }
+    }
+
     stage('UI performance') {
       when { environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' }
       steps {
@@ -335,12 +518,11 @@ ${typecheckStage()}
     stage('${MULTIBRANCH_REGRESSION_STAGE}') {
       when { environment name: 'QA_PIPELINE_PROFILE', value: 'regression' }
       steps {
-        echo 'Protected-branch run: visual, responsive, cross-browser, accessibility, API, UI performance, JMeter liveness, security, SEO/content, failure analysis, retest, coverage, Allure, and final summary execute inside npm run qa:all. Heavy JMeter is not authorized.'
-        script {
-          qa.runFullRegression(params.DISCOVER_URL)
-        }
+        echo 'Protected-branch main/regression tier. Scheduled extras (dependencies, cross-browser, AI) live on Jenkinsfile.regression / GitHub schedule. Heavy JMeter is not authorized. Chaos stays NOT_TESTED.'
       }
     }
+
+${mainRegressionStages(true, false)}
 
 ${reportArchiveNotifyStages()}
   }
@@ -352,9 +534,13 @@ ${postAlways()}
 
 export function renderRegressionJenkinsfile(): string {
   return `// Dedicated Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.regression
-// Always runs npm run qa:all (liveness JMeter only). Not a pull-request job.
+// Main/regression tier + scheduled-tier commands. Not a pull-request job.
+// AUTHORIZE_DESTRUCTIVE / ALLOW_PRODUCTION default false (manual authorization).
+// Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — no separate chaos runner.
+// Heavy JMeter is not authorized here (use Jenkinsfile.performance).
 // Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
 // Never hardcode passwords, tokens, API keys, cookies, or credentials.
+// Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
 
 def qa
 
@@ -372,7 +558,17 @@ pipeline {
     string(
       name: 'DISCOVER_URL',
       defaultValue: '',
-      description: 'Optional live URL for qa:all --url=. Empty uses the in-repo fixture. Do not put secrets in this field.'
+      description: 'Optional live URL for discovery/tests. Empty uses the in-repo fixture. Do not put secrets in this field.'
+    )
+    booleanParam(
+      name: 'AUTHORIZE_DESTRUCTIVE',
+      defaultValue: false,
+      description: 'Must be true to run destructive resilience (QA_RESILIENCE_AUTHORIZE / --authorize-destructive). Default false. Chaos remains NOT_TESTED.'
+    )
+    booleanParam(
+      name: 'ALLOW_PRODUCTION',
+      defaultValue: false,
+      description: 'Must be true to run npm run test:production-verification. Default false. Runner still respects tests.productionVerification.enabled.'
     )
   }
 
@@ -387,11 +583,29 @@ ${installStage('full')}
 
 ${typecheckStage()}
 
-    stage('Full regression (qa:all)') {
+${mainRegressionStages(false, true)}
+
+    stage('Destructive resilience') {
+      when {
+        expression { return params.AUTHORIZE_DESTRUCTIVE == true }
+      }
       steps {
-        echo 'Runs npm run qa:all (complete orchestrator: discovery through Allure and final summary). Heavy JMeter is not authorized.'
+        echo 'Chaos is not a separate runner — stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE; no chaos tool.'
         script {
-          qa.runFullRegression(params.DISCOVER_URL)
+          withEnv(['QA_RESILIENCE_AUTHORIZE=true']) {
+            qa.npmRun('run test:resilience -- --authorize-destructive')
+          }
+        }
+      }
+    }
+
+    stage('Production verification') {
+      when {
+        expression { return params.ALLOW_PRODUCTION == true }
+      }
+      steps {
+        script {
+          qa.npmRun('run test:production-verification')
         }
       }
     }
@@ -410,8 +624,10 @@ export function renderPerformanceJenkinsfile(): string {
   return `// Dedicated / manual Jenkins Pipeline job. Script Path: jenkins/Jenkinsfile.performance
 // Heavy JMeter (load / stress / spike / soak) only. AUTHORIZE_HEAVY defaults to false.
 // Never a production host by default. allowHeavyAgainst must still allow the API host.
+// Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — not part of this performance job.
 // Cursor is not a Jenkins plugin. This file calls npm / npx / existing scripts only.
 // Never hardcode passwords, tokens, API keys, cookies, or credentials.
+// Credentials (Secret text IDs, empty if missing): qa-username, qa-password, qa-api-token, qa-api-url, qa-api-username, qa-api-password, qa-website-url
 
 def qa
 

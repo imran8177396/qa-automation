@@ -64,17 +64,39 @@ test('generated /solutions script still asserts 404 and uses a descriptive flagg
     method: 'GET',
     path: '/solutions',
     assertionFlags: solutions.assertionFlags,
+    expectedStatus: 404,
   }).join('\n');
   assert.match(script, /GET \/solutions returns HTTP 404 \[FLAGGED:/);
   assert.match(script, /pm\.response\.to\.have\.status\(404\)/);
   assert.doesNotMatch(script, /to\.have\.status\(200\)/);
+  assert.match(script, /qaNeedsShapeDetail/);
+  assert.match(script, /actual responseShape/);
 });
 
 test('UNVERIFIED requests do not assert an observed status code', () => {
   const script = buildPostmanTestScript(
     resolveAssertions({ name: 'PUT /', method: 'PUT', path: '/', expectedStatus: 'UNVERIFIED', assertions: { expectJson: false } }),
-    { method: 'PUT', path: '/' }
+    { method: 'PUT', path: '/', expectedStatus: 'UNVERIFIED' }
   ).join('\n');
   assert.match(script, /status not asserted — UNVERIFIED/);
   assert.doesNotMatch(script, /to\.have\.status\(/);
+  assert.match(script, /qaExpectedStatus = "UNVERIFIED"/);
+});
+
+test('generated status script embeds 400/5xx wording with expected status (not flipped)', () => {
+  const script = buildPostmanTestScript(
+    resolveAssertions({
+      name: 'GET /posts',
+      method: 'GET',
+      path: '/posts',
+      expectedStatus: 200,
+      assertions: { statusCode: 200, expectJson: true },
+    }),
+    { method: 'GET', path: '/posts', expectedStatus: 200 }
+  ).join('\n');
+  assert.match(script, /qaCode === 400 \|\| \(qaCode >= 500 && qaCode <= 599\)/);
+  assert.match(script, /qaExpectedStatus = "200"/);
+  assert.match(script, /actual responseShape:/);
+  assert.match(script, /pm\.expect\(qaCode, qaDetail\)\.to\.eql\(200\)/);
+  assert.match(script, /pm\.response\.to\.have\.status\(200\)/);
 });

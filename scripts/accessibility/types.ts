@@ -1,3 +1,5 @@
+import { A11Y_AUTOMATED_LIMIT as A11Y_AUTOMATED_LIMIT_FROM_SAFETY } from '../core/safety-policy';
+
 export interface AccessibilityPageDef {
   name: string;
   path: string;
@@ -6,6 +8,9 @@ export interface AccessibilityPageDef {
 export type AccessibilityFindingStatus = 'PASS' | 'FAIL' | 'NOTE' | 'NOT_APPLICABLE';
 
 export type AccessibilityImpact = 'critical' | 'serious' | 'moderate' | 'minor' | 'info';
+
+/** Re-export: automated axe is not full WCAG compliance. */
+export const A11Y_AUTOMATED_LIMIT = A11Y_AUTOMATED_LIMIT_FROM_SAFETY;
 
 export interface AccessibilityFinding {
   status: AccessibilityFindingStatus;
@@ -72,4 +77,5 @@ export const A11Y_LIMITATIONS = [
   'Touch-target checks measure CSS bounding boxes in Chromium — not a real device',
   'Form error announcement is not exercised by submitting Login (generated a11y does not submit)',
   'These results do not constitute WCAG 2.x conformance certification',
+  A11Y_AUTOMATED_LIMIT,
 ];

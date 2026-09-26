@@ -69,6 +69,7 @@ test('renderFindingsMarkdown includes the WCAG disclaimer and NOT_APPLICABLE row
   assert.match(md, new RegExp(A11Y_DISCLAIMER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(md, /QA-level automated accessibility/);
   assert.match(md, /not a WCAG 2\.x conformance certification/i);
+  assert.match(md, /Automated axe checks are not full WCAG compliance/);
   assert.match(md, /NOT_APPLICABLE \(not invented\)/);
   assert.match(md, /No <nav>/);
   assert.match(md, /label/);

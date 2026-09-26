@@ -3,7 +3,13 @@ import type { ExecutionEvidence } from './types';
 import { calculateDimensions } from './dimensions';
 import { deriveCoverageFormula } from './formula';
 import { deriveRiskAreas } from './risk-areas';
+import {
+  calculateTestTypeDimensions,
+  rollupTestTypeCoveragePct,
+  type TestTypeDimensionInput,
+} from './test-type-dimensions';
 import { uiExecutionPassRate } from '../lib/pass-rate';
+import type { QaConfig } from '../types';
 import { classifyItem, emptyByStatus, isCoveredStatus, isTestable, percent, toCoverageRecord } from './status';
 
 export function isTested(item: InventoryItem): boolean {
@@ -23,6 +29,10 @@ export function calculateCoverage(
     notes: string[];
     pagesDiscoveredRaw?: number;
     pagesDiscoveredUnique?: number;
+    config?: QaConfig | null;
+    testTypeDimensions?: Partial<
+      Pick<TestTypeDimensionInput, 'engineSummaries' | 'loadEngineSummariesFromDisk' | 'env'>
+    >;
   }
 ): CoverageReport {
   const testableItems = items.filter(isTestable);
@@ -112,6 +122,15 @@ export function calculateCoverage(
 
   const dimensions = calculateDimensions(items, records);
   const riskAreas = deriveRiskAreas(items, records);
+  const testTypeDimensions = calculateTestTypeDimensions({
+    items,
+    records,
+    config: meta.config ?? null,
+    loadEngineSummariesFromDisk: meta.testTypeDimensions?.loadEngineSummariesFromDisk ?? false,
+    engineSummaries: meta.testTypeDimensions?.engineSummaries,
+    env: meta.testTypeDimensions?.env,
+  });
+  const overallTestTypeCoveragePct = rollupTestTypeCoveragePct(testTypeDimensions);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -122,6 +141,8 @@ export function calculateCoverage(
     totals,
     byKind,
     dimensions,
+    testTypeDimensions,
+    overallTestTypeCoveragePct,
     formula: deriveCoverageFormula(items, records, totals, {
       pagesDiscoveredRaw: meta.pagesDiscoveredRaw,
       pagesDiscoveredUnique: meta.pagesDiscoveredUnique,

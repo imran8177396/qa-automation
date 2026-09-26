@@ -12,7 +12,7 @@ Provide a single, config-driven framework that can:
 2. Run UI, API, performance (liveness), accessibility, visual, responsive, security, SEO, and content checks.
 3. Classify failures, retest automation defects without erasing the original FAIL, measure coverage from inventory (not pass rate), and write Allure / Playwright HTML / five-layer Word-HTML-PDF reports.
 
-The checked-in example target is **[Sauce Demo](https://www.saucedemo.com/)** for UI (`qa.config.json` → `urls.website` / `playwright.baseURL`). The documented API is **[JSONPlaceholder](https://jsonplaceholder.typicode.com)** (`urls.api`, Postman requests, JMeter `path` `/posts`). Sauce Demo login-page REST is never invented — discovery found no XHR/fetch API there.
+The engine has **no live default website or API**. Set the target via `--url` / `QA_WEBSITE_URL` / `QA_PLAYWRIGHT_BASE_URL` (and optionally `qa.config.json` `urls.website`) for UI, and `QA_API_URL` (or `urls.api`) for the documented API. Empty targets fail with REQUIRES_CONFIGURATION — they do not fall through to a public demo. Hand-written example specs may mention Swag Labs only when you actually point the run at that origin; Postman/JMeter path catalogs (e.g. `/posts`) are configured tests, not a baked-in host. Undocumented UI-page REST is never invented.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ QA-AUTOMATION/
 │   ├── templates/                    # Report format template
 │   └── input|output/qa-test-results/ # Dated Word/HTML/PDF packs (gitignored; qa:clean does not wipe)
 ├── discovery/                        # Generated inventories (*.json gitignored)
-├── reports/                          # Ephemeral tool output (gitignored)
+├── reports/                          # Current-run tool output (gitignored; history/ PKT folders + KPI JSON + allure/history preserved)
 ├── visual-baselines/                 # Committed screenshot goldens (actual/diff ignored)
 ├── playwright*.config.ts
 ├── package.json
@@ -68,7 +68,7 @@ Jenkins is an **additional** CI path (`jenkins/`). GitHub Actions workflows stay
 | **Node.js 18+** (x64 or arm64) | `preflight` requires major ≥ 18 |
 | **npm** (lockfile install) | `package-lock.json` is committed; CI uses `npm ci` |
 | **Git** | Local history and optional later publish |
-| **Playwright browsers** | `npx playwright install` (CI installs Chromium) |
+| **Playwright browsers** | `npx playwright install` (CI installs Chromium, Firefox, and WebKit) |
 | **Java 17+ JRE/JDK** | JMeter non-GUI and Allure CLI |
 | **Apache JMeter** on `PATH` or `JMETER_HOME` | `npm run test:performance` (CI installs 5.6.3) |
 | Optional **Lighthouse CLI** | `npm run test:lighthouse`; missing CLI is recorded, not faked |
@@ -98,15 +98,15 @@ Use `npm ci` in CI or when you want a lockfile-exact install. Do not delete `pac
 
    On Unix: `cp .env.example .env`.
 
-2. Fill **documented** values only. Sauce Demo prints accepted usernames and the shared password on the login page — copy those into `QA_USERNAME` / `QA_PASSWORD` locally if you need inventory browse. Leave them empty to keep login-page-only checks (`REQUIRES_CONFIGURATION` for gated inventory). JSONPlaceholder in this config uses `postman.auth.type: none` — leave API tokens empty unless you change the contract.
+2. Fill **documented** values only. Credentials come from env and are never hardcoded — leave `QA_USERNAME` / `QA_PASSWORD` empty when the target does not document them (`REQUIRES_CONFIGURATION` for gated inventory). Leave API tokens empty unless `postman.auth` documents a contract.
 
 | Variable | Role |
 | --- | --- |
-| `QA_WEBSITE_URL` | Site origin (example: `https://www.saucedemo.com/`). Also used by `qa:all` when no `--url=` / positional URL is passed. |
-| `QA_API_URL` | Documented API base (example: `https://jsonplaceholder.typicode.com`) |
-| `QA_PLAYWRIGHT_BASE_URL` | Playwright origin (example: `https://www.saucedemo.com`) |
+| `QA_WEBSITE_URL` | Site origin. Used by `qa:all` when no `--url=` / positional URL is passed, before the persisted last target. |
+| `QA_API_URL` | Documented API base (required for Postman/JMeter when `urls.api` is empty) |
+| `QA_PLAYWRIGHT_BASE_URL` | Playwright origin |
 | `QA_PLAYWRIGHT_HEADLESS` | `true` / `false` |
-| `QA_PLAYWRIGHT_BROWSERS` | Optional engine list override (otherwise `qa.config.json` `playwright.browsers`) |
+| `QA_PLAYWRIGHT_BROWSERS` | Generated list of compulsory engines (`chromium,firefox,webkit`). Not a way to drop an engine. |
 | `QA_LOGIN_URL` | Optional login URL if you set `urls.login` in config |
 | `QA_USERNAME` / `QA_PASSWORD` | UI credentials when the target documents them |
 | `QA_API_TOKEN` / `QA_API_USERNAME` / `QA_API_PASSWORD` | API auth only when `postman.auth` documents a contract |
@@ -119,15 +119,15 @@ Use `npm ci` in CI or when you want a lockfile-exact install. Do not delete `pac
 
 | Command | What it runs |
 | --- | --- |
-| `npm run test:e2e` | Functional UI (`tests/e2e`, excludes visual/responsive/a11y/workflows/performance) |
-| `npm run test:e2e:headed` | Same suite, headed browser |
+| `npm run test:e2e` | Functional UI on Chromium + Firefox + WebKit (`tests/e2e`, excludes visual/responsive/a11y/workflows/performance) |
+| `npm run test:e2e:headed` | Same suite, headed browsers |
 | `npm run test:e2e:debug` | Playwright inspector |
 | `npm run test:e2e:report` | Open the last e2e HTML report |
-| `npm run test:e2e:cross-browser` | Representative `@cross-browser` specs on Chromium, Firefox, WebKit engines (not real devices) |
+| `npm run test:e2e:cross-browser` | Dedicated matrix of representative `@cross-browser` specs (same 3 desktop engines — not real devices). Every other Playwright suite also runs those engines. |
 | `npm run test:ui` | Generate + execute discovery UI checks, then coverage |
 | `npm run test:visual` | Screenshot comparison; **does not** rewrite goldens |
 | `npm run test:visual:update` | Rewrite baselines only after review (`--approve-baseline-update`) |
-| `npm run test:responsive` | Desktop/laptop/tablet/mobile **emulation** |
+| `npm run test:responsive` | Desktop/laptop/tablet/mobile **emulation** on Chromium + Firefox + WebKit |
 | `npm run test:accessibility` | axe-core + keyboard/structure |
 | `npm run test:workflows` | Documented UI+API pairs only |
 | `npm run qa:test -- <url>` | Discovery-driven live crawl + non-destructive checks |
@@ -136,7 +136,7 @@ Failure artifacts (screenshot / video / trace) go under `test-results/` (gitigno
 
 ## API commands
 
-Requests and assertions are defined in `qa.config.json` → `postman.requests` (JSONPlaceholder `/posts` and related documented cases). Sync, then run:
+Requests and assertions are defined in `qa.config.json` → `postman.requests` (path catalog such as `/posts` — host comes from `QA_API_URL` / `urls.api`). Sync, then run:
 
 ```bash
 npm run qa:sync
@@ -152,7 +152,7 @@ Reports: `reports/postman/`. Undocumented / `UNVERIFIED` requests are excluded f
 
 ## JMeter commands
 
-Default profile is **`liveness`** (`qa.config.json` `jmeter.defaultProfile`). `smoke` is an alias of liveness. The stage records measurements as **RECORDED** when thresholds are `null` — this config does not invent a P95 or error-rate SLA. Target path is documented API `GET /posts`, not Sauce Demo REST.
+Default profile is **`liveness`** (`qa.config.json` `jmeter.defaultProfile`). `smoke` is an alias of liveness. The stage records measurements as **RECORDED** when thresholds are `null` — this config does not invent a P95 or error-rate SLA. Target host comes from the resolved API URL; path is `jmeter.path` (e.g. `/posts`).
 
 ```bash
 npm run test:performance
@@ -179,6 +179,7 @@ npm run report:allure
 npm run report:playwright
 npm run report:playwright -- --open
 npm run report:final
+npm run report:master
 npm run report:all
 ```
 
@@ -187,6 +188,7 @@ npm run report:all
 | `npm run report:allure` | `allure generate` → `reports/allure/report` (previous HTML archived under `reports/allure/history/`) |
 | `npm run report:playwright` | Index Playwright HTML paths |
 | `npm run report:final` | Unified markdown/JSON + five-layer Word/HTML/PDF |
+| `npm run report:master` | MASTER-QA-REPORT.html/.json in the PKT history folder (also written by `qa:all` after archive) |
 | `npm run report:all` | Allure + Playwright index + existing Postman/JMeter + `report:final` + `reports/summary/report-index.json` |
 
 If the Allure CLI cannot run, the stage is **BLOCKED** — do not claim Allure succeeded. Open `reports/allure/report/index.html` after a successful generate. `qa:all` includes Allure, Playwright report indexing, and the final summary as later stages.
@@ -196,7 +198,7 @@ If the Allure CLI cannot run, the stage is **BLOCKED** — do not claim Allure s
 ```bash
 npm run qa:clean
 npm run typecheck && npm run qa:all
-npm run qa:all -- --url=https://www.saucedemo.com/
+npm run qa:all -- --url=https://example.com/
 npm run qa:all -- http://127.0.0.1:4173/
 npm run qa:all -- --fail-fast
 npm run qa:all -- --keep-artifacts
@@ -204,14 +206,14 @@ npm run qa:all -- --keep-artifacts
 
 `qa:all` is the primary complete run. It:
 
-1. Cleans **ephemeral** artifacts (`reports/`, `test-results/`, discovery JSON, and related scratch). It does **not** delete dated packs under `docs/input|output/qa-test-results/`.
+1. Cleans **allowlisted current-run** artifacts (`test-results/`, discovery JSON, current Playwright/Allure/Postman/JMeter dirs, and related scratch). It does **not** delete `reports/history/`, `reports/allure/history/`, dated packs under `docs/input|output/qa-test-results/`, or the gitignored last-target file `qa.last-target.json`.
 2. Runs `qa:sync`.
 3. Spawns **23 child stages** (20 named contract steps; performance is one process covering UI timing + JMeter liveness). Extra stages include dependencies, content, workflows, and collect.
 4. Records every exit code in `reports/orchestrator/summary.json` and `reports/orchestrator/stages.md`.
 5. Continues after failed stages unless `--fail-fast`.
 6. Runs retest with `--automation-only` so application defects are not silently re-run as a pass.
 
-URL resolution: `--url=` or a positional URL, else `QA_WEBSITE_URL`, else a previous discovery seed, else loopback Playwright base, else `qa.config.json` `urls.website`. Loopback URLs start the in-repo fixture site.
+URL resolution: `--url=` or a positional URL, else `QA_PLAYWRIGHT_BASE_URL` / `QA_WEBSITE_URL`, else the gitignored last target (`qa.last-target.json`), else a previous discovery seed, else optional loopback `playwright.baseURL` when explicitly set, else `qa.config.json` `urls.website` (may be empty). A new `--url` overwrites the last target immediately. Every Playwright suite uses that resolved URL as `use.baseURL`. The next `qa:all` or `test:e2e` without `--url` reuses that persisted origin. Loopback URLs start the in-repo fixture site. Loopback is persisted only when you pass it explicitly. If no valid URL can be resolved, the run fails with REQUIRES_CONFIGURATION — no public demo is substituted.
 
 Related: `npm run test:all` is **core tools only** (Playwright → Postman → JMeter + enterprise report), not the full orchestrator.
 
@@ -252,7 +254,7 @@ Workflows live in `.github/workflows/` and are regenerated by `npm run qa:sync` 
 
 | Workflow | Trigger | Purpose |
 | --- | --- | --- |
-| `qa-automation.yml` (**QA CI**) | **pull_request** to `main` or `master`, and **workflow_dispatch** | Lightweight: typecheck, sync, Chromium, fixture at `http://127.0.0.1:4173`, discovery, Playwright e2e, Postman, accessibility, JMeter **liveness**, `report:all`, artifacts. Not `qa:all`. Never `--authorize-heavy`. |
+| `qa-automation.yml` (**QA CI**) | **pull_request** to `main` or `master`, and **workflow_dispatch** | Lightweight: typecheck, sync, Chromium + Firefox + WebKit, fixture at `http://127.0.0.1:4173`, discovery, Playwright e2e, Postman, accessibility, JMeter **liveness**, `report:all`, artifacts. Not `qa:all`. Never `--authorize-heavy`. |
 | `qa-regression.yml` | **push** to `main`/`master`, weekly **schedule**, **workflow_dispatch** | Full `npm run qa:all` (visual, cross-browser, remaining stages). Still liveness JMeter only. Optional `discover_url` input for `--url=`. |
 | `qa-performance-heavy.yml` | **workflow_dispatch** (type `authorize-heavy`) and optional weekly **schedule** | Heavy JMeter (`load` / `stress` / `spike` / `soak`). Schedule also needs Actions variable `QA_PERF_AUTHORIZE_SCHEDULE=true`. Never `pull_request`. |
 
@@ -281,13 +283,13 @@ A checked-in Jenkinsfile does **not** mean Jenkins is running. Remaining control
 | Symptom | What to check |
 | --- | --- |
 | `preflight` fails on Node | Install Node 18+ (`node -v`). |
-| Playwright browsers missing | `npx playwright install` (CI: `npx playwright install --with-deps chromium`). |
+| Playwright browsers missing | `npx playwright install` (CI: `npx playwright install --with-deps chromium firefox webkit`). A missing engine is recorded BLOCKED / NOT_TESTED — it is not silently skipped. |
 | JMeter / Java not found | Install a JRE 17+ and JMeter; set `JAVA_HOME` / `JMETER_HOME` or put `jmeter` on `PATH`. Preflight and the performance stage record the gap — do not fake JTL results. |
 | Allure HTML missing | Need Java + `npm run report:allure` after a Playwright run that wrote `reports/allure/results`. Failure is BLOCKED, not a silent skip. |
 | Login / inventory gated | Set documented `QA_USERNAME` / `QA_PASSWORD` in `.env`. Empty credentials → `REQUIRES_CONFIGURATION`, not a hidden skip. |
-| Tests hit the fixture instead of Sauce Demo | Set `QA_PLAYWRIGHT_BASE_URL` / `QA_WEBSITE_URL` or pass `--url=`. Product suites fail if the origin does not match the configured live target. |
+| Tests hit the fixture instead of your site | Set `QA_PLAYWRIGHT_BASE_URL` / `QA_WEBSITE_URL` or pass `--url=`. Product suites fail if the origin does not match the configured live target. |
 | Heavy JMeter refused | Expected without `--authorize-heavy` / `QA_PERF_AUTHORIZE`, or when the API host is not loopback and not in `allowHeavyAgainst`. |
-| `qa:clean` removed `reports/` but dated Word packs remain | Intended. Historical packs under `docs/input\|output/qa-test-results/` are retained on disk and stay gitignored. |
+| `qa:clean` removed current-run dirs but dated Word packs remain | Intended. `reports/history/`, `reports/allure/history/`, and packs under `docs/input\|output/qa-test-results/` are retained. |
 | Coverage looks like “100%” | It is not claimed here. Read `reports/coverage/coverage.json` and `docs/uncovered-test-items.md`. Coverage is covered ÷ testable discovered items. |
 | A test failed | Run `npm run analyze:failures`, then `npm run retest`. Do not weaken assertions to go green. |
 | Accidental secret in a file | Remove it from the working tree; do not `git add .env`. Rotating leaked credentials is a human step — this README does not rewrite Git history. |
@@ -301,7 +303,7 @@ A checked-in Jenkinsfile does **not** mean Jenkins is running. Remaining control
 | `npm run discover -- <url>` | Page / UI / workflow / API inventories |
 | `npm run coverage` | 13-dimension coverage from discovered items |
 | `npm run qa:sync` | Regenerate configs from `qa.config.json` |
-| `npm run qa:clean` | Delete ephemeral run artifacts only |
+| `npm run qa:clean` | Delete allowlisted current-run artifacts only |
 | `npm run test:security` | QA-level HTTPS/headers/cookies/exposure — not a pentest |
 | `npm run test:seo` | Technical SEO — not a ranking audit |
 | `npm run test:content` | Structural content QA — not fact-checking |
@@ -310,6 +312,7 @@ A checked-in Jenkinsfile does **not** mean Jenkins is running. Remaining control
 | `npm run retest` | Controlled retest; original FAIL is preserved |
 | `npm run test:unit` | Framework unit tests |
 | `npm run docs:qa-report` | Enterprise DOCX/HTML/PDF on demand |
+| `npm run report:master` | MASTER-QA-REPORT.html/.json in the PKT history folder |
 | `npm run rules:sync` | `.cursor/rules/*.json` → `.mdc` |
 
 ## Reports and verdicts

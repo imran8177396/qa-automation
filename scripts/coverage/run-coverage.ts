@@ -76,6 +76,8 @@ export function runCoverage(): CoverageReport {
     notes,
     pagesDiscoveredRaw,
     pagesDiscoveredUnique,
+    config,
+    testTypeDimensions: { loadEngineSummariesFromDisk: true },
   });
 
   if (report.targetMismatch) {
@@ -112,6 +114,8 @@ export function runCoverage(): CoverageReport {
     complete: report.totals.complete,
     passRatePercent: report.totals.passRatePercent,
     dimensions: report.dimensions,
+    testTypeDimensions: report.testTypeDimensions,
+    overallTestTypeCoveragePct: report.overallTestTypeCoveragePct,
     riskAreas: report.riskAreas,
   };
 
@@ -130,6 +134,9 @@ export function runCoverage(): CoverageReport {
     generatedAt: report.generatedAt,
     seedUrl: report.seedUrl,
     dimensions: report.dimensions,
+    testTypeDimensions: report.testTypeDimensions,
+    // Overall = mean of MEASURED coveragePct only; null when none measured.
+    overallTestTypeCoveragePct: report.overallTestTypeCoveragePct,
   });
 
   return report;
@@ -169,6 +176,16 @@ export function printCoverageSummary(report: CoverageReport): void {
   for (const row of report.dimensions) {
     console.log(
       `${row.label.padEnd(24)} ${row.coveragePercent}%  (${row.covered}/${row.testable} testable; ${row.discovered} discovered; TESTED ${row.byStatus.TESTED} FAILED ${row.byStatus.FAILED} BLOCKED ${row.byStatus.BLOCKED} UNCOVERED ${row.uncovered})`
+    );
+  }
+  logStep('Test-type dimensions (inventory/engine — not pass rate)');
+  const overall =
+    report.overallTestTypeCoveragePct == null ? 'null (none measured)' : `${report.overallTestTypeCoveragePct}%`;
+  console.log(`overall (MEASURED mean) ${overall}`);
+  for (const row of report.testTypeDimensions) {
+    const pct = row.coveragePct == null ? 'n/a' : `${row.coveragePct}%`;
+    console.log(
+      `${row.dimension.padEnd(16)} ${row.status.padEnd(24)} testable=${row.testable} tested=${row.tested} failed=${row.failed} coverage=${pct}${row.reason ? ` — ${row.reason}` : ''}`
     );
   }
   logStep(`Risk areas (${report.riskAreas.length})`);

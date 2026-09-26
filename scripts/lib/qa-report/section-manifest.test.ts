@@ -18,6 +18,7 @@ test('Layer 2 numbers 2.11 SEO through 2.17 Retest from manifest order', () => {
   assert.equal(byId.visual, '2.15');
   assert.equal(byId['failure-analysis'], '2.16');
   assert.equal(byId.retest, '2.17');
+  assert.equal(byId['engine-results'], '2.18');
   assert.equal(byId['failure-detail'], '2.6.5');
   assert.equal(byId.lighthouse, '2.8.2');
 });

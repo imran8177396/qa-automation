@@ -1,10 +1,10 @@
 import type { HttpMethod, PostmanAuthConfig, PostmanRequestConfig, QaConfig } from '../types';
-import { buildPostmanTestScript, resolveAssertions } from './postman-tests';
+import { buildPostmanTestScript, resolveAssertions, resolveExpectedStatus } from './postman-tests';
 
 const SUPPORTED_METHODS: ReadonlySet<HttpMethod> = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
 export const CONFIG_NOT_DISCOVERY_DESCRIPTION =
-  'Requests are generated only from qa.config.json postman.requests. Sauce Demo discovery found 0 xhr/fetch/websocket APIs — login-page REST paths are never invented. Authentication/authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION unless postman.auth documents a contract and QA_API_TOKEN (or basic credentials) are provided at runtime. Secrets are never written into this collection.';
+  'Requests are generated only from qa.config.json postman.requests. When discovery records 0 xhr/fetch/websocket APIs, login-page REST paths are never invented. Authentication/authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION unless postman.auth documents a contract and QA_API_TOKEN (or basic credentials) are provided at runtime. Secrets are never written into this collection.';
 
 export function isSupportedHttpMethod(method: string): method is HttpMethod {
   return SUPPORTED_METHODS.has(method as HttpMethod);
@@ -79,6 +79,7 @@ export function buildPostmanCollection(config: QaConfig): Record<string, unknown
     auth: buildCollectionAuth(config.postman.auth),
     item: activeRequests.map((request) => {
       const assertions = resolveAssertions(request, config.postman.assertions);
+      const navDefault = config.postman.expectationPolicy?.navReachableDefault ?? 200;
       const headers = requestHeaders(request);
       const query = Object.entries(request.query ?? {}).map(([key, value]) => ({ key, value }));
       const querySuffix =
@@ -94,6 +95,7 @@ export function buildPostmanCollection(config: QaConfig): Record<string, unknown
                 method: request.method,
                 path: request.path,
                 assertionFlags: request.assertionFlags,
+                expectedStatus: resolveExpectedStatus(request, navDefault),
               }),
               type: 'text/javascript',
             },

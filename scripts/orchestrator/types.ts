@@ -1,5 +1,6 @@
 import { SUITE_STATUSES, type SuiteStatus } from '../lib/suite-status';
 import type { StagePhase } from '../lib/stage-timeline';
+import type { OrchestratorPhaseName } from './phases';
 
 export const STAGE_STATUSES = SUITE_STATUSES;
 export type StageStatus = SuiteStatus;
@@ -9,7 +10,10 @@ export interface StageDefinition {
   key: string;
   name: string;
   script: string | null;
+  /** Coarse timeline phase (setup / discovery / inventory / execution / post). */
   phase: StagePhase;
+  /** Stable 11-phase orchestrator flow name from phases.ts. */
+  orchestratorPhase: OrchestratorPhaseName;
   args?: string[];
   skip?: (ctx: OrchestratorContext) => string | null;
   /**
@@ -65,11 +69,24 @@ export interface OrchestratorSummary {
   skipped: string[];
   passed: string[];
   notExecuted: string[];
-  overallStatus: 'PASS' | 'FAIL' | 'BLOCKED' | 'WARNING';
+  overallStatus: 'PASS' | 'FAIL' | 'BLOCKED';
+  executionId?: string;
   exitCode: number;
   orderingValid: boolean;
   orderingViolations: string[];
   suiteRollup?: Array<{ label: string; status: string; percent?: number; detail?: string }>;
+  qualityGate?: {
+    status: 'PASS' | 'FAIL' | 'BLOCKED';
+    reasons: Array<{ code: string; detail: string }>;
+  };
+  /**
+   * Release-gate recording only. When qualityGate.blockRelease is not true,
+   * block is false and exitCode is unchanged by this field.
+   */
+  releaseGate?: {
+    block: boolean;
+    reasons: string[];
+  };
 }
 
 export const ORCHESTRATOR_DISCLAIMER =

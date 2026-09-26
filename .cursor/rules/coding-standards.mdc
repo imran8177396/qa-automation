@@ -46,4 +46,14 @@ const { password } = getCredentials();
 npm run typecheck
 ```
 
-Changes that touch tests must also run the relevant test command and fix failures before finishing.
+Changes that touch tests must also run the relevant test command and fix failures before finishing. Inspect the existing implementation before changing it. Fix actual implementation errors. Do not merely say "looks good."
+
+## Never (non-negotiable)
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never claim complete coverage without evidence.
+- Never execute destructive actions without authorization.
+- Never run heavy JMeter tests against production by default.
+- Never hardcode secrets.

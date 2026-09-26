@@ -1,8 +1,13 @@
 name: QA Regression
 
-# Full suite via npm run qa:all. Not a pull_request workflow (too heavy for every PR).
-# Triggers: push to protected branches, weekly schedule, and manual dispatch.
-# Still liveness/smoke JMeter only — qa:all strips --authorize-heavy / QA_PERF_AUTHORIZE.
+# Main / regression tier (push + schedule + dispatch): full E2E, API, integration, contract,
+# visual, responsive, accessibility, security, SEO, content, regression.
+# Scheduled-only extras: dependencies, compatibility matrix, AI regression, deep security
+# (still the existing QA security script — pentest coverage is NOT_IMPLEMENTED).
+# Heavy load/stress/soak stay in qa-performance-heavy.yml behind authorize-heavy gates.
+# Destructive resilience and production verification require workflow_dispatch inputs
+# (default false). Chaos stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE — no chaos tool.
+# Not a pull_request workflow.
 
 on:
   push:
@@ -14,9 +19,19 @@ on:
   workflow_dispatch:
     inputs:
       discover_url:
-        description: Optional live URL for qa:all --url=. Empty uses the in-repo fixture. Do not put secrets in this field.
+        description: Optional live URL for discovery/tests. Empty uses the in-repo fixture. Do not put secrets in this field.
         required: false
         type: string
+      authorize_destructive:
+        description: Set true to run destructive resilience (QA_RESILIENCE_AUTHORIZE / --authorize-destructive). Default false. Chaos remains NOT_TESTED.
+        required: false
+        type: boolean
+        default: false
+      allow_production:
+        description: Set true to run npm run test:production-verification. Default false. Runner still respects tests.productionVerification.enabled.
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: qa-regression-${{ github.ref }}
@@ -27,7 +42,7 @@ permissions:
 
 jobs:
   qa-regression:
-    name: Full regression (qa:all)
+    name: Main / regression tier
     timeout-minutes: 90
     runs-on: ubuntu-latest
 
@@ -82,20 +97,36 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install JMeter
+      - name: Apply optional discover URL
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.discover_url != '' }}
+        env:
+          QA_DISPATCH_URL: ${{ inputs.discover_url }}
         run: |
-          JMETER_VERSION=5.6.3
-          curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz
-          echo "JMETER_HOME=$PWD/apache-jmeter-${JMETER_VERSION}" >> "$GITHUB_ENV"
-          echo "$PWD/apache-jmeter-${JMETER_VERSION}/bin" >> "$GITHUB_PATH"
+          # Value not printed (may be a non-public host). Fixture origin is replaced for this job only.
+          echo "QA_PLAYWRIGHT_BASE_URL=$QA_DISPATCH_URL" >> "$GITHUB_ENV"
+          case "$QA_DISPATCH_URL" in
+            */) echo "QA_WEBSITE_URL=$QA_DISPATCH_URL" >> "$GITHUB_ENV" ;;
+            *) echo "QA_WEBSITE_URL=$QA_DISPATCH_URL/" >> "$GITHUB_ENV" ;;
+          esac
 
-      - name: Run full regression
+      - name: Start fixture site
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.discover_url == '' }}
+        run: |
+          npx tsx scripts/testing/serve-fixture-site.ts 4173 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4173/index.html > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Fixture did not become ready" >&2
+          exit 1
+
+      - name: Discovery
+        run: npm run discover -- "$QA_WEBSITE_URL"
+
+      - name: full E2E
+        run: npm run test:e2e
+
+      - name: API
         env:
           QA_API_URL: ${{ secrets.QA_API_URL }}
           QA_USERNAME: ${{ secrets.QA_USERNAME }}
@@ -103,13 +134,52 @@ jobs:
           QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
           QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
           QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
-          QA_DISPATCH_URL: ${{ github.event.inputs.discover_url }}
-        run: |
-          if [ -n "$QA_DISPATCH_URL" ]; then
-            npm run qa:all -- --url="$QA_DISPATCH_URL"
-          else
-            npm run qa:all
-          fi
+        run: npm run test:api
+
+      - name: integration
+        run: npm run test:integration
+
+      - name: contract
+        run: npm run test:contract
+
+      - name: visual
+        run: npm run test:visual
+
+      - name: responsive
+        run: npm run test:responsive
+
+      - name: accessibility
+        run: npm run test:accessibility
+
+      - name: security
+        run: npm run test:security
+
+      - name: SEO
+        run: npm run test:seo
+
+      - name: content
+        run: npm run test:content
+
+      - name: regression
+        run: npm run test:regression
+
+      # Scheduled tier — not on push. Heavy JMeter is NOT here (see qa-performance-heavy.yml).
+      - name: dependency
+        if: ${{ github.event_name == 'schedule' }}
+        run: npm run test:dependencies
+
+      - name: compatibility matrix
+        if: ${{ github.event_name == 'schedule' }}
+        run: npm run test:e2e:cross-browser
+
+      - name: AI regression
+        if: ${{ github.event_name == 'schedule' }}
+        run: npm run test:ai
+
+      # Deep security: pentest coverage is NOT_IMPLEMENTED; this is still the existing QA security script.
+      - name: deep security
+        if: ${{ github.event_name == 'schedule' }}
+        run: npm run test:security
 
       - name: Generate Allure and combined QA reports
         if: always()
@@ -207,6 +277,343 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qa-final-summary
+          path: |
+            reports/summary/
+            reports/orchestrator/
+            reports/coverage/
+            reports/performance/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  resilience-authorized:
+    name: Destructive resilience (authorized)
+    # Chaos is not a separate runner — stays NOT_TESTED until QA_RESILIENCE_AUTHORIZE; no chaos tool.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authorize_destructive == true }}
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      QA_PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      QA_WEBSITE_URL: http://127.0.0.1:4173/
+      QA_RESILIENCE_AUTHORIZE: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Sync configs from qa.config.json
+        run: npm run qa:sync
+
+      - name: Record repository secret availability
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+        run: |
+          record() {
+            if [ -z "$2" ]; then
+              echo "$1: not configured (auth-dependent checks may be REQUIRES_CONFIGURATION / NOT_TESTED)"
+            else
+              echo "$1: configured (value not printed)"
+            fi
+          }
+          record QA_WEBSITE_URL "$QA_WEBSITE_URL"
+          record QA_API_URL "$QA_API_URL"
+          record QA_USERNAME "$QA_USERNAME"
+          record QA_PASSWORD "$QA_PASSWORD"
+          record QA_API_TOKEN "$QA_API_TOKEN"
+          record QA_API_USERNAME "$QA_API_USERNAME"
+          record QA_API_PASSWORD "$QA_API_PASSWORD"
+
+      - name: Start fixture site
+        run: |
+          npx tsx scripts/testing/serve-fixture-site.ts 4173 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4173/index.html > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Fixture did not become ready" >&2
+          exit 1
+
+      - name: Destructive resilience
+        run: npm run test:resilience -- --authorize-destructive
+
+      - name: Generate Allure and combined QA reports
+        if: always()
+        run: npm run report:all
+
+      - name: Upload Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-resilience
+          path: |
+            reports/allure/report/
+            reports/allure/results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-resilience
+          path: reports/playwright/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Playwright screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots-resilience
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos-resilience
+          path: |
+            test-results/**/*.webm
+            test-results/**/*.mp4
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-resilience
+          path: test-results/**/*.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-resilience
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Postman reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-report-resilience
+          path: reports/postman/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload JMeter reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-report-resilience
+          path: reports/jmeter/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report-resilience
+          path: reports/lighthouse/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload final QA summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-final-summary-resilience
+          path: |
+            reports/summary/
+            reports/orchestrator/
+            reports/coverage/
+            reports/performance/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  production-verification:
+    name: Production verification (authorized)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_production == true }}
+    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    env:
+      QA_PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+      QA_WEBSITE_URL: http://127.0.0.1:4173/
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Sync configs from qa.config.json
+        run: npm run qa:sync
+
+      - name: Record repository secret availability
+        env:
+          QA_WEBSITE_URL: ${{ secrets.QA_WEBSITE_URL }}
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+        run: |
+          record() {
+            if [ -z "$2" ]; then
+              echo "$1: not configured (auth-dependent checks may be REQUIRES_CONFIGURATION / NOT_TESTED)"
+            else
+              echo "$1: configured (value not printed)"
+            fi
+          }
+          record QA_WEBSITE_URL "$QA_WEBSITE_URL"
+          record QA_API_URL "$QA_API_URL"
+          record QA_USERNAME "$QA_USERNAME"
+          record QA_PASSWORD "$QA_PASSWORD"
+          record QA_API_TOKEN "$QA_API_TOKEN"
+          record QA_API_USERNAME "$QA_API_USERNAME"
+          record QA_API_PASSWORD "$QA_API_PASSWORD"
+
+      - name: Production verification
+        env:
+          QA_API_URL: ${{ secrets.QA_API_URL }}
+          QA_USERNAME: ${{ secrets.QA_USERNAME }}
+          QA_PASSWORD: ${{ secrets.QA_PASSWORD }}
+          QA_API_TOKEN: ${{ secrets.QA_API_TOKEN }}
+          QA_API_USERNAME: ${{ secrets.QA_API_USERNAME }}
+          QA_API_PASSWORD: ${{ secrets.QA_API_PASSWORD }}
+        run: npm run test:production-verification
+
+      - name: Generate Allure and combined QA reports
+        if: always()
+        run: npm run report:all
+
+      - name: Upload Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-production
+          path: |
+            reports/allure/report/
+            reports/allure/results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-production
+          path: reports/playwright/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Playwright screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots-production
+          path: |
+            test-results/**/*.png
+            test-results/**/*.jpg
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-videos-production
+          path: |
+            test-results/**/*.webm
+            test-results/**/*.mp4
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-production
+          path: test-results/**/*.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-production
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Postman reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-report-production
+          path: reports/postman/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload JMeter reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-report-production
+          path: reports/jmeter/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report-production
+          path: reports/lighthouse/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload final QA summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-final-summary-production
           path: |
             reports/summary/
             reports/orchestrator/

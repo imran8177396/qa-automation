@@ -38,7 +38,10 @@ def isPullRequestBuild() {
 
 def branchName() {
   def raw = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
-  return raw.replaceFirst(/^origin\//, '')
+  if (raw.startsWith('origin/')) {
+    return raw.substring('origin/'.length())
+  }
+  return raw
 }
 
 def isProtectedBranch() {
@@ -155,6 +158,18 @@ def runFullRegression(String discoverUrl) {
       bat 'npm run qa:all -- --url=%QA_DISCOVER_URL%'
     }
   }
+}
+
+/** Optional live URL for tiered discovery/tests. Empty keeps the fixture origin. Value not printed. */
+def applyDiscoverUrl(String discoverUrl) {
+  def url = discoverUrl != null ? discoverUrl.trim() : ''
+  if (!url) {
+    return
+  }
+  env.QA_USE_FIXTURE = 'false'
+  env.QA_PLAYWRIGHT_BASE_URL = url.replaceAll(/\/+$/, '')
+  env.QA_WEBSITE_URL = env.QA_PLAYWRIGHT_BASE_URL + '/'
+  echo 'DISCOVER_URL override is set for this job (value not printed). Fixture origin is not used.'
 }
 
 def assertHeavyAuthorized(Object authorizeHeavy) {

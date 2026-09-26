@@ -2,8 +2,13 @@ export const PERFORMANCE_PROFILES = ['liveness', 'load', 'stress', 'spike', 'soa
 
 export type CanonicalPerformanceProfile = (typeof PERFORMANCE_PROFILES)[number];
 
-/** `smoke` is a deprecated alias for `liveness` and is normalized at the runner boundary. */
-export type PerformanceProfile = CanonicalPerformanceProfile | 'smoke';
+/**
+ * Requestable aliases:
+ * - `smoke` / `baseline` → liveness (safe; RECORDED, never PASS)
+ * - `endurance` → soak (heavy; authorize-heavy required)
+ * volume / scalability are not plan ids — they resolve to NOT_TESTED.
+ */
+export type PerformanceProfile = CanonicalPerformanceProfile | 'smoke' | 'baseline' | 'endurance';
 
 export interface PerformanceProfilePlan {
   threads: number;
@@ -71,12 +76,21 @@ export interface PerformanceThresholdResult {
   comparisons: ThresholdComparison[];
 }
 
-export type PerformanceRunStatus = 'RECORDED' | 'NOT_EXECUTED' | 'BLOCKED' | 'breached' | 'met' | 'NOT_AVAILABLE';
+export type PerformanceRunStatus =
+  | 'RECORDED'
+  | 'NOT_EXECUTED'
+  | 'NOT_TESTED'
+  | 'BLOCKED'
+  | 'REQUIRES_CONFIGURATION'
+  | 'breached'
+  | 'met'
+  | 'NOT_AVAILABLE';
 
 export interface PerformanceSummary {
   ranAt: string;
-  profile: CanonicalPerformanceProfile;
-  /** Liveness (and its smoke alias) is never a PASS verdict. */
+  /** Canonical plan id when mapped; otherwise the requested token (e.g. volume). */
+  profile: string;
+  /** Liveness (and smoke/baseline aliases) is never a PASS verdict. */
   status: PerformanceRunStatus;
   heavy: boolean;
   authorized: boolean;
@@ -192,9 +206,9 @@ export interface PerformanceStageSummary {
   ranAt: string;
   command: string;
   authorizeHeavy: boolean;
-  profile: CanonicalPerformanceProfile;
+  profile: string;
   heavyProfiles: CanonicalPerformanceProfile[];
   ui: { status: UiPerformanceRunStatus | 'NOT_EXECUTED'; artifact: string };
-  jmeter: { status: PerformanceRunStatus; profile: CanonicalPerformanceProfile; heavy: boolean; artifact: string };
+  jmeter: { status: PerformanceRunStatus; profile: string; heavy: boolean; artifact: string };
   lighthouse: { status: 'RECORDED' | 'NOT_EXECUTED'; artifact: string };
 }

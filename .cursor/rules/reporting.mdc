@@ -10,9 +10,9 @@ Apply when generating, editing, or interpreting test reports.
 
 ## Fresh run artifacts
 
-Full test commands (`qa:all`, `test:all`, `qa:test`, and a default `qa` pipeline) delete **ephemeral** runtime artifacts (`reports/`, discovery JSON, Playwright result folders) **before** the new run. Use `--keep-artifacts` to skip that clean. Manual: `npm run qa:clean`.
+Full test commands (`qa:all`, `test:all`, `qa:test`, and a default `qa` pipeline) delete **allowlisted current-run** artifacts (Playwright/Allure results, Postman/JMeter output, discovery JSON, Playwright result folders, temp logs) **before** the new run. Use `--keep-artifacts` to skip that clean. Manual: `npm run qa:clean` (`scripts/clean-test-data.ts`).
 
-`qa:clean` must **never** delete historical professional packs under `docs/input/qa-test-results/` or `docs/output/qa-test-results/` (including older timestamp folders and leftover flat files). Those are retained as evidence.
+`qa:clean` must **never** delete the entire `reports/` directory, `reports/history/`, `reports/allure/history/`, or historical professional packs under `docs/input/qa-test-results/` or `docs/output/qa-test-results/` (including older timestamp folders and leftover flat files). Those are retained as evidence.
 
 ## Historical professional reports (retention)
 
@@ -21,9 +21,24 @@ Full test commands (`qa:all`, `test:all`, `qa:test`, and a default `qa` pipeline
 - `docs/output/qa-test-results/latest.json` may be **updated** to point at the newest pack. That is not deletion of older folders.
 - Documented in `qa.config.json` → `report.retention` and `docs/templates/qa-test-results.format.json`.
 
+## Mandatory PKT execution archive (`reports/history/`)
+
+Every `qa:all` / `report:final` execution also archives into a new folder:
+
+`reports/history/<ProjectName>_<YYYY-MM-DD>_<HH-mm-ss>_PKT/`
+
+- **PKT** = Pakistan Standard Time (`Asia/Karachi`, UTC+05:00). In this project PST means Pakistan — never US Pacific. Do not use the machine timezone.
+- Project name sources (do not invent): `qa.config.json` `project.name`, then env `QA_PROJECT_NAME` / `QA_WEBSITE_NAME` / `QA_APPLICATION_NAME`, then a title already present in this run’s discovery, then the base-URL hostname (record that fallback in metadata).
+- Never overwrite an existing execution folder. Collision: `_01` (or higher precision).
+- Primary human report in that folder: `MASTER-QA-REPORT.html` (embedded findings in the release-readiness sequence — Executive Summary → Key Findings → scope/domains → Defects → Failure Analysis → Recommended Actions → Coverage Matrix → Release Quality Assessment, plus appendices — not a link-only index) plus `MASTER-QA-REPORT.json`. Generate via `scripts/reporting/generate-master-report.ts` after collect/coverage/final report and before/with the quality gate.
+- Copy (do not move-only) existing module artifacts into `modules/` (discovery, accessibility, content, cross-browser, jmeter, performance, playwright, postman, responsive, security, seo, visual, workflows, failures, retest, coverage, quality, orchestrator, …). Copy this execution’s evidence into `evidence/` (screenshots, videos, traces, logs). Copy this execution’s Allure into `allure/` (results/report only — never `reports/allure/history`). Keep `execution-metadata.json` fields. Do not invent Allure or other suite reports that were NOT_EXECUTED.
+- Top-level `reports/accessibility/` etc. remain temporary current-run write targets for engines (PATHS). `qa:clean` wipes those temp paths, never `reports/history/**`.
+- `qa:clean` must never delete `reports/history/**` (including PKT folders, MASTER-QA-REPORT files, modules/, evidence/, and KPI JSON). Do not add `reports/history` to the cleanup allowlist.
+
 ## Professional reports
 
-- **Final unified report** — `npm run report:final` (and `qa:all` stage 19) writes `reports/summary/final-qa-report.md` + `.json`, then the five-layer professional SQA Word/HTML/PDF under a **new** date-time folder `docs/input|output/qa-test-results/YYYY-MM-DD_HH-MM-SS/`. Previous timestamp folders stay on disk. Stage 19 always runs at the end of `qa:all`, including after earlier FAIL stages and after `--fail-fast` stops. Tautological / observed-status API assertions are recorded as report-quality warnings and do **not** abort Word/HTML/PDF generation.
+- **Master consolidated report** — `npm run report:master` (also from `qa:all` after archive) writes `MASTER-QA-REPORT.html` + `.json` into the PKT history folder from existing module JSON/MD. Missing modules stay NOT_EXECUTED / BLOCKED / N/A / UNTESTABLE.
+- **Final unified report** — `npm run report:final` (and `qa:all` stage 19) writes `reports/summary/final-qa-report.md` + `.json`, then the five-layer professional SQA Word/HTML/PDF under a **new** date-time folder `docs/input|output/qa-test-results/YYYY-MM-DD_HH-MM-SS/`. Previous timestamp folders stay on disk. Stage 19 always runs at the end of `qa:all`, including after earlier FAIL stages and after `--fail-fast` stops. Tautological / observed-status API assertions are recorded as report-quality warnings and do **not** abort Word/HTML/PDF generation. MASTER-QA-REPORT is still written when the five-layer model fails quality checks.
 - **Enterprise formats on demand** — `npm run docs:qa-report` regenerates DOCX/HTML/PDF from the same artifacts.
 - **Raw tool artifacts** — stay in `reports/<tool>/`; index via `reports/summary/raw-index.md`, do not overwrite them.
 - **Allure** — Playwright writes raw results to `reports/allure/results`. `npm run report:allure` (or `report:all`) runs `allure generate` into `reports/allure/report`. A previous `index.html` is copied to `reports/allure/history/<timestamp>/` before `--clean` so the only prior HTML is not wiped. Requires project deps `allure-playwright` + `allure-commandline` (Java JRE for the CLI). If the CLI cannot run, record **BLOCKED** — do not claim Allure works.
@@ -66,6 +81,10 @@ Use `npm run analyze:failures` before retest. Classes:
 
 ## Integrity (non-negotiable)
 
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never claim complete coverage without evidence.
 - **Never fake results** — only write statuses backed by execution artifacts.
 - **Never weaken assertions** to achieve PASS.
 - **Never omit failures** from summary or verdict.
@@ -74,4 +93,4 @@ Use `npm run analyze:failures` before retest. Classes:
 
 ## Retest
 
-After fixes, run **`npm run retest`** — preserves original FAIL records. Update final report only after retest evidence exists.
+After fixes, run **`npm run retest`** — preserves original FAIL records. Update final report only after retest evidence exists. Inspect existing report generators before changing them. After implementation, run `npm run report:final` (or the relevant report command) and fix actual errors. Do not merely say "looks good."

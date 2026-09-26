@@ -11,7 +11,7 @@ Apply when editing JMeter plans, Playwright UI timing, performance runners, or `
 ## Two surfaces (do not mix)
 
 - **A. Playwright UI performance** — page load, Navigation Timing, resource/network timing on the discovered login page (`tests/e2e/performance/`, `reports/performance/`). Status is **RECORDED**. No SLA is invented. Official CWV scores are not fabricated here.
-- **B. JMeter backend/load** — documented API only (`qa.config.json` `urls.api` + `jmeter.path`, JSONPlaceholder GET `/posts`). Not Sauce Demo REST (discovery found 0 XHR on login).
+- **B. JMeter backend/load** — documented API only (`QA_API_URL` or `qa.config.json` `urls.api` + `jmeter.path`). An empty API host is REQUIRES_CONFIGURATION — the engine does not substitute a public demo. Undocumented UI-page REST is not invented when discovery found 0 XHR.
 
 ## Source of truth
 
@@ -29,6 +29,7 @@ Apply when editing JMeter plans, Playwright UI timing, performance runners, or `
 - Heavy profiles (`load` / `stress` / `spike` / `soak`) require `--authorize-heavy` or `QA_PERF_AUTHORIZE`, plus `allowHeavyAgainst` when that list is non-empty.
 - Dedicated pipelines: `.github/workflows/qa-performance-heavy.yml` (`workflow_dispatch` with `authorize-heavy`, optional weekly schedule + `QA_PERF_AUTHORIZE_SCHEDULE`; never `pull_request`) and `jenkins/Jenkinsfile.performance` (`AUTHORIZE_HEAVY` default false). Never authorize heavy on the PR Jenkinsfile.
 - Never run heavy/destructive load against production by default.
+- Never run heavy JMeter tests against production by default.
 
 ## Performance considerations
 
@@ -63,4 +64,11 @@ Reports: `reports/jmeter/results.jtl`, `reports/jmeter/html/index.html`, `report
 - **Automation defect**: wrong host/path, JMeter not installed, malformed JMX — fix config or runner.
 - Never hide failures by removing listeners or assertions to make a run pass.
 
-Keep plans **CI/CD-ready** — non-GUI mode, deterministic paths, no local-only hardcoded directories.
+Keep plans **CI/CD-ready** — non-GUI mode, deterministic paths, no local-only hardcoded directories. Inspect existing JMX generation and runners before changing them. After implementation, run `npm run test:performance` and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never run heavy JMeter tests against production by default.

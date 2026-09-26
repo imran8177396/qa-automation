@@ -30,9 +30,13 @@ if (testFiles.length === 0) {
   process.exit(0);
 }
 
-const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-reporter=spec', ...testFiles], {
-  stdio: 'inherit',
-  cwd: PATHS.root,
-});
+const result = spawnSync(
+  process.execPath,
+  ['--import', 'tsx', '--test', '--test-reporter=spec', '--test-timeout=180000', ...testFiles],
+  {
+    stdio: 'inherit',
+    cwd: PATHS.root,
+  }
+);
 
 process.exit(result.status ?? 1);

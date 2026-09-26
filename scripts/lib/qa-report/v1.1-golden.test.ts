@@ -14,7 +14,7 @@ import {
   assertUniquePlaywrightSuitePaths,
 } from '../playwright-suites';
 import { assertDiscoveryPrecedesExecution } from '../stage-timeline';
-import { compareSuiteOriginToBaseUrl } from '../suite-origin';
+import { compareSuiteOriginToBaseUrl, NOT_AVAILABLE, originOf } from '../suite-origin';
 import { resolveSuiteStatus, rollupStageGroups } from '../suite-status';
 import { EmptyTableError, TableAudit, emptyTablePlaceholder } from './empty-table';
 import {
@@ -181,8 +181,9 @@ describe('v1.1 golden fixtures', () => {
     const productSuite = loadV11GeneratedCheckSuiteSummary();
 
     assert.equal(responsive.targetOrigin, 'http://127.0.0.1:4173');
-    assert.equal(config.playwright.baseURL, 'https://www.saucedemo.com');
-    assert.equal(compareSuiteOriginToBaseUrl(responsive.targetOrigin, config.playwright.baseURL), 'INVALID');
+    const websiteOrigin = originOf(config.urls.website);
+    assert.equal(websiteOrigin, NOT_AVAILABLE);
+    assert.equal(compareSuiteOriginToBaseUrl(responsive.targetOrigin, config.urls.website), 'INVALID');
     assert.equal(compareSuiteOriginToBaseUrl(suiteSummary.targetOrigin, suiteSummary.configuredBaseUrl), 'INVALID');
     assert.equal(suiteSummary.originStatus, 'INVALID');
 

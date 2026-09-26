@@ -50,6 +50,11 @@ npm run coverage           # Coverage matrix from inventory + results
 
 ## Integrity
 
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never claim complete coverage without evidence.
+- Never execute destructive actions without authorization.
 - Never fake results or coverage — if something was not run, say so.
 - Never weaken assertions to achieve PASS.
 - Items that cannot run safely → BLOCKED / NOT_TESTED / REQUIRES_CONFIGURATION with reason, not omitted.

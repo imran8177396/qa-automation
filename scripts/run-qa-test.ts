@@ -26,7 +26,9 @@ import type { DiscoveryResult } from './discovery/types';
 import type { InventoryResult } from './inventory/types';
 import type { SafetyConfigResolved } from './core/safety-policy';
 import { writeProfessionalSqaReport } from './reporting/write-enterprise-report';
-import { cleanRunArtifacts, shouldKeepArtifacts } from './lib/clean-run-artifacts';
+import { cleanTestData, shouldKeepArtifacts } from './lib/clean-test-data';
+import { persistCliWebsiteUrl, websiteTargetEnv } from './lib/last-target';
+import { resolveDiscoverUrl } from './discovery/cli';
 
 interface CliArgs {
   url: string;
@@ -34,15 +36,14 @@ interface CliArgs {
 }
 
 function parseArgs(): CliArgs {
-  const args = process.argv.slice(2);
-  const url = args.find((arg) => !arg.startsWith('--'));
-  if (!url) {
+  const resolved = resolveDiscoverUrl();
+  persistCliWebsiteUrl(resolved.cliUrl);
+  if (!resolved.url) {
     throw new Error('Usage: npm run qa:test -- <url> [--max-pages=N]');
   }
-  const maxPagesArg = args.find((arg) => arg.startsWith('--max-pages='));
   return {
-    url,
-    maxPages: maxPagesArg ? Number(maxPagesArg.split('=')[1]) : undefined,
+    url: resolved.url,
+    maxPages: resolved.maxPages,
   };
 }
 
@@ -85,6 +86,7 @@ async function inventorySite(
 async function main(): Promise<void> {
   loadRuntimeEnv();
   const { url, maxPages } = parseArgs();
+  Object.assign(process.env, websiteTargetEnv(url));
   const config = loadConfig();
 
   const safety = resolveSafetyConfig(config.safety);
@@ -95,7 +97,7 @@ async function main(): Promise<void> {
     logWarn('Keeping previous run artifacts (--keep-artifacts)');
   } else {
     logStep('Cleaning previous test artifacts and cache');
-    const { removed } = cleanRunArtifacts();
+    const { removed } = cleanTestData();
     logSuccess(
       removed.length === 0
         ? 'No previous run artifacts were present'
@@ -163,10 +165,17 @@ async function main(): Promise<void> {
     jmeterPassed = await runJmeter(config);
     lighthousePassed = await runLighthouse(config);
   } else {
+    const configuredHost = (() => {
+      try {
+        return config.urls.website?.trim() ? new URL(config.urls.website).host : '(urls.website empty)';
+      } catch {
+        return '(urls.website invalid)';
+      }
+    })();
     logWarn(
       `Skipping Postman/JMeter and hand-written tests/e2e specs — crawled host (${new URL(discovery.seedUrl).host}) ` +
-        `does not match qa.config.json's configured site (${new URL(config.urls.website).host}). ` +
-        'Only tests/e2e/generated/ ran, against the crawled URL. Point qa.config.json at this site to enable full coverage.'
+        `does not match qa.config.json's configured site (${configuredHost}). ` +
+        'Only tests/e2e/generated/ ran, against the crawled URL. Set urls.website (or pass a matching target) to enable full coverage.'
     );
   }
 

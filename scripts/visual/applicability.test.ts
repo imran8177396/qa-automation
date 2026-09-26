@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { planVisualChecks } from './applicability';
+import { discoveryLandingHasLoginForm } from '../lib/discovered-page-targets';
 import { isFixtureUiTarget } from '../lib/ui-target';
+import { PATHS } from '../lib/paths';
+import { readJsonIfExists } from '../discovery/write-json';
+import type { UiInventory } from '../discovery/ui-scan';
 
 test('live origin plans login visuals and does not invent cart/inventory', () => {
   if (isFixtureUiTarget()) {
@@ -13,10 +17,18 @@ test('live origin plans login visuals and does not invent cart/inventory', () =>
 
   const plan = planVisualChecks();
   const byId = Object.fromEntries(plan.map((row) => [row.id, row]));
+  const ui = readJsonIfExists<UiInventory>(PATHS.uiInventoryFile);
 
   assert.equal(byId['VIS-login-full']?.status, 'APPLICABLE');
-  assert.equal(byId['VIS-login-form']?.status, 'APPLICABLE');
-  assert.equal(byId['VIS-login-heading']?.status, 'APPLICABLE');
+  if (discoveryLandingHasLoginForm(ui)) {
+    assert.equal(byId['VIS-login-form']?.status, 'APPLICABLE');
+  } else {
+    assert.equal(
+      byId['VIS-login-form']?.status,
+      'NOT_APPLICABLE',
+      'NOT_APPLICABLE: last live inventory has no login form — Sauce Demo login-form visuals are not invented'
+    );
+  }
   assert.equal(byId['VIS-inventory']?.status, 'NOT_APPLICABLE');
   assert.equal(byId['VIS-cart']?.status, 'NOT_APPLICABLE');
   assert.equal(byId['VIS-navigation']?.status, 'NOT_APPLICABLE');

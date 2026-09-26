@@ -23,6 +23,6 @@ test('empty discovery calls stay 0 and name config as the execution source', () 
   const summary = summarizeApiDiscovery(inventory, 'https://www.saucedemo.com/');
   assert.equal(summary.inventoryPresent, true);
   assert.equal(summary.observedCallCount, 0);
-  assert.match(summary.note, /Sauce Demo discovery found 0/i);
-  assert.match(summary.note, /jsonplaceholder|qa\.config\.json/i);
+  assert.match(summary.note, /Discovery found 0/i);
+  assert.match(summary.note, /qa\.config\.json/i);
 });

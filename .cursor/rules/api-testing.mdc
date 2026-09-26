@@ -13,6 +13,7 @@ Apply when editing Postman collections, API config, or `qa.config.json` postman 
 - Define requests and assertions in **`qa.config.json`** → `postman.requests`.
 - Run **`npm run qa:sync`** to regenerate `tests/api/postman/collections/qa-automation-api.json` and environment.
 - Do not hand-edit generated files without syncing back to config.
+- Never invent undocumented UI-page REST paths. When discovery records 0 XHR, executed Postman requests come only from `qa.config.json` `postman.requests` against the resolved API base (`QA_API_URL` or `urls.api`). An empty API base is REQUIRES_CONFIGURATION — the engine does not substitute a public demo host. The committed path catalog (e.g. GET `/posts`) is config, not a hardcoded host.
 
 ## Response validation
 
@@ -45,4 +46,10 @@ Use Postman Tests tab logic (generated from config) — never leave requests wit
 npm run qa:sync && npm run test:api
 ```
 
-Review `reports/postman/report.json`. Distinguish API/product failures from collection or env misconfiguration.
+Review `reports/postman/report.json`. Distinguish API/product failures from collection or env misconfiguration. Inspect existing config and collection generation before changing them. After implementation, run the command above and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.

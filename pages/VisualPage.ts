@@ -53,12 +53,15 @@ export class VisualPage extends BasePage {
     return this.page.locator('section').filter({ hasText: 'Danger zone' });
   }
 
-  /** First heading of any level — Sauce Demo login has h4s, not an h1. */
+  /** First heading of any level — example Sauce Demo login has h4s, not an h1. */
   get observedHeading(): Locator {
     return this.page.getByRole('heading').first();
   }
 
-  /** Visible brand text on the Sauce Demo login screen. */
+  /**
+   * Visible brand text on the Sauce Demo example login screen.
+   * Specs must gate with `isExampleWebsiteTarget()` — never assert this on an arbitrary URL.
+   */
   get brand(): Locator {
     return this.page.getByText('Swag Labs', { exact: true });
   }

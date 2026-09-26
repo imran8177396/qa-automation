@@ -315,7 +315,7 @@ export function buildBrowserSuiteStats(input: {
       rows.push({
         browser,
         status: 'NOT_EXECUTED',
-        reason: `not listed in qa.config.json playwright.browsers`,
+        reason: 'compulsory Playwright engine was not launched',
         total: NOT_AVAILABLE,
         passed: NOT_AVAILABLE,
         failed: NOT_AVAILABLE,

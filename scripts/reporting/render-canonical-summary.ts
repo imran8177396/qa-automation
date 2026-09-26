@@ -40,6 +40,7 @@ function classifyDefectFamily(classification: string): string {
 
 export function renderCanonicalFinalReportMd(input: {
   generatedAt: string;
+  executionId?: string;
   verdict: FinalVerdict;
   projectName: string;
   coverage: CoverageReport;
@@ -81,6 +82,7 @@ export function renderCanonicalFinalReportMd(input: {
     `**Verdict:** ${verdict}`,
     `**Release recommendation:** ${model.releaseRecommendation.decision}`,
     `**Generated:** ${input.generatedAt}`,
+    `**Execution ID:** ${input.executionId ?? 'NOT_AVAILABLE'}`,
     `**Project:** ${input.projectName}`,
     `**Target URL:** ${pipeline.url}`,
     `**Command:** ${pipeline.command}`,

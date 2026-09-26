@@ -90,11 +90,14 @@ export class AccessibilityPage extends BasePage {
     });
   }
 
-  /** First heading of any level — Sauce Demo login has h4s, not an h1. */
+  /** First heading of any level — example Sauce Demo login has h4s, not an h1. */
   get observedHeading(): Locator {
     return this.page.getByRole('heading').first();
   }
 
+  /**
+   * Sauce Demo example brand text. Specs must not require this on a non-example origin.
+   */
   get brand(): Locator {
     return this.page.getByText('Swag Labs', { exact: true });
   }

@@ -52,7 +52,7 @@ export interface SuiteRollupArtifacts {
   crossBrowserNote?: string | null;
 }
 
-export type OverallRollupStatus = 'PASS' | 'FAIL' | 'BLOCKED' | 'WARNING';
+export type OverallRollupStatus = 'PASS' | 'FAIL' | 'BLOCKED';
 
 export interface SuiteRollup {
   lines: SuiteRollupLine[];
@@ -132,15 +132,18 @@ function coverageLine(
 }
 
 /**
- * OVERALL is PASS only when every required banner suite passed (or JMeter
- * RECORDED / coverage %). Application FAIL on a11y/security/SEO is OVERALL FAIL.
+ * OVERALL is PASS / FAIL / BLOCKED only.
+ * PASS only when every required banner suite passed (or JMeter RECORDED /
+ * coverage %). Application FAIL on a11y/security/SEO is OVERALL FAIL.
  * Config/env that prevented required work is BLOCKED — never disguised as PASS.
+ * A required-suite WARNING is not PASS (no invented SLA).
  */
 export function resolveOverallStatus(required: SuiteRollupLine[]): OverallRollupStatus {
   let sawWarning = false;
   let sawBlocked = false;
 
   for (const line of required) {
+    if (line.label === 'OVERALL') continue;
     if (line.status === 'FAIL' || line.status === 'PARTIAL') return 'FAIL';
     if (line.status === 'WARNING') sawWarning = true;
     if (line.label === 'JMETER' && line.status === 'RECORDED') continue;
@@ -149,7 +152,7 @@ export function resolveOverallStatus(required: SuiteRollupLine[]): OverallRollup
   }
 
   if (sawBlocked) return 'BLOCKED';
-  if (sawWarning) return 'WARNING';
+  if (sawWarning) return 'FAIL';
   return 'PASS';
 }
 
@@ -158,7 +161,10 @@ export function resolveOverallStatus(required: SuiteRollupLine[]): OverallRollup
  * that the child recorded while exiting 0) must still be non-zero.
  * Stage FAIL/INVALID/PARTIAL already yield 1 via overallExitCode.
  */
-export function orchestratorProcessExitCode(overall: OverallRollupStatus, stageExitCode: number): number {
+export function orchestratorProcessExitCode(
+  overall: OverallRollupStatus | 'WARNING',
+  stageExitCode: number
+): number {
   if (overall === 'FAIL') return 1;
   return stageExitCode;
 }

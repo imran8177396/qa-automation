@@ -1,11 +1,23 @@
 /**
- * Part 19 contract: 20 named qa:all steps, in order.
+ * Part 19 contract: 20 named qa:all child-stage keys, in order.
  * Extra existing stages (dependencies, content, workflows, collect) still run
  * between these keys; they are not a rewrite of the pipeline.
+ *
+ * The stable 11-phase orchestrator flow (`phases.ts`) maps these stages into:
+ * DISCOVER → INVENTORY → PLAN → SELECT ENABLED TEST ENGINES → EXECUTE →
+ * NORMALIZE RESULTS → ASSERTIONS → COVERAGE → FAILURE ANALYSIS → RETEST → REPORT.
+ *
+ * Part 24 maps 31 conceptual Universal QA steps onto these stages
+ * (`universal-qa-flow.ts`). Do not spawn 31 child processes.
  *
  * Steps 11–12 share one child process (`scripts/run-performance.ts`, liveness
  * only — never `--authorize-heavy`). The printed rollup splits UI vs JMeter.
  */
+import { ORCHESTRATOR_PHASE_NAMES } from './phases';
+
+export { ORCHESTRATOR_PHASE_NAMES };
+export type { OrchestratorPhaseName } from './phases';
+
 export interface ContractNamedStep {
   n: number;
   key: string;
@@ -27,9 +39,9 @@ export const CONTRACT_NAMED_STEPS: readonly ContractNamedStep[] = [
   { n: 12, key: 'performance', title: 'JMeter smoke' },
   { n: 13, key: 'security', title: 'Security' },
   { n: 14, key: 'seo', title: 'SEO/content' },
-  { n: 15, key: 'analyze', title: 'Failure analysis' },
-  { n: 16, key: 'retest', title: 'Retest where appropriate' },
-  { n: 17, key: 'coverage', title: 'Coverage' },
+  { n: 15, key: 'coverage', title: 'Coverage' },
+  { n: 16, key: 'analyze', title: 'Failure analysis' },
+  { n: 17, key: 'retest', title: 'Retest where appropriate' },
   { n: 18, key: 'allure', title: 'Allure' },
   { n: 19, key: 'playwright-reports', title: 'Playwright reports' },
   { n: 20, key: 'report', title: 'Final QA summary' },
@@ -41,6 +53,17 @@ export const CONTRACT_STAGE_KEYS: readonly string[] = CONTRACT_NAMED_STEPS.map((
 );
 
 export const REPORTING_STAGE_KEYS = ['allure', 'playwright-reports', 'report'] as const;
+
+/**
+ * Coverage / analyze / retest / reports — never silently omitted after --fail-fast.
+ * Order matches orchestrator phases COVERAGE → FAILURE ANALYSIS → RETEST → REPORT.
+ */
+export const POST_EXECUTION_STAGE_KEYS = [
+  'coverage',
+  'analyze',
+  'retest',
+  ...REPORTING_STAGE_KEYS,
+] as const;
 
 export function contractKeysInOrder(stageKeys: string[]): { ok: boolean; violations: string[] } {
   const violations: string[] = [];

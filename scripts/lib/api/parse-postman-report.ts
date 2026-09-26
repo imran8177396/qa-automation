@@ -8,6 +8,13 @@ import type {
   PostmanExecutionLike,
   PostmanReportLike,
 } from './types';
+import {
+  classifyResponseShape,
+  decodeExecutionResponseBody,
+  formatErrorStatusDetail,
+  needsErrorStatusShapeDetail,
+  type ObservedResponseShape,
+} from './response-shape';
 
 const AUTH_NO_CONTRACT =
   'No authentication or authorization contract is documented (postman.auth.type is none). Authentication and authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION — they are not counted as passing GET / duplicates.';
@@ -16,7 +23,7 @@ const AUTH_TOKEN_ABSENT =
   'A documented auth contract exists but QA_API_TOKEN (or the documented credential env vars) is absent. Authentication and authorization are NOT_EXECUTED / REQUIRES_CONFIGURATION.';
 
 const TERMINOLOGY =
-  'API automation via Postman CLI. Sauce Demo discovery found 0 xhr/fetch/websocket APIs; executed requests are documented in qa.config.json postman.requests, not invented from the login page. expectedStatus is the documented intended status; collection assertions.statusCode is never auto-flipped. UNVERIFIED requests are excluded from the pass count. Authentication/authorization are NOT_EXECUTED when the contract is undocumented or QA_API_TOKEN is absent.';
+  'API automation via Postman CLI. When discovery records 0 xhr/fetch/websocket APIs, executed requests are documented in qa.config.json postman.requests, not invented from the UI page. expectedStatus is the documented intended status; collection assertions.statusCode is never auto-flipped. UNVERIFIED requests are excluded from the pass count. Authentication/authorization are NOT_EXECUTED when the contract is undocumented or QA_API_TOKEN is absent.';
 
 export function normalizeApiResultStatus(status: string | undefined): 'PASS' | 'FAIL' {
   const upper = (status ?? '').toUpperCase();
@@ -113,8 +120,26 @@ function decideResult(input: {
   expectedStatus: ExpectedHttpStatus;
   actualStatus: number | null;
   collectionPassed: boolean;
-}): { result: ApiResultStatus; includedInPassCount: boolean; expectedVsActual?: { expected: string; actual: string } } {
-  const actual = input.actualStatus == null ? 'Not Provided' : String(input.actualStatus);
+  responseShape?: ObservedResponseShape;
+}): {
+  result: ApiResultStatus;
+  includedInPassCount: boolean;
+  expectedVsActual?: { expected: string; actual: string };
+  actualResponseShape?: ObservedResponseShape;
+} {
+  const bareActual = input.actualStatus == null ? 'Not Provided' : String(input.actualStatus);
+  const shapeDetail =
+    input.actualStatus != null &&
+    needsErrorStatusShapeDetail(input.actualStatus) &&
+    input.responseShape != null
+      ? formatErrorStatusDetail({
+          actualStatus: input.actualStatus,
+          responseShape: input.responseShape,
+          expectedStatus: input.expectedStatus,
+        })
+      : null;
+  const actual = shapeDetail ?? bareActual;
+  const actualResponseShape = shapeDetail != null ? input.responseShape : undefined;
 
   if (input.expectedStatus === 'UNVERIFIED') {
     if (!input.collectionPassed) {
@@ -122,20 +147,22 @@ function decideResult(input: {
         result: 'FAIL',
         includedInPassCount: false,
         expectedVsActual: { expected: 'UNVERIFIED (collection assertion failed)', actual },
+        actualResponseShape,
       };
     }
     return {
       result: 'UNVERIFIED',
       includedInPassCount: false,
       expectedVsActual: { expected: 'UNVERIFIED', actual },
+      actualResponseShape,
     };
   }
 
   const expectedVsActual = { expected: String(input.expectedStatus), actual };
   if (input.actualStatus == null || input.actualStatus !== input.expectedStatus || !input.collectionPassed) {
-    return { result: 'FAIL', includedInPassCount: true, expectedVsActual };
+    return { result: 'FAIL', includedInPassCount: true, expectedVsActual, actualResponseShape };
   }
-  return { result: 'PASS', includedInPassCount: true, expectedVsActual };
+  return { result: 'PASS', includedInPassCount: true, expectedVsActual, actualResponseShape };
 }
 
 function authRows(auth: ApiAuthStance, startIndex: number): ApiSection27Request[] {
@@ -200,14 +227,19 @@ export function parsePostmanReportForSection27(input: {
   const flaggedAssertions = input.config.postman.requests.flatMap((request) => request.assertionFlags ?? []);
   const discoveryNote =
     input.discoveryNote ??
-    'Sauce Demo discovery found 0 xhr/fetch/websocket APIs. Executed requests are documented in qa.config.json, not invented from the login page.';
+    'Discovery found 0 xhr/fetch/websocket APIs. Executed requests are documented in qa.config.json, not invented from the UI page.';
 
   const requests: ApiSection27Request[] = executions.map((exec, index) => {
     const matched = matchRequest(input.config, exec);
     const expectedStatus = matched ? resolveExpectedStatus(matched, navDefault) : 'UNVERIFIED';
     const actualStatus = exec.response?.code ?? null;
     const collectionPassed = collectionTestsPassed(exec);
-    const decided = decideResult({ expectedStatus, actualStatus, collectionPassed });
+    const bodyText = decodeExecutionResponseBody(exec.response);
+    const responseShape =
+      actualStatus != null && needsErrorStatusShapeDetail(actualStatus)
+        ? classifyResponseShape(bodyText)
+        : undefined;
+    const decided = decideResult({ expectedStatus, actualStatus, collectionPassed, responseShape });
     const assertionNames =
       (exec.tests ?? [])
         .map((test) => test.name)
@@ -216,6 +248,17 @@ export function parsePostmanReportForSection27(input: {
       (expectedStatus === 'UNVERIFIED'
         ? 'No documented status expectation (UNVERIFIED)'
         : 'Status not named in Postman report');
+    const shapeAssertion =
+      decided.expectedVsActual &&
+      actualStatus != null &&
+      needsErrorStatusShapeDetail(actualStatus) &&
+      decided.actualResponseShape
+        ? formatErrorStatusDetail({
+            actualStatus,
+            responseShape: decided.actualResponseShape,
+            expectedStatus,
+          })
+        : null;
     const flags = [...(matched?.assertionFlags?.flatMap((flag) => flag.flags) ?? [])];
     if (expectedStatus === 'UNVERIFIED') flags.push('UNVERIFIED');
     if (typeof expectedStatus === 'number' && actualStatus != null && actualStatus !== expectedStatus) {
@@ -234,10 +277,11 @@ export function parsePostmanReportForSection27(input: {
       collectionAssertedStatus: matched?.assertions?.statusCode ?? null,
       collectionAssertionResult: collectionPassed ? 'PASS' : 'FAIL',
       responseTimeMs: exec.response?.responseTime ?? 0,
-      assertion: assertionNames,
+      assertion: shapeAssertion ?? assertionNames,
       result: decided.result,
       flags: [...new Set(flags)],
       expectedVsActual: decided.expectedVsActual,
+      actualResponseShape: decided.actualResponseShape,
       includedInPassCount: decided.includedInPassCount,
       note: matched?.assertionFlags?.[0]?.note,
     };

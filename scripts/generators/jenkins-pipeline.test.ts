@@ -32,7 +32,7 @@ function config(overrides: Partial<QaConfig['github']> = {}): QaConfig {
     urls: { website: 'https://example.com', api: 'https://jsonplaceholder.typicode.com' },
     pipeline: { steps: ['sync', 'e2e', 'api', 'load'], failFast: false },
     postman: { enabled: true, collectionName: 'QA Automation API', requests: [] },
-    playwright: { enabled: true, baseURL: 'http://127.0.0.1:4173', browsers: ['chromium'], headless: true },
+    playwright: { enabled: true, baseURL: 'http://127.0.0.1:4173', browsers: ['chromium', 'firefox', 'webkit'], headless: true },
     jmeter: {
       enabled: true,
       path: '/users',
@@ -146,13 +146,16 @@ test('protected branches come from qa.config.json github.branches plus develop',
   assert.deepEqual(jenkinsProtectedBranches(config({ branches: ['release'] })), ['release', 'develop']);
 });
 
-test('Multibranch Jenkinsfile is lightweight on CHANGE_ID / feature and qa:all on protected branches', () => {
+test('Multibranch Jenkinsfile is lightweight on CHANGE_ID / feature and main tier on protected branches', () => {
   const groovy = renderMultibranchJenkinsfile(config());
   assert.match(groovy, /pipeline\s*\{/);
   assert.match(groovy, /CHANGE_ID|QA_PIPELINE_PROFILE/);
   assert.match(groovy, /environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight'/);
   assert.match(groovy, /environment name: 'QA_PIPELINE_PROFILE', value: 'regression'/);
-  assert.match(groovy, /npm run qa:all/);
+  assert.match(groovy, /run test:e2e/);
+  assert.match(groovy, /run test:visual/);
+  assert.match(groovy, /run test:regression/);
+  assert.doesNotMatch(runnableLines(groovy), /npm run qa:all/);
   assert.doesNotMatch(runnableLines(groovy), /--authorize-heavy/);
   assert.doesNotMatch(runnableLines(groovy), /QA_PERF_AUTHORIZE\s*[:=]/);
   assert.match(groovy, new RegExp(JENKINS_FIXTURE_ORIGIN.replace(/\./g, '\\.')));
@@ -166,20 +169,51 @@ test('Multibranch Jenkinsfile is lightweight on CHANGE_ID / feature and qa:all o
   assertBalancedGroovy(groovy, 'multibranch Jenkinsfile');
 });
 
-test('Multibranch Jenkinsfile does not run qa:all on the lightweight path', () => {
+test('Multibranch Jenkinsfile installs Chromium, Firefox, and WebKit on every profile', () => {
+  const groovy = renderMultibranchJenkinsfile(config());
+  assert.match(groovy, /installPlaywrightBrowsers\('chromium firefox webkit'\)/);
+  assert.doesNotMatch(groovy, /installPlaywrightBrowsers\('chromium'\)/);
+});
+
+test('Multibranch Jenkinsfile PR tier excludes main-only engines and keeps critical E2E', () => {
   const groovy = renderMultibranchJenkinsfile(config());
   assert.match(groovy, /when \{ environment name: 'QA_PIPELINE_PROFILE', value: 'lightweight' \}/);
+  assert.match(groovy, /stage\('critical E2E'\)/);
+  assert.match(groovy, /run test:unit/);
+  assert.match(groovy, /run test:smoke/);
   assert.match(groovy, /run test:e2e/);
   assert.match(groovy, /run test:api/);
   assert.match(groovy, /run test:accessibility/);
+  assert.match(groovy, /stage\('security-light'\)/);
   assert.match(groovy, /run test:performance -- --profile=liveness/);
   assert.match(groovy, /run discover --/);
+  const lightweightOnly = groovy.split("value: 'regression'")[0] ?? groovy;
+  assert.doesNotMatch(lightweightOnly, /run test:visual/);
+  assert.doesNotMatch(lightweightOnly, /run test:integration/);
+  assert.doesNotMatch(lightweightOnly, /run test:contract/);
+  assert.doesNotMatch(lightweightOnly, /run test:e2e:cross-browser/);
+  assert.doesNotMatch(lightweightOnly, /run test:ai/);
+  assert.doesNotMatch(lightweightOnly, /run test:resilience/);
+  assert.doesNotMatch(lightweightOnly, /run test:production-verification/);
 });
 
-test('Regression Jenkinsfile always runs qa:all and never authorizes heavy JMeter', () => {
+test('Regression Jenkinsfile runs main + scheduled tiers and gates authorized stages', () => {
   const groovy = renderRegressionJenkinsfile();
   assertRequiredStages(groovy, REGRESSION_JOB_STAGES);
-  assert.match(groovy, /npm run qa:all/);
+  assert.match(groovy, /run test:e2e/);
+  assert.match(groovy, /run test:visual/);
+  assert.match(groovy, /run test:regression/);
+  assert.match(groovy, /run test:seo/);
+  assert.match(groovy, /run test:content/);
+  assert.match(groovy, /run test:dependencies/);
+  assert.match(groovy, /run test:e2e:cross-browser/);
+  assert.match(groovy, /run test:ai/);
+  assert.match(groovy, /name: 'AUTHORIZE_DESTRUCTIVE'/);
+  assert.match(groovy, /name: 'ALLOW_PRODUCTION'/);
+  assert.match(groovy, /defaultValue: false/);
+  assert.match(groovy, /run test:resilience -- --authorize-destructive/);
+  assert.match(groovy, /run test:production-verification/);
+  assert.doesNotMatch(runnableLines(groovy), /npm run qa:all/);
   assert.doesNotMatch(runnableLines(groovy), /--authorize-heavy/);
   assert.doesNotMatch(runnableLines(groovy), /QA_PERF_AUTHORIZE\s*[:=]/);
   assert.doesNotMatch(groovy, /CHANGE_ID/);

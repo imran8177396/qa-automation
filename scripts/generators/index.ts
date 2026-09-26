@@ -3,7 +3,8 @@ import path from 'path';
 import { PATHS } from '../lib/paths';
 import { resolvePlaywrightBrowsers } from '../lib/playwright-browsers';
 import type { QaConfig } from '../types';
-import { readExistingSeedUrl, isLoopbackUrl } from '../orchestrator/resolve-url';
+import { resolveApiUrl, resolveWebsiteTarget } from '../orchestrator/resolve-url';
+import { readLastTargetUrl } from '../lib/last-target';
 import { buildPostmanCollection, buildPostmanEnvironment } from './postman-collection';
 import { writeJmeterProfilePlans } from '../performance/jmx';
 
@@ -11,27 +12,36 @@ export { generateGithubWorkflow } from './github-workflow';
 export { generateJenkinsfiles } from './jenkins-pipeline';
 
 function resolveWebsiteUrl(config: QaConfig): string {
-  const seed = readExistingSeedUrl();
-  if (seed) return seed.endsWith('/') ? seed : `${seed}/`;
-  if (config.playwright.baseURL && isLoopbackUrl(config.playwright.baseURL)) {
-    const base = config.playwright.baseURL.replace(/\/+$/, '');
-    return `${base}/`;
-  }
-  return config.urls.website;
+  // No discovery seed — generators must not let a stale crawl retarget generated.env.
+  const url = resolveWebsiteTarget({
+    playwrightEnvUrl: process.env.QA_PLAYWRIGHT_BASE_URL,
+    websiteEnvUrl: process.env.QA_WEBSITE_URL,
+    lastTargetUrl: readLastTargetUrl(),
+    websiteUrl: config.urls.website,
+    playwrightBaseUrl: config.playwright.baseURL,
+    environments: config.environments,
+    activeEnvironment: config.environment?.active,
+  }).trim();
+  if (!url) return '';
+  return url.endsWith('/') ? url : `${url}/`;
 }
 
 function resolvePlaywrightBaseUrl(config: QaConfig): string {
-  const seed = readExistingSeedUrl();
-  if (seed) return seed.replace(/\/+$/, '');
-  return config.playwright.baseURL.replace(/\/+$/, '');
+  const website = resolveWebsiteUrl(config);
+  return website ? website.replace(/\/+$/, '') : '';
 }
 
 export function generateEnvFile(config: QaConfig): void {
   const websiteUrl = resolveWebsiteUrl(config);
+  const apiUrl = resolveApiUrl({
+    apiUrl: config.urls.api,
+    environments: config.environments,
+    activeEnvironment: config.environment?.active,
+  });
   const lines = [
     `QA_PROJECT_NAME=${config.project.name}`,
     `QA_WEBSITE_URL=${websiteUrl}`,
-    `QA_API_URL=${config.urls.api}`,
+    `QA_API_URL=${apiUrl}`,
   ];
 
   if (config.urls.login) {

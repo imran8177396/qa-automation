@@ -14,19 +14,20 @@ import type { RuntimeCorrelationEvidence } from './evidence';
 export async function runFixtureCorrelationSelfCheck(): Promise<RuntimeCorrelationEvidence> {
   const server = await startFixtureServer();
   try {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ headless: true, timeout: 30000 });
     try {
       const page = await browser.newPage();
       await page.goto(`${server.url}${FIXTURE_SELF_CHECK_PAIR.uiPath}`, { waitUntil: 'load' });
 
       const pending = page.waitForResponse(
         (response) =>
-          response.request().method() === 'GET' && response.url().includes(FIXTURE_SELF_CHECK_PAIR.apiPath)
+          response.request().method() === 'GET' && response.url().includes(FIXTURE_SELF_CHECK_PAIR.apiPath),
+        { timeout: 15000 }
       );
       await page.locator(FIXTURE_SELF_CHECK_PAIR.uiAction ?? '[data-qa="load-status"]').click();
       const apiResponse = await pending;
       const result = page.locator(FIXTURE_SELF_CHECK_PAIR.uiResult ?? '[data-qa="status-result"]');
-      await result.waitFor({ state: 'visible' });
+      await result.waitFor({ state: 'visible', timeout: 15000 });
       const actual = (await result.textContent())?.trim() ?? '';
       const status = apiResponse.status();
       const passed = status === (FIXTURE_SELF_CHECK_PAIR.expectedStatus ?? 200) && actual === 'ok';

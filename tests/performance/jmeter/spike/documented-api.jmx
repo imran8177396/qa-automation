@@ -2,7 +2,7 @@
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
     <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="QA Automation spike API" enabled="true">
-      <stringProp name="TestPlan.comments">Auto-generated from qa.config.json. Documented API only: https://jsonplaceholder.typicode.com/posts. Not a Sauce Demo REST plan — discovery found 0 XHR on the login page; do not invent that API. Profile: spike. HEAVY profile. Do not run unless --authorize-heavy or QA_PERF_AUTHORIZE is set. Not a CI default.</stringProp>
+      <stringProp name="TestPlan.comments">Auto-generated from qa.config.json. Documented API only: /posts. Not a Sauce Demo REST plan — discovery found 0 XHR on the login page; do not invent that API. Profile: spike. HEAVY profile. Do not run unless --authorize-heavy or QA_PERF_AUTHORIZE is set. Not a CI default.</stringProp>
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
     </TestPlan>
@@ -24,7 +24,7 @@
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.domain">jsonplaceholder.typicode.com</stringProp>
+          <stringProp name="HTTPSampler.domain"></stringProp>
           <stringProp name="HTTPSampler.port"></stringProp>
           <stringProp name="HTTPSampler.protocol">https</stringProp>
           <stringProp name="HTTPSampler.path">/posts</stringProp>

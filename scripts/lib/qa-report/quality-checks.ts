@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { readJsonIfExists, writeJson } from '../../discovery/write-json';
 import { PATHS } from '../paths';
 import {
   PLAYWRIGHT_SUITE_OUTPUT_PATHS,
@@ -244,6 +245,28 @@ export function assertQualityChecksPass(checks: QualityCheck[]): void {
 
 export function collectPlannedRefIds(texts: string[]): string[] {
   return [...new Set(texts.flatMap((text) => extractRefTokens(text)))];
+}
+
+export interface QualityChecksArtifact {
+  generatedAt: string;
+  checks: QualityCheck[];
+}
+
+/** Persist report quality-checks so the orchestrator quality gate can read them. */
+export function writeQualityChecksArtifact(
+  checks: QualityCheck[],
+  filePath = PATHS.qualityChecksFile
+): void {
+  writeJson(filePath, {
+    generatedAt: new Date().toISOString(),
+    checks,
+  } satisfies QualityChecksArtifact);
+}
+
+export function readQualityChecksArtifact(filePath = PATHS.qualityChecksFile): QualityCheck[] | null {
+  const raw = readJsonIfExists<QualityChecksArtifact>(filePath);
+  if (!raw || !Array.isArray(raw.checks)) return null;
+  return raw.checks;
 }
 
 const TAUTOLOGICAL_FLAG = 'TAUTOLOGICAL_ASSERTION';

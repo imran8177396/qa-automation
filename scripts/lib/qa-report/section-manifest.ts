@@ -57,6 +57,7 @@ export const SECTION_MANIFEST: readonly ManifestSection[] = [
   { id: 'visual', layer: 2, title: 'Visual Regression' },
   { id: 'failure-analysis', layer: 2, title: 'Failure Analysis' },
   { id: 'retest', layer: 2, title: 'Retest' },
+  { id: 'engine-results', layer: 2, title: 'Engine Results' },
 
   { id: 'layer-3', layer: 3, title: 'QA Analysis' },
   { id: 'coverage-analysis', layer: 3, title: 'Coverage Analysis' },

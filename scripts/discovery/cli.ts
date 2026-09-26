@@ -1,7 +1,12 @@
 import { loadConfig } from '../lib/load-config';
 import { loadRuntimeEnv } from '../lib/load-runtime-env';
+import { persistCliWebsiteUrl, readLastTargetUrl } from '../lib/last-target';
+import { readExistingSeedUrl, resolveOrchestratorUrl } from '../orchestrator/resolve-url';
 
-export function resolveDiscoverUrl(argv = process.argv.slice(2)): { url: string; maxPages?: number } {
+export function resolveDiscoverUrl(
+  argv = process.argv.slice(2),
+  options?: { lastTargetUrl?: string | null; envUrl?: string | null; existingSeed?: string | null }
+): { url: string; maxPages?: number; cliUrl?: string } {
   loadRuntimeEnv();
 
   const cleaned = argv.filter((arg) => arg !== '--');
@@ -17,24 +22,44 @@ export function resolveDiscoverUrl(argv = process.argv.slice(2)): { url: string;
   const urlFromFlag = urlEq
     ? urlEq.slice('--url='.length)
     : urlFlagIndex >= 0
-      ? cleaned[urlFlagIndex + 1]
-      : undefined;
+    ? cleaned[urlFlagIndex + 1]
+    : undefined;
   const positional = cleaned.find((arg, index) => {
     if (arg.startsWith('--')) return false;
     if (urlFlagIndex >= 0 && index === urlFlagIndex + 1) return false;
     return true;
   });
-  const url = urlFromFlag || positional;
+  const cliUrl = urlFromFlag || positional;
 
-  if (url) {
-    return { url, maxPages };
+  if (cliUrl) {
+    return { url: cliUrl, maxPages, cliUrl };
   }
 
   const config = loadConfig();
-  if (!config.urls.website) {
+  const url = resolveOrchestratorUrl({
+    playwrightEnvUrl:
+      options?.envUrl !== undefined
+        ? undefined
+        : process.env.QA_PLAYWRIGHT_BASE_URL,
+    envUrl: options?.envUrl !== undefined ? options.envUrl ?? undefined : process.env.QA_WEBSITE_URL,
+    lastTargetUrl: options?.lastTargetUrl !== undefined ? options.lastTargetUrl : readLastTargetUrl(),
+    websiteUrl: config.urls.website,
+    playwrightBaseUrl: config.playwright.baseURL,
+    existingSeed: options?.existingSeed !== undefined ? options.existingSeed : readExistingSeedUrl(),
+  });
+  if (!url) {
     throw new Error(
       'Usage: npm run discover -- <url> [--url=<url>] [--max-pages=N] (or set urls.website in qa.config.json)'
     );
   }
-  return { url: config.urls.website, maxPages };
+  return { url, maxPages };
+}
+
+/** CLI entry helper: resolve, then persist a new `--url` / positional target. */
+export function resolveAndPersistDiscoverUrl(
+  argv = process.argv.slice(2)
+): { url: string; maxPages?: number; cliUrl?: string } {
+  const resolved = resolveDiscoverUrl(argv);
+  persistCliWebsiteUrl(resolved.cliUrl);
+  return resolved;
 }

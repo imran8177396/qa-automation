@@ -12,6 +12,8 @@ import { renderApiFindingsHtml, renderApiFindingsMarkdown } from '../lib/api/wri
 import type { PostmanReportLike } from '../lib/api/types';
 import { writeCrossSuiteReport } from '../lib/quality/cross-suite';
 import { writeTautologicalArtifact } from '../lib/quality/tautological-assertions';
+import { resolveApiUrl, resolveWebsiteTarget } from '../orchestrator/resolve-url';
+import { readLastTargetUrl } from '../lib/last-target';
 import type { QaConfig } from '../types';
 
 function loadRuntimeEnv(): void {
@@ -41,7 +43,32 @@ export async function runPostman(config: QaConfig): Promise<boolean> {
   const tokenPresent = Boolean(process.env.QA_API_TOKEN);
   const usernamePresent = Boolean(process.env.QA_API_USERNAME);
   const passwordPresent = Boolean(process.env.QA_API_PASSWORD);
-  const discovery = loadApiDiscoveryProvenance(config.urls.website);
+  const websiteUrl = resolveWebsiteTarget({
+    playwrightEnvUrl: process.env.QA_PLAYWRIGHT_BASE_URL,
+    websiteEnvUrl: process.env.QA_WEBSITE_URL,
+    lastTargetUrl: readLastTargetUrl(),
+    websiteUrl: config.urls.website,
+    playwrightBaseUrl: config.playwright.baseURL,
+  });
+  const discovery = loadApiDiscoveryProvenance(websiteUrl);
+  const apiBaseUrl = resolveApiUrl({ apiUrl: config.urls.api });
+  if (!apiBaseUrl) {
+    const reason =
+      'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api). Refusing to run Postman against a missing host — no public demo API is substituted.';
+    logWarn(reason);
+    writeJson(path.join(PATHS.reports.postman, 'summary.json'), {
+      generatedAt: new Date().toISOString(),
+      collection: PATHS.postmanCollection,
+      environment: PATHS.postmanEnvironment,
+      passed: false,
+      status: 'REQUIRES_CONFIGURATION',
+      requestSource: 'qa.config.json postman.requests',
+      discovery,
+      note: reason,
+    });
+    writeCrossSuiteReport();
+    return false;
+  }
 
   const result = runCommand(resolvePostmanCommand(), [
     'collection',
@@ -50,7 +77,7 @@ export async function runPostman(config: QaConfig): Promise<boolean> {
     '-e',
     PATHS.postmanEnvironment,
     '--env-var',
-    `baseUrl=${process.env.QA_API_URL || config.urls.api}`,
+    `baseUrl=${apiBaseUrl}`,
     '--env-var',
     `apiToken=${process.env.QA_API_TOKEN ?? ''}`,
     '--env-var',

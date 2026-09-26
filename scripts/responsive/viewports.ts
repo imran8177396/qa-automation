@@ -1,3 +1,7 @@
+import { engineProject } from '../cross-browser/projects';
+import { ALL_PLAYWRIGHT_BROWSERS, type PlaywrightBrowser } from '../lib/playwright-browsers';
+import type { PlaywrightTestConfig } from '@playwright/test';
+
 export const VIEWPORT_NAMES = ['desktop', 'laptop', 'tablet', 'mobile'] as const;
 
 export type ViewportName = (typeof VIEWPORT_NAMES)[number];
@@ -21,7 +25,7 @@ export interface ViewportProfile {
 }
 
 export const EMULATION_NOTE =
-  'Chromium emulated viewport (page.setViewportSize / Playwright viewport + touch flags) — not a real device, not iOS Safari, not Android Chrome';
+  'Emulated viewport on desktop Chromium / Firefox / WebKit (page.setViewportSize / Playwright viewport + touch flags) — not a real device, not iOS Safari, not Android Chrome';
 
 export const VIEWPORTS: Record<ViewportName, ViewportProfile> = {
   desktop: {
@@ -67,13 +71,43 @@ export const VIEWPORTS: Record<ViewportName, ViewportProfile> = {
 };
 
 export function viewportFromProjectName(projectName: string | undefined): ViewportProfile {
-  const match = VIEWPORT_NAMES.find((name) => VIEWPORTS[name].projectName === projectName);
+  const raw = projectName ?? '';
+  const exact = VIEWPORT_NAMES.find((name) => VIEWPORTS[name].projectName === raw);
+  if (exact) return VIEWPORTS[exact];
+  const stripped = raw.replace(/-(chromium|firefox|webkit)$/i, '');
+  const match = VIEWPORT_NAMES.find((name) => VIEWPORTS[name].projectName === stripped);
   if (!match) {
     throw new Error(
-      `Unknown responsive project "${projectName ?? ''}". Expected one of: ${VIEWPORT_NAMES.map((n) => VIEWPORTS[n].projectName).join(', ')}`
+      `Unknown responsive project "${raw}". Expected one of: ${VIEWPORT_NAMES.map((n) => VIEWPORTS[n].projectName).join(', ')}[-chromium|-firefox|-webkit]`
     );
   }
   return VIEWPORTS[match];
+}
+
+export function responsiveProjectName(profile: ViewportProfile, browser: PlaywrightBrowser): string {
+  return `${profile.projectName}-${browser}`;
+}
+
+export function responsiveEngineProjects(): NonNullable<PlaywrightTestConfig['projects']> {
+  return ALL_PLAYWRIGHT_BROWSERS.flatMap((browser) =>
+    VIEWPORT_NAMES.map((name) => {
+      const profile = VIEWPORTS[name];
+      const engine = engineProject(browser);
+      return {
+        name: responsiveProjectName(profile, browser),
+        use: {
+          ...engine.use,
+          ...playwrightUseFor(profile),
+        },
+      };
+    })
+  );
+}
+
+export function responsiveProjectArgs(browsers: readonly PlaywrightBrowser[]): string[] {
+  return browsers.flatMap((browser) =>
+    VIEWPORT_NAMES.map((name) => `--project=${responsiveProjectName(VIEWPORTS[name], browser)}`)
+  );
 }
 
 export function playwrightUseFor(profile: ViewportProfile): {
@@ -91,9 +125,9 @@ export function playwrightUseFor(profile: ViewportProfile): {
 }
 
 export const RESPONSIVE_LIMITATIONS = [
-  'This suite uses emulated viewports in Chromium (page.setViewportSize and Playwright project viewport/touch flags). It is not a real device.',
+  'This suite uses emulated viewports on Chromium, Firefox, and WebKit desktop engines (page.setViewportSize and Playwright project viewport/touch flags). It is not a real device.',
   'No real iOS Safari, real Android Chrome, or device-cloud session was executed.',
   'A passing mobile emulated viewport is not iPhone coverage and is not Mobile Safari coverage.',
   'Playwright device descriptors are not used as named iPhone/Pixel profiles — form factors are desktop/laptop/tablet/mobile only.',
-  'WebKit engine results (if added later) would still be browser-engine testing, not Mobile Safari on a device.',
+  'WebKit engine results are desktop WebKit, not Mobile Safari on a device.',
 ] as const;

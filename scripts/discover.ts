@@ -2,7 +2,7 @@ import { PATHS } from './lib/paths';
 import { loadConfig } from './lib/load-config';
 import { loadRuntimeEnv } from './lib/load-runtime-env';
 import { logStep, logSuccess } from './lib/logger';
-import { resolveDiscoverUrl } from './discovery/cli';
+import { resolveAndPersistDiscoverUrl } from './discovery/cli';
 import { runFullDiscovery } from './discovery/run-discover';
 import { mergeCategoryStatus } from './discovery/categories';
 import { resolveSafetyConfig } from './core/safety-policy';
@@ -10,7 +10,7 @@ import { writePlannedUiChecks } from './planning/write-planned-checks';
 
 async function main(): Promise<void> {
   loadRuntimeEnv();
-  const { url, maxPages } = resolveDiscoverUrl();
+  const { url, maxPages } = resolveAndPersistDiscoverUrl();
   logStep(`Application discovery — ${url}`);
 
   const result = await runFullDiscovery(url, maxPages);
@@ -37,6 +37,7 @@ async function main(): Promise<void> {
   logSuccess(`ui-inventory.json        ${PATHS.uiInventoryFile}`);
   logSuccess(`workflow-inventory.json  ${PATHS.workflowInventoryFile}`);
   logSuccess(`api-inventory.json       ${PATHS.apiInventoryFile}`);
+  logSuccess(`discovery-inventory.json ${PATHS.discoveryInventoryFile}`);
   logSuccess(`planned-checks.json      ${PATHS.plannedChecksFile} (${planned} runnable / ${checks.length} total)`);
 }
 

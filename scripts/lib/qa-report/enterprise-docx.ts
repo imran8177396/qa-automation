@@ -22,6 +22,10 @@ import { sanitizeDocxText } from '../../../npm-docs/sanitize-text';
 import { SectionRegistry, resolveRefTokens } from './section-manifest';
 import { TableAudit, prepareTableRows } from './empty-table';
 import { NOT_AVAILABLE } from '../suite-origin';
+import {
+  ENGINE_RESULT_COLUMN_LABELS,
+  engineReportRowToCells,
+} from './collect-engine-results';
 
 const COLORS = {
   navy: '1F3864',
@@ -121,6 +125,16 @@ function bullet(text: string): Paragraph {
 
 function statusColor(status: string): string {
   const upper = status.toUpperCase();
+  // Never color gated / non-executed outcomes as PASS green.
+  if (
+    upper === 'NOT_TESTED' ||
+    upper === 'SKIPPED' ||
+    upper === 'NOT_APPLICABLE' ||
+    upper === 'BLOCKED' ||
+    upper === 'REQUIRES_CONFIGURATION'
+  ) {
+    return upper === 'BLOCKED' || upper === 'REQUIRES_CONFIGURATION' ? COLORS.conditional : COLORS.slate;
+  }
   if (upper.includes('CONDITIONAL')) return COLORS.conditional;
   if (upper.includes('BLOCKED') || upper.includes('REQUIRES_CONFIGURATION')) return COLORS.conditional;
   if (upper.includes('PASS') && !upper.includes('FAIL')) return COLORS.pass;
@@ -306,6 +320,7 @@ export async function generateEnterpriseDocx(
       ['Attribute', 'Details'],
       [
         ['Application', model.meta.applicationName],
+        ['Execution ID', model.meta.executionId],
         ['Testing Phase', model.meta.testingPhase],
         ['Environment', model.meta.environment],
         ['Report Version', model.meta.reportVersion],
@@ -866,6 +881,17 @@ export async function generateEnterpriseDocx(
       ]),
       1600,
       model.retest.missingReason || model.retest.reason || 'no retest items were present'
+    ),
+    h('engine-results'),
+    p(model.engineResults.sourceNote),
+    p(
+      'Statuses keep the engine vocabulary (PASS, FAIL, BLOCKED, NOT_TESTED, FLAKY, REQUIRES_CONFIGURATION, NOT_APPLICABLE, SKIPPED). Missing summary files are omitted — not counted as PASS. FLAKY is never rewritten to PASS.'
+    ),
+    tbl(
+      [...ENGINE_RESULT_COLUMN_LABELS],
+      model.engineResults.rows.map((row) => engineReportRowToCells(row)),
+      900,
+      'no engine summary.json results were present for this execution'
     )
   );
 

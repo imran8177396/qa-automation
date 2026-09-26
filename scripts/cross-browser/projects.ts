@@ -1,5 +1,8 @@
 import { devices, type PlaywrightTestConfig } from '@playwright/test';
-import type { PlaywrightBrowser } from '../lib/playwright-browsers';
+import {
+  ALL_PLAYWRIGHT_BROWSERS,
+  type PlaywrightBrowser,
+} from '../lib/playwright-browsers';
 
 /**
  * Headless Firefox on Windows often hits SWGL framebuffer mapping failures
@@ -31,4 +34,23 @@ export function engineProject(browser: PlaywrightBrowser): NonNullable<Playwrigh
         : {}),
     },
   };
+}
+
+type EngineProjectUse = NonNullable<NonNullable<PlaywrightTestConfig['projects']>[number]['use']>;
+
+/** Chromium + Firefox + WebKit projects — reuse this from every Playwright config. */
+export function engineProjects(
+  useOverrides?: EngineProjectUse
+): NonNullable<PlaywrightTestConfig['projects']> {
+  return ALL_PLAYWRIGHT_BROWSERS.map((browser) => {
+    const project = engineProject(browser);
+    if (!useOverrides) return project;
+    return {
+      ...project,
+      use: {
+        ...project.use,
+        ...useOverrides,
+      },
+    };
+  });
 }

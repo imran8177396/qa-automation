@@ -12,7 +12,7 @@ export interface ApiDiscoveryProvenance {
 }
 
 const ZERO_CALLS_NOTE =
-  'Sauce Demo discovery found 0 xhr/fetch/websocket APIs. Executed Postman requests are documented in qa.config.json postman.requests (JSONPlaceholder-style), not invented from the login page.';
+  'Discovery found 0 xhr/fetch/websocket APIs on the crawled UI. Executed Postman requests come only from qa.config.json postman.requests (documented urls.api), not invented from the page.';
 
 export function summarizeApiDiscovery(
   inventory: ApiInventory | null,
@@ -39,7 +39,7 @@ export function summarizeApiDiscovery(
     note:
       inventory.calls.length === 0
         ? ZERO_CALLS_NOTE
-        : `Discovery observed ${inventory.calls.length} xhr/fetch/websocket call(s). Collection items still come only from qa.config.json postman.requests unless a call shares urls.api — Sauce Demo login-page paths are never invented.`,
+        : `Discovery observed ${inventory.calls.length} xhr/fetch/websocket call(s). Collection items still come only from qa.config.json postman.requests unless a call shares urls.api — undocumented UI-page paths are never invented.`,
   };
 }
 

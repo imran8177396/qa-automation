@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { PATHS } from './paths';
@@ -21,6 +22,22 @@ function quoteWindowsArg(value: string): string {
 function windowsCommandLine(command: string, args: string[]): string {
   const inner = [quoteWindowsArg(command), ...args.map(quoteWindowsArg)].join(' ');
   return `"${inner}"`;
+}
+
+/**
+ * Resolve the npm CLI the same way preflight does: prefer `npm.cmd` / `npm`
+ * next to `process.execPath`, then PATH. `execFileSync('npm')` is ENOENT on
+ * Windows because npm is a `.cmd` shim, not a bare executable.
+ */
+export function resolveNpmCommand(): string | null {
+  const npmBesideNode = path.join(
+    path.dirname(process.execPath),
+    process.platform === 'win32' ? 'npm.cmd' : 'npm'
+  );
+  if (fs.existsSync(npmBesideNode)) {
+    return npmBesideNode;
+  }
+  return findOnPath('npm');
 }
 
 /** First PATH match for `name` (`where` on Windows, `which` elsewhere). */
@@ -80,11 +97,12 @@ export function runLocalBin(
 export function captureCommand(
   command: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number; maxBuffer?: number } = {}
 ): { status: number | null; stdout: string; stderr: string } {
   const cwd = options.cwd ?? PATHS.root;
   const env = options.env ?? process.env;
   const timeout = options.timeoutMs;
+  const maxBuffer = options.maxBuffer;
 
   const result =
     process.platform === 'win32'
@@ -95,6 +113,7 @@ export function captureCommand(
           shell: false,
           windowsVerbatimArguments: true,
           timeout,
+          maxBuffer,
         })
       : spawnSync(command, args, {
           encoding: 'utf8',
@@ -102,6 +121,7 @@ export function captureCommand(
           env,
           shell: false,
           timeout,
+          maxBuffer,
         });
 
   return {

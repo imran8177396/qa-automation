@@ -9,10 +9,12 @@ import {
   defaultReportKindRoots,
   inspectReportKinds,
 } from '../lib/report-kinds';
+import { loadExecutionIdentity } from '../lib/qa-report/execution-archive';
 
 export interface ReportIndexDocument {
   generatedAt: string;
   project: string;
+  executionId?: string;
   note: string;
   kinds: ReportKindRecord[];
 }
@@ -22,6 +24,7 @@ export function buildReportIndexDocument(allureOverride?: AllureStatusOverride):
   return {
     generatedAt: new Date().toISOString(),
     project: config.project.name,
+    executionId: loadExecutionIdentity()?.executionId,
     note: 'Statuses reflect files on disk only. Missing tool reports are NOT_EXECUTED. Failures are not converted to PASS. Coverage is not invented.',
     kinds: inspectReportKinds(defaultReportKindRoots(), allureOverride),
   };
@@ -33,6 +36,7 @@ export function renderRawIndexMarkdown(document: ReportIndexDocument): string {
     '',
     `Generated: ${document.generatedAt}`,
     `Project: ${document.project}`,
+    `Execution ID: ${document.executionId ?? 'NOT_AVAILABLE'}`,
     '',
     document.note,
     '',
@@ -91,6 +95,7 @@ export function writeFallbackCombinedReport(professionalError: string): {
   const mdPath = path.join(PATHS.reports.summary, 'final-qa-report.md');
   const payload = {
     generatedAt,
+    executionId: loadExecutionIdentity()?.executionId,
     verdict: 'BLOCKED',
     project: config.project.name,
     professionalReport: null,

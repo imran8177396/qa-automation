@@ -1,41 +1,13 @@
 /**
  * Single labelled pass-rate helper.
  *
- * Named rates (use these; do not invent additional headline rates):
+ * Named rates (do not invent additional headline rates):
  * - uiExecutionPassRate  = passed / (passed + failed); skipped excluded
  * - assertionPassRate    = assertions passed / assertions executed (all suites)
  *
- * ---------------------------------------------------------------------------
- * Call sites left for the report-generator agent (do not edit those files here)
- * ---------------------------------------------------------------------------
- * scripts/lib/qa-report/enterprise-model.ts
- *   - local passRate(passed, total) ~L460 — formats passed/total as "N.N%"
- *   - browserSummaries[].passRate = passRate(passed, rows.length) ~L984
- *     (denominator includes skipped when rows include SKIPPED)
- *   - executive/analysis prose: passRate(pwPassed, executions.length) ~L1268
- *   - kpi.passRate = passRate(pwPassed, executions.length) ~L1386  ← headline UI figure
- *   - playwright.passRate = passRate(pwPassed, executions.length) ~L1606
- *   - evidence-integrity note: passRate(pwPassed, executions.length) ~L1773
- * scripts/lib/qa-report/enterprise-html.ts
- *   - KPI / Playwright tables render model.kpi.passRate and model.playwright.passRate
- *   - distribution passedPct = passed / totalUiExecutions (includes skip) ~L73
- * scripts/lib/qa-report/enterprise-docx.ts
- *   - same model fields; distribution % uses totalUiExecutions (includes skip) ~L818
- * scripts/lib/qa-report/build-report.ts
- *   - prints model.kpi.passRate
- * scripts/reporting/generate-final-report.ts
- *   - prints coverage.totals.passRatePercent (already skipped-excluded via coverage)
- *
- * Those sites currently divide by executions including skipped (5/10 → 50.0%).
- * They should call uiExecutionPassRate / assertionPassRate (5/9 → 55.6%).
- *
- * ---------------------------------------------------------------------------
- * Shared-lib / parser sites (touched from this helper task)
- * ---------------------------------------------------------------------------
- * scripts/coverage/calculate.ts — passRatePercent now uses uiExecutionPassRate
- *
- * Display-only (no computation; left unchanged):
- * scripts/coverage/run-coverage.ts, scripts/coverage/markdown.ts
+ * enterprise-model formats those via formatLabelledPassRate. Coverage
+ * passRatePercent uses uiExecutionPassRate. Coverage markdown only displays
+ * the stored percent — it does not recompute a second rate.
  */
 
 export const UI_EXECUTION_PASS_RATE_SCOPE = 'uiExecutionPassRate';

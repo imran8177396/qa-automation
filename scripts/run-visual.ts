@@ -11,16 +11,18 @@ import { resolveVisualCli } from './visual/cli';
 import { planVisualChecks } from './visual/applicability';
 import { copyVisualEvidence } from './visual/evidence';
 import { loadConfig } from './lib/load-config';
+import {
+  classifyCompulsoryPlaywrightBrowsers,
+  playwrightProjectArgs,
+  resolvePlaywrightBrowsers,
+} from './lib/playwright-browsers';
 import { QA_PLAYWRIGHT_SUITE_ENV, playwrightSuiteHtmlDir, playwrightSuiteResultsPath } from './lib/playwright-suites';
 import { completePlaywrightSuite, preparePlaywrightSuite } from './lib/playwright-suite-summary';
-import { resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
-
-const VISUAL_SKIPPED_BROWSERS = [
-  { browser: 'firefox' as const, reason: 'visual suite is chromium-only; pixel comparison is not a stable cross-engine signal' },
-  { browser: 'webkit' as const, reason: 'visual suite is chromium-only; pixel comparison is not a stable cross-engine signal' },
-];
+import { applyCliWebsiteTarget, resolveConfiguredPlaywrightBaseUrl } from './lib/suite-origin';
+import { stripWebsiteTargetArgs } from './orchestrator/resolve-url';
 
 async function main(): Promise<void> {
+  applyCliWebsiteTarget();
   const cli = resolveVisualCli(process.argv);
   const config = loadConfig();
   const target = resolveUiTarget(config);
@@ -40,7 +42,12 @@ async function main(): Promise<void> {
   fs.mkdirSync(path.join(PATHS.root, 'test-results', 'visual'), { recursive: true });
   fs.mkdirSync(PATHS.visualBaselinesDir, { recursive: true });
 
-  runLocalBin('playwright', ['install', 'chromium']);
+  const requestedBrowsers = resolvePlaywrightBrowsers(config.playwright);
+  runLocalBin('playwright', ['install', ...requestedBrowsers]);
+  const { executableBrowsers, skippedBrowsers } = classifyCompulsoryPlaywrightBrowsers(requestedBrowsers);
+  if (skippedBrowsers.length > 0) {
+    logError(`Missing Playwright engines after install: ${skippedBrowsers.map((row) => row.browser).join(', ')}`);
+  }
 
   let server: Awaited<ReturnType<typeof ensureFixtureChildProcess>> = null;
   if (target.isLoopback) {
@@ -59,17 +66,23 @@ async function main(): Promise<void> {
     if (cli.updateBaselines) {
       args.push('--update-snapshots');
     }
-    args.push(...cli.extraArgs);
+    args.push(...stripWebsiteTargetArgs(cli.extraArgs));
+    if (executableBrowsers.length > 0) {
+      args.push(...playwrightProjectArgs(executableBrowsers));
+    }
 
-    const result = runLocalBin('playwright', args, {
-      env: {
-        ...process.env,
-        QA_PLAYWRIGHT_BASE_URL: target.url,
-        QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
-        [QA_PLAYWRIGHT_SUITE_ENV]: 'visual',
-      },
-    });
-    passed = result.status === 0;
+    const result =
+      executableBrowsers.length === 0
+        ? { status: 1 }
+        : runLocalBin('playwright', args, {
+            env: {
+              ...process.env,
+              QA_PLAYWRIGHT_BASE_URL: target.url,
+              QA_PLAYWRIGHT_HEADLESS: process.env.QA_PLAYWRIGHT_HEADLESS ?? 'true',
+              [QA_PLAYWRIGHT_SUITE_ENV]: 'visual',
+            },
+          });
+    passed = result.status === 0 && skippedBrowsers.length === 0;
   } finally {
     if (server) await server.close();
     evidenceFiles = copyVisualEvidence();
@@ -77,8 +90,8 @@ async function main(): Promise<void> {
 
   const suiteSummary = completePlaywrightSuite(started, {
     passed,
-    executedBrowsers: ['chromium'],
-    skippedBrowsers: VISUAL_SKIPPED_BROWSERS,
+    executedBrowsers: executableBrowsers,
+    skippedBrowsers,
   });
   writeJson(path.join(PATHS.reports.visual, 'applicability.json'), {
     generatedAt: new Date().toISOString(),

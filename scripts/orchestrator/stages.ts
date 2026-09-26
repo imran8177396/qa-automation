@@ -1,13 +1,27 @@
+import { loadConfig } from '../lib/load-config';
 import { stagePhaseForKey } from '../lib/stage-timeline';
+import type { TestsConfig } from '../types';
+import {
+  orchestratorPhaseForStageKey,
+  selectedOptInEngineDefs,
+  type OrchestratorPhaseName,
+} from './phases';
 import type { StageDefinition } from './types';
 
 /**
  * qa:all child-process stages. The 20 named contract steps appear in order;
  * extra existing stages (dependencies, content, workflows, collect) still run.
  * Steps 11–12 are one command (`run-performance.ts`, no --authorize-heavy).
+ * Opt-in engines (tests.*.enabled) are appended into EXECUTE when selected.
+ *
+ * Post-EXECUTE order follows the 11-phase flow:
+ * NORMALIZE (collect) → COVERAGE → FAILURE ANALYSIS → RETEST → REPORT.
  */
-export function buildStages(): StageDefinition[] {
-  const stages: Array<Omit<StageDefinition, 'phase'>> = [
+export function buildStages(options?: { tests?: TestsConfig }): StageDefinition[] {
+  const tests = options?.tests ?? loadConfig().tests;
+  const optIns = selectedOptInEngineDefs(tests);
+
+  const stages: Array<Omit<StageDefinition, 'phase' | 'orchestratorPhase'>> = [
     { id: 1, key: 'preflight', name: 'Preflight / environment', script: 'scripts/preflight.ts' },
     {
       id: 2,
@@ -121,44 +135,63 @@ export function buildStages(): StageDefinition[] {
       script: 'scripts/run-workflows.ts',
       skip: (ctx) => (ctx.playwrightEnabled ? null : 'playwright.enabled is false'),
     },
-    { id: 17, key: 'collect', name: 'Result collection', script: null },
+  ];
+
+  let nextId = 17;
+  for (const optIn of optIns) {
+    stages.push({
+      id: nextId,
+      key: optIn.key,
+      name: optIn.name,
+      script: optIn.script,
+    });
+    nextId += 1;
+  }
+
+  stages.push(
+    { id: nextId, key: 'collect', name: 'Result collection', script: null },
+    { id: nextId + 1, key: 'coverage', name: 'Coverage analysis', script: 'scripts/coverage.ts' },
     {
-      id: 18,
+      id: nextId + 2,
       key: 'analyze',
       name: 'Failure analysis',
       script: 'scripts/analyze-failures.ts',
       skip: (ctx) => (ctx.failureAnalysisEnabled ? null : 'failureAnalysis.enabled is false'),
     },
     {
-      id: 19,
+      id: nextId + 3,
       key: 'retest',
       name: 'Retesting where appropriate',
       script: 'scripts/retest.ts',
       args: ['--automation-only'],
       skip: (ctx) => (ctx.retestEnabled ? null : 'retest.enabled is false'),
     },
-    { id: 20, key: 'coverage', name: 'Coverage analysis', script: 'scripts/coverage.ts' },
     {
-      id: 21,
+      id: nextId + 4,
       key: 'allure',
       name: 'Allure report',
       script: 'scripts/reporting/generate-allure-report.ts',
       skip: (ctx) => (ctx.reportEnabled ? null : 'report.enabled is false'),
     },
     {
-      id: 22,
+      id: nextId + 5,
       key: 'playwright-reports',
       name: 'Playwright reports',
       script: 'scripts/reporting/report-playwright.ts',
       skip: (ctx) => (ctx.reportEnabled ? null : 'report.enabled is false'),
     },
     {
-      id: 23,
+      id: nextId + 6,
       key: 'report',
       name: 'Final QA summary',
       script: 'scripts/reporting/generate-final-report.ts',
       skip: (ctx) => (ctx.reportEnabled ? null : 'report.enabled is false'),
-    },
-  ];
-  return stages.map((stage) => ({ ...stage, phase: stagePhaseForKey(stage.key) }));
+    }
+  );
+
+  return stages.map((stage) => ({
+    ...stage,
+    phase: stagePhaseForKey(stage.key),
+    orchestratorPhase: orchestratorPhaseForStageKey(stage.key) as OrchestratorPhaseName,
+  }));
 }

@@ -1,6 +1,7 @@
 import { PATHS } from './paths';
 import { readJsonIfExists } from '../discovery/write-json';
 import type { PageMap } from '../discovery/page-map';
+import type { UiInventory } from '../discovery/ui-scan';
 import { originOf } from './suite-origin';
 import type { ResolvedUiTarget } from './ui-target';
 
@@ -30,6 +31,15 @@ function pathOf(url: string, fallback: string): string {
   } catch {
     return fallback;
   }
+}
+
+/** True only when discovery recorded a form whose name/locator looks like login. */
+export function discoveryLandingHasLoginForm(ui: UiInventory | null | undefined): boolean {
+  return Boolean(
+    ui?.elements.some(
+      (el) => el.elementType === 'form' && /login/i.test(`${el.accessibleName ?? ''} ${el.locator ?? ''}`)
+    )
+  );
 }
 
 /**

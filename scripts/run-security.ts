@@ -7,7 +7,8 @@ import { readJsonIfExists, writeJson } from './discovery/write-json';
 import type { PageMap } from './discovery/page-map';
 import type { DiscoveryResult } from './discovery/types';
 import type { UiInventory } from './discovery/ui-scan';
-import { isLoopbackUrl } from './orchestrator/resolve-url';
+import { isLoopbackUrl, resolveWebsiteTarget } from './orchestrator/resolve-url';
+import { readLastTargetUrl } from './lib/last-target';
 import { collectApiHygieneFindings, documentedApiGetUrl } from './security/api-hygiene';
 import { parseSetCookie, collectCookieFindings, type ObservedCookie } from './security/cookies';
 import { collectCsrfFindings } from './security/csrf';
@@ -33,12 +34,34 @@ import {
 
 function resolveTarget(pageMap: PageMap | null, websiteUrl: string | undefined, playwrightBaseUrl: string | undefined): {
   target: string | null;
-  source: 'page-map' | 'config' | 'none';
+  source: 'page-map' | 'env' | 'last-target' | 'config' | 'none';
 } {
-  if (pageMap?.seedUrl) return { target: pageMap.seedUrl, source: 'page-map' };
-  if (websiteUrl) return { target: websiteUrl, source: 'config' };
-  if (playwrightBaseUrl) return { target: playwrightBaseUrl, source: 'config' };
-  return { target: null, source: 'none' };
+  const playwrightEnv = process.env.QA_PLAYWRIGHT_BASE_URL?.trim() || '';
+  const websiteEnv = process.env.QA_WEBSITE_URL?.trim() || '';
+  const lastTarget = readLastTargetUrl();
+  const seed = pageMap?.seedUrl?.trim() || null;
+  const website = websiteUrl?.trim() || '';
+  const loopbackBase =
+    playwrightBaseUrl && isLoopbackUrl(playwrightBaseUrl) ? playwrightBaseUrl : undefined;
+
+  if (!playwrightEnv && !websiteEnv && !lastTarget && !seed && !website && !loopbackBase) {
+    return { target: null, source: 'none' };
+  }
+
+  const target = resolveWebsiteTarget({
+    playwrightEnvUrl: playwrightEnv || undefined,
+    websiteEnvUrl: websiteEnv || undefined,
+    lastTargetUrl: lastTarget,
+    existingSeed: seed,
+    playwrightBaseUrl: loopbackBase,
+    websiteUrl: website || loopbackBase || 'https://invalid.invalid/',
+  });
+
+  let source: 'page-map' | 'env' | 'last-target' | 'config' = 'config';
+  if (playwrightEnv || websiteEnv) source = 'env';
+  else if (lastTarget) source = 'last-target';
+  else if (seed) source = 'page-map';
+  return { target, source };
 }
 
 function sameOriginPath(left: string, right: string): boolean {

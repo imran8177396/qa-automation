@@ -12,6 +12,25 @@ import {
 import type { OrchestratorSummary, StageResult } from './types';
 import { overallExitCode } from './spawn-stage';
 import { collectSuiteRollup, orchestratorProcessExitCode } from './suite-rollup';
+import {
+  applyQualityGateToRollup,
+  determineQualityGate,
+  evaluateReleaseGate,
+  formatQualityGateBanner,
+  loadQualityChecksForGate,
+} from './quality-gate';
+import { bindUniversalQaFlow, formatUniversalQaFlowMarkdown } from './universal-qa-flow';
+import { loadExecutionIdentity } from '../lib/qa-report/execution-archive';
+import {
+  buildOrchestratorPhasePlan,
+  normalizeExistingEngineResults,
+  recordAssertionsPhase,
+  recordInventoryPhase,
+  type EngineSelectionRecord,
+  type OrchestratorPhasePlan,
+} from './phases';
+import type { TestsConfig } from '../types';
+import { loadConfig } from '../lib/load-config';
 
 function toTimelineRows(results: StageResult[]): StageTimelineRow[] {
   return results.map((row) => ({
@@ -33,11 +52,42 @@ export function writeOrchestratorArtifacts(input: {
   url: string;
   failFast: boolean;
   results: StageResult[];
+  tests?: TestsConfig;
+  phasePlan?: OrchestratorPhasePlan;
+  selection?: EngineSelectionRecord;
 }): OrchestratorSummary {
   const groups = rollupStageGroups(input.results);
   const timeline = buildStageTimeline(toTimelineRows(input.results));
-  const suiteRollup = collectSuiteRollup(input.results);
-  const exitCode = orchestratorProcessExitCode(suiteRollup.overall, overallExitCode(input.results));
+  const rawRollup = collectSuiteRollup(input.results);
+  const qualityGate = determineQualityGate({
+    required: rawRollup.lines,
+    qualityChecks: loadQualityChecksForGate(),
+  });
+  const suiteRollup = applyQualityGateToRollup(rawRollup, qualityGate);
+  const universalFlow = bindUniversalQaFlow({ results: input.results, qualityGate });
+  const exitCode = orchestratorProcessExitCode(qualityGate.status, overallExitCode(input.results));
+
+  const config = loadConfig();
+  const tests = input.tests ?? config.tests;
+  const releaseGate = evaluateReleaseGate(
+    {
+      criticalFailures: groups.failed.length,
+    },
+    config.qualityGate ?? {}
+  );
+  // releaseGate is recorded only — never used to alter exitCode when blockRelease is not true.
+  const phasePlan =
+    input.phasePlan ??
+    buildOrchestratorPhasePlan({
+      tests,
+      discoveryRan: input.results.some((row) => row.key === 'discovery' && row.status !== 'NOT_EXECUTED'),
+    });
+  const selection = input.selection ?? phasePlan.selection;
+  const inventory = recordInventoryPhase({
+    discoveryRan: input.results.some((row) => row.key === 'discovery' && row.status !== 'NOT_EXECUTED'),
+  });
+  const normalized = normalizeExistingEngineResults(selection);
+  const assertions = recordAssertionsPhase({ normalized, qualityGate });
 
   const summary: OrchestratorSummary = {
     generatedAt: new Date().toISOString(),
@@ -49,11 +99,17 @@ export function writeOrchestratorArtifacts(input: {
     skipped: groups.notExecuted,
     passed: groups.passed,
     notExecuted: groups.notExecuted,
-    overallStatus: suiteRollup.overall,
+    overallStatus: qualityGate.status,
+    executionId: loadExecutionIdentity()?.executionId,
     exitCode,
     orderingValid: timeline.ordering.ok,
     orderingViolations: timeline.ordering.violations,
     suiteRollup: suiteRollup.lines,
+    qualityGate: {
+      status: qualityGate.status,
+      reasons: qualityGate.reasons,
+    },
+    releaseGate,
   };
 
   const dir = PATHS.reports.orchestrator;
@@ -61,13 +117,32 @@ export function writeOrchestratorArtifacts(input: {
   fs.mkdirSync(PATHS.reports.summary, { recursive: true });
   writeJson(path.join(dir, 'summary.json'), summary);
   writeJson(path.join(dir, 'timeline.json'), timeline);
+  writeJson(PATHS.orchestratorQualityGate, qualityGate);
+  writeJson(PATHS.orchestratorUniversalFlow, universalFlow);
+  writeJson(PATHS.orchestratorPhasePlan, { ...phasePlan, inventory });
+  writeJson(PATHS.orchestratorEngineSelection, selection);
+  writeJson(PATHS.orchestratorNormalizedResults, normalized);
+  writeJson(PATHS.orchestratorAssertions, assertions);
   writeJson(path.join(PATHS.reports.summary, 'qa-all.json'), summary);
+  fs.writeFileSync(path.join(dir, 'universal-qa-flow.md'), formatUniversalQaFlowMarkdown(universalFlow), 'utf8');
+  fs.writeFileSync(path.join(dir, 'quality-gate.md'), `${formatQualityGateBanner(qualityGate).trim()}\n`, 'utf8');
 
   const lines = [
     '# qa:all stage results',
     '',
     `URL: ${summary.url}`,
     `Overall: ${summary.overallStatus}`,
+    `Execution ID: ${summary.executionId ?? 'NOT_AVAILABLE'}`,
+    '',
+    '## Orchestrator phases (11)',
+    '',
+    ...phasePlan.phaseNames.map((name, index) => `${index + 1}. ${name}`),
+    '',
+    '## Quality gate',
+    '',
+    '```',
+    formatQualityGateBanner(qualityGate).trim(),
+    '```',
     '',
     '## Suite rollup',
     '',
@@ -103,6 +178,9 @@ export function collectResults(input: {
   url: string;
   failFast: boolean;
   results: StageResult[];
+  tests?: TestsConfig;
+  phasePlan?: OrchestratorPhasePlan;
+  selection?: EngineSelectionRecord;
 }): OrchestratorSummary {
   return writeOrchestratorArtifacts(input);
 }

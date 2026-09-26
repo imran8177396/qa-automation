@@ -76,12 +76,15 @@ export class ResponsivePage extends BasePage {
     return this.page.locator('[data-qa="dropdown"]').or(this.page.locator('select'));
   }
 
-  /** First heading of any level — Sauce Demo login has h4s, not an h1. */
+  /** First heading of any level — example Sauce Demo login has h4s, not an h1. */
   get observedHeading(): Locator {
     return this.page.getByRole('heading').first();
   }
 
-  /** Visible brand text on the Sauce Demo login screen. */
+  /**
+   * Sauce Demo example brand text. Asserted only when present (count > 0);
+   * never invented on an arbitrary live origin.
+   */
   get brand(): Locator {
     return this.page.getByText('Swag Labs', { exact: true });
   }

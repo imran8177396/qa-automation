@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { startFixtureServer } from '../testing/serve-fixture-site';
+import { isPlaywrightBrowserInstalled, MISSING_CHROMIUM_UNIT_REASON } from '../lib/playwright-browsers';
 import { crawl } from './crawler';
 import { resolveDiscoveryConfig } from '../core/scope';
 import { resolveSafetyConfig } from '../core/safety-policy';
@@ -9,6 +10,7 @@ test(
   'crawl() with credentials discovers the post-login page; without credentials it does not invent it',
   { timeout: 90000 },
   async () => {
+    assert.ok(isPlaywrightBrowserInstalled('chromium'), MISSING_CHROMIUM_UNIT_REASON);
     const server = await startFixtureServer();
     const options = {
       ...resolveDiscoveryConfig({ maxPages: 10, maxDepth: 2, useSitemap: false }),

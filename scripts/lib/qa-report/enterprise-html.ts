@@ -5,6 +5,10 @@ import { sanitizeDocxText } from '../../../npm-docs/sanitize-text';
 import { SectionRegistry, resolveRefTokens } from './section-manifest';
 import { TableAudit, prepareTableRows } from './empty-table';
 import { NOT_AVAILABLE } from '../suite-origin';
+import {
+  ENGINE_RESULT_COLUMN_LABELS,
+  engineReportRowToCells,
+} from './collect-engine-results';
 
 function escapeHtml(text: string): string {
   return sanitizeDocxText(text)
@@ -16,10 +20,21 @@ function escapeHtml(text: string): string {
 
 function statusClass(status: string): string {
   const upper = status.toUpperCase();
+  // Never style gated / non-executed outcomes as PASS.
+  if (
+    upper === 'NOT_TESTED' ||
+    upper === 'SKIPPED' ||
+    upper === 'NOT_APPLICABLE' ||
+    upper === 'BLOCKED' ||
+    upper === 'REQUIRES_CONFIGURATION'
+  ) {
+    return upper === 'BLOCKED' || upper === 'REQUIRES_CONFIGURATION' ? 'conditional' : '';
+  }
   if (upper.includes('CONDITIONAL')) return 'conditional';
   if (upper.includes('BLOCKED') || upper.includes('REQUIRES_CONFIGURATION')) return 'conditional';
-  if (upper.includes('PASS') && !upper.includes('FAIL')) return 'pass';
-  if (upper.includes('FAIL')) return 'fail';
+  // FLAKY is never styled as PASS — same non-pass bucket as FAIL / broken.
+  if (upper === 'FLAKY' || upper.includes('FAIL')) return 'fail';
+  if (upper.includes('PASS')) return 'pass';
   return '';
 }
 
@@ -264,6 +279,7 @@ export function generateEnterpriseHtml(
         ['Attribute', 'Details'],
         [
           ['Application', model.meta.applicationName],
+          ['Execution ID', model.meta.executionId],
           ['Testing Phase', model.meta.testingPhase],
           ['Environment', model.meta.environment],
           ['Report Version', model.meta.reportVersion],
@@ -779,6 +795,15 @@ export function generateEnterpriseHtml(
         row.stabilityVerdict,
       ]),
       model.retest.missingReason || model.retest.reason || 'no retest items were present'
+    )}
+
+    ${heading('engine-results')}
+    <p>${escapeHtml(model.engineResults.sourceNote)}</p>
+    <p>Statuses keep the engine vocabulary (PASS, FAIL, BLOCKED, NOT_TESTED, FLAKY, REQUIRES_CONFIGURATION, NOT_APPLICABLE, SKIPPED). Missing summary files are omitted — not counted as PASS. FLAKY is never rewritten to PASS.</p>
+    ${t(
+      [...ENGINE_RESULT_COLUMN_LABELS],
+      model.engineResults.rows.map((row) => engineReportRowToCells(row)),
+      'no engine summary.json results were present for this execution'
     )}
 
     ${heading('layer-3', 'h1')}

@@ -4,7 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import { getEnv } from './utils/env';
 import { loadConfig } from './scripts/lib/load-config';
-import { VIEWPORT_NAMES, VIEWPORTS, playwrightUseFor } from './scripts/responsive/viewports';
+import {
+  captureShellPlaywrightUrls,
+  configFallbackPlaywrightBaseUrl,
+  resolveConfiguredPlaywrightBaseUrl,
+} from './scripts/lib/suite-origin';
+import { responsiveEngineProjects } from './scripts/responsive/viewports';
 import {
   PLAYWRIGHT_FAILURE_ARTIFACTS,
   playwrightAllureReporterConfig,
@@ -15,6 +20,7 @@ import {
 
 const rootDir = __dirname;
 const generatedEnvPath = path.join(rootDir, 'config', 'generated.env');
+const capturedUrls = captureShellPlaywrightUrls();
 
 if (fs.existsSync(generatedEnvPath)) {
   dotenv.config({ path: generatedEnvPath });
@@ -26,10 +32,10 @@ const suiteName = resolvePlaywrightSuiteNameFromEnv('responsive');
 
 /**
  * Responsive suite is isolated from functional e2e and from visual baselines.
- * Projects are form-factor emulated viewports on Chromium via Playwright
- * `use.viewport` + `page.setViewportSize`. This is not a real device,
- * not iOS Safari, and not Android Chrome. Named Playwright device profiles
- * (iPhone / Pixel) are intentionally not used.
+ * Projects are form-factor emulated viewports × Chromium / Firefox / WebKit
+ * via Playwright `use.viewport` + `page.setViewportSize`. This is not a real
+ * device, not iOS Safari, and not Android Chrome. Named Playwright device
+ * profiles (iPhone / Pixel) are intentionally not used.
  */
 export default defineConfig({
   testDir: './tests/e2e/responsive',
@@ -48,15 +54,16 @@ export default defineConfig({
     ['allure-playwright', playwrightAllureReporterConfig(suiteName)],
   ],
   use: {
-    baseURL: getEnv('QA_PLAYWRIGHT_BASE_URL', loadConfig().playwright.baseURL),
+    baseURL: resolveConfiguredPlaywrightBaseUrl({
+      capturedEnvUrl: capturedUrls.capturedEnvUrl,
+      capturedWebsiteUrl: capturedUrls.capturedWebsiteUrl,
+      configBaseUrl: configFallbackPlaywrightBaseUrl(loadConfig()),
+    }),
     headless,
     ...PLAYWRIGHT_FAILURE_ARTIFACTS,
     actionTimeout: 15000,
     navigationTimeout: 35000,
     colorScheme: 'light',
   },
-  projects: VIEWPORT_NAMES.map((name) => ({
-    name: VIEWPORTS[name].projectName,
-    use: playwrightUseFor(VIEWPORTS[name]),
-  })),
+  projects: responsiveEngineProjects(),
 });

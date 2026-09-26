@@ -139,7 +139,7 @@ export async function tryDiscoveryLogin(page: Page, credentials: DiscoveryCreden
     await page.locator(form.submitLocator).click();
     await page.waitForLoadState('load', { timeout: 15000 }).catch(() => undefined);
     await page
-      .locator('h1, a[href], [data-test="inventory-item"], [data-testid="inventory-item"]')
+      .locator('h1, main, [role="main"], a[href]')
       .first()
       .waitFor({ state: 'attached', timeout: 8000 })
       .catch(() => undefined);

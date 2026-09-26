@@ -1,5 +1,8 @@
 import { expect, test } from '../../../fixtures/qa-test';
-import { isFixtureUiTarget } from '../../../scripts/lib/ui-target';
+import {
+  isExampleWebsiteTarget,
+  isFixtureUiTarget,
+} from '../../../scripts/lib/ui-target';
 import { attachUiNetworkListener, collectUiTimings } from '../../../scripts/performance/ui-timing';
 import { writeUiTimingEvidence } from '../../../scripts/performance/ui-evidence';
 import { resolveUiPerformancePage } from '../../../scripts/performance/ui-pages';
@@ -30,7 +33,11 @@ test('Playwright UI timing records login page load without inventing SLAs', asyn
 
     const response = await page.goto(target.path, { waitUntil: 'load' });
     expect(response, `expected a response for ${target.path}`).not.toBeNull();
-    await loginPage.expectLoaded();
+    if (isExampleWebsiteTarget()) {
+      await loginPage.expectLoaded();
+    } else {
+      await expect(page.locator('body')).toBeVisible();
+    }
     const measurement = await collectUiTimings(page, {
       url: page.url(),
       pageName: target.name,

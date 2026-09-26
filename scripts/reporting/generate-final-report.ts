@@ -15,6 +15,8 @@ import { buildEnterpriseReportModel, type EnterpriseReportModel } from '../lib/q
 import { assertDiscoveryPrecedesExecution, type StageTimeline } from '../lib/stage-timeline';
 import { writeFallbackCombinedReport, writeReportIndex } from './build-report-index';
 import { dirHasHtmlIndex, toPosixRelative } from '../lib/report-kinds';
+import { archiveToHistory, loadOrBeginQaExecution } from '../lib/qa-report/execution-archive';
+import { generateMasterQaReport } from './generate-master-report';
 
 export async function generateFinalQaReport(): Promise<{
   mdPath: string;
@@ -58,7 +60,8 @@ export async function generateFinalQaReport(): Promise<{
 
   let professional: ProfessionalReportPaths | null = null;
   let professionalError: string | undefined;
-  let model: EnterpriseReportModel;
+  let model: EnterpriseReportModel | undefined;
+  let modelErrorToRethrow: unknown;
   try {
     professional = await writeProfessionalSqaReport();
     model = professional?.model ?? buildEnterpriseReportModel();
@@ -71,7 +74,7 @@ export async function generateFinalQaReport(): Promise<{
       const fallbackReason = modelError instanceof Error ? modelError.message : String(modelError);
       writeFallbackCombinedReport(fallbackReason);
       writeReportIndex();
-      throw modelError;
+      modelErrorToRethrow = modelError;
     }
   }
 
@@ -79,9 +82,16 @@ export async function generateFinalQaReport(): Promise<{
   const jsonPath = path.join(PATHS.reports.summary, 'final-qa-report.json');
   const mdPath = path.join(PATHS.reports.summary, 'final-qa-report.md');
 
+  const identity = loadOrBeginQaExecution({ testSuite: 'report:final' });
+  if (professional?.htmlPath && fs.existsSync(professional.htmlPath)) {
+    const summaryHtml = path.join(PATHS.reports.summary, 'final-qa-report.html');
+    fs.copyFileSync(professional.htmlPath, summaryHtml);
+  }
+
   const generatedAt = new Date().toISOString();
   const payload = {
     generatedAt,
+    executionId: identity.executionId,
     verdict,
     project: config.project.name,
     coverage: coverage.totals,
@@ -119,21 +129,44 @@ export async function generateFinalQaReport(): Promise<{
   };
   writeJson(jsonPath, payload);
 
-  const markdown = renderCanonicalFinalReportMd({
-    generatedAt,
-    verdict,
-    projectName: config.project.name,
-    coverage,
-    failures,
-    model,
-    professional,
-    professionalError,
-  });
-  fs.writeFileSync(mdPath, markdown, 'utf8');
+  if (model) {
+    const markdown = renderCanonicalFinalReportMd({
+      generatedAt,
+      executionId: identity.executionId,
+      verdict,
+      projectName: config.project.name,
+      coverage,
+      failures,
+      model,
+      professional,
+      professionalError,
+    });
+    fs.writeFileSync(mdPath, markdown, 'utf8');
+  } else {
+    fs.writeFileSync(
+      mdPath,
+      `# Final QA report\n\nVerdict: ${verdict}\n\nFive-layer model was not produced: ${professionalError ?? 'NOT_AVAILABLE'}\nMASTER-QA-REPORT is generated from module artifacts independently.\n`,
+      'utf8'
+    );
+  }
   writeReportIndex();
+  const archived = archiveToHistory({
+    identity,
+    endedAt: new Date(),
+    overallStatus: professional?.overallStatus ?? verdict,
+  });
+  const master = generateMasterQaReport({
+    identity,
+    folderPath: archived.folderPath,
+  });
+  logSuccess(`History folder: ${archived.folderPath}`);
   logSuccess(`Final report: ${mdPath} (${verdict})`);
+  logSuccess(`MASTER-QA-REPORT.html: ${master.htmlPath}`);
   if (!professional) {
-    logWarn('Five-layer Word/HTML/PDF was not produced; canonical markdown still written from artifacts.');
+    logWarn('Five-layer Word/HTML/PDF was not produced; MASTER-QA-REPORT was still written from artifacts.');
+  }
+  if (modelErrorToRethrow) {
+    throw modelErrorToRethrow;
   }
   return { mdPath, jsonPath, verdict, professional };
 }

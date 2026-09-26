@@ -1,5 +1,6 @@
 import { ALL_PLAYWRIGHT_BROWSERS, type PlaywrightBrowser } from '../lib/playwright-browsers';
 import { NOT_AVAILABLE } from '../lib/suite-origin';
+import { renderCompatibilityMatrixMarkdown } from './compatibility-matrix';
 import { CROSS_BROWSER_LIMITATIONS, type EngineVersionRow } from './versions';
 import type { CrossBrowserFinding, CrossBrowserMatrixRow, EngineCellStatus } from './matrix';
 
@@ -107,6 +108,16 @@ export function renderCrossBrowserMatrixMarkdown(input: {
     }
     lines.push('');
   }
+
+  // Append normalized compatibility matrix (desktop engines vs branded channels).
+  const compatibilityMd = renderCompatibilityMatrixMarkdown({
+    browserVersions: {
+      chromium: versionFor('chromium', input.versions),
+      firefox: versionFor('firefox', input.versions),
+      webkit: versionFor('webkit', input.versions),
+    },
+  }).trimEnd();
+  lines.push(compatibilityMd, '');
 
   return `${lines.join('\n')}\n`;
 }

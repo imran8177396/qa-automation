@@ -1,8 +1,8 @@
-import { resolveDiscoverUrl } from './discovery/cli';
+import { resolveAndPersistDiscoverUrl } from './discovery/cli';
 import { runPageDiscovery } from './discovery/run-discover';
 
 async function main(): Promise<void> {
-  const { url, maxPages } = resolveDiscoverUrl();
+  const { url, maxPages } = resolveAndPersistDiscoverUrl();
   await runPageDiscovery(url, maxPages);
 }
 

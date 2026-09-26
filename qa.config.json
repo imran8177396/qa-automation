@@ -1,10 +1,42 @@
 {
   "project": {
-    "name": "QA Automation"
+    "name": "QA Automation",
+    "id": "default"
+  },
+  "environment": {
+    "active": "development"
+  },
+  "environments": {
+    "local": { "websiteUrl": "", "apiUrl": "" },
+    "development": { "websiteUrl": "", "apiUrl": "" },
+    "staging": { "websiteUrl": "", "apiUrl": "" },
+    "production": { "websiteUrl": "", "apiUrl": "" }
+  },
+  "execution": {
+    "parallel": false,
+    "maxExtraAttempts": 0,
+    "maxConcurrency": 1
+  },
+  "retry": {
+    "enabled": false,
+    "maxAttempts": 2
+  },
+  "qualityGate": {
+    "blockRelease": false
+  },
+  "qualityGates": {
+    "enabled": false
+  },
+  "plugins": [],
+  "changeImpact": {
+    "mappings": []
+  },
+  "risk": {
+    "profile": "full"
   },
   "urls": {
-    "website": "https://www.saucedemo.com/",
-    "api": "https://jsonplaceholder.typicode.com"
+    "website": "",
+    "api": ""
   },
   "pipeline": {
     "steps": ["sync", "api", "e2e", "load"],
@@ -205,8 +237,7 @@
   },
   "playwright": {
     "enabled": true,
-    "baseURL": "https://www.saucedemo.com",
-    "browsers": ["chromium"],
+    "browsers": ["chromium", "firefox", "webkit"],
     "headless": true,
     "workers": 2,
     "testIdAttribute": "data-test"
@@ -214,7 +245,7 @@
   "jmeter": {
     "enabled": true,
     "path": "/posts",
-    "threads": 5,
+    "threads": 10,
     "rampUpSeconds": 5,
     "loopCount": 1,
     "defaultProfile": "liveness",
@@ -224,7 +255,7 @@
     },
     "allowHeavyAgainst": [],
     "profiles": {
-      "liveness": { "threads": 5, "rampUpSeconds": 5, "loopCount": 1 },
+      "liveness": { "threads": 10, "rampUpSeconds": 5, "loopCount": 1 },
       "load": { "threads": 20, "rampUpSeconds": 20, "loopCount": 5 },
       "stress": { "threads": 50, "rampUpSeconds": 10, "loopCount": 10 },
       "spike": { "threads": 40, "rampUpSeconds": 1, "loopCount": 3 },
@@ -279,6 +310,95 @@
   "retest": {
     "enabled": true
   },
+  "tests": {
+    "unit": { "enabled": true },
+    "integration": {
+      "enabled": false,
+      "checks": []
+    },
+    "contract": {
+      "enabled": false,
+      "contracts": [],
+      "usePostmanRequests": false,
+      "executeNegative": false
+    },
+    "database": {
+      "enabled": false,
+      "urlEnv": "DATABASE_URL"
+    },
+    "smoke": {
+      "enabled": true,
+      "criticalPagePath": "",
+      "authUrl": "",
+      "authUrlEnv": "",
+      "workflowUrl": "",
+      "workflowUrlEnv": "",
+      "dependencies": [],
+      "apiPath": ""
+    },
+    "sanity": { "enabled": false, "checks": [] },
+    "regression": { "enabled": true, "mode": "selective" },
+    "performance": {
+      "enabled": true,
+      "load": { "enabled": false },
+      "stress": { "enabled": false },
+      "spike": { "enabled": false },
+      "endurance": { "enabled": false }
+    },
+    "reliability": {
+      "enabled": false,
+      "healthUrl": "",
+      "healthUrlEnv": "",
+      "timeoutMs": 5000
+    },
+    "resilience": {
+      "enabled": false,
+      "dependencyUrl": "",
+      "dependencyUrlEnv": "",
+      "healthUrl": "",
+      "healthUrlEnv": ""
+    },
+    "deployment": {
+      "enabled": false,
+      "healthUrl": "",
+      "healthUrlEnv": "",
+      "readinessUrl": "",
+      "readinessUrlEnv": "",
+      "versionUrl": "",
+      "versionUrlEnv": "",
+      "requiredEnv": []
+    },
+    "localization": {
+      "enabled": true,
+      "locales": ["en-US", "en-GB", "ur-PK"],
+      "timezones": ["UTC", "Asia/Karachi", "America/Chicago"]
+    },
+    "ai": {
+      "enabled": false,
+      "endpointEnv": "QA_AI_ENDPOINT",
+      "prompt": "",
+      "requiredFields": [],
+      "requiredFacts": [],
+      "expectedTool": "",
+      "workflowTools": []
+    },
+    "productionVerification": {
+      "enabled": false,
+      "health": false,
+      "smoke": false,
+      "criticalApi": false,
+      "criticalUi": false,
+      "criticalWorkflow": false
+    },
+    "multiTenant": { "enabled": false },
+    "webhook": { "enabled": false },
+    "queue": { "enabled": false },
+    "property": { "enabled": false },
+    "mutation": { "enabled": false },
+    "race": { "enabled": false },
+    "backupRestore": { "enabled": false },
+    "privacy": { "enabled": false }
+  },
   "report": {
     "enabled": true,
     "format": "docs/templates/qa-test-results.format.json",
@@ -289,7 +409,7 @@
       "note": "Previous dated packs under docs/input|output/qa-test-results/ are retained. Each run writes a new YYYY-MM-DD_HH-MM-SS folder (suffix -2, -3, … on collision). latest.json may be updated to point at the newest pack."
     },
     "signOff": {
-      "preparerName": "",
+      "preparerName": "Muhammad Imran",
       "preparerRole": "Senior QA Automation Engineer",
       "reviewerName": "",
       "reviewerRole": "",

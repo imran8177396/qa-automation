@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from '@playwright/test';
 import { startFixtureServer } from './serve-fixture-site';
+import { isPlaywrightBrowserInstalled, MISSING_CHROMIUM_UNIT_REASON } from '../lib/playwright-browsers';
 import { crawl } from '../discovery/crawler';
 import { resolveDiscoveryConfig } from '../core/scope';
 import { resolveSafetyConfig } from '../core/safety-policy';
@@ -21,6 +22,7 @@ test(
   'discovery pipeline never sends a state-changing request to the fixture site',
     { timeout: 120000 },
   async () => {
+    assert.ok(isPlaywrightBrowserInstalled('chromium'), MISSING_CHROMIUM_UNIT_REASON);
     const server = await startFixtureServer();
 
     try {

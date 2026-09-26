@@ -145,7 +145,27 @@ export function startFixtureServer(port = 0): Promise<FixtureServer> {
       resolve({
         url: `http://127.0.0.1:${address.port}`,
         requestLog,
-        close: () => new Promise<void>((res) => server.close(() => res())),
+        close: () =>
+          new Promise<void>((resolveClose) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              resolveClose();
+            };
+            const timer = setTimeout(finish, 3000);
+            if (typeof server.closeAllConnections === 'function') {
+              server.closeAllConnections();
+            }
+            server.close((error) => {
+              if (error && (error as NodeJS.ErrnoException).code !== 'ERR_SERVER_NOT_RUNNING') {
+                finish();
+                return;
+              }
+              finish();
+            });
+          }),
       });
     });
   });

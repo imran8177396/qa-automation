@@ -5,6 +5,8 @@ import {
   VIEWPORT_NAMES,
   VIEWPORTS,
   playwrightUseFor,
+  responsiveEngineProjects,
+  responsiveProjectArgs,
   viewportFromProjectName,
 } from './viewports';
 
@@ -48,7 +50,22 @@ test('limitations refuse real-device / iOS Safari / Android Chrome claims', () =
   assert.ok(RESPONSIVE_LIMITATIONS.some((line) => /not Mobile Safari/i.test(line)));
 });
 
-test('viewportFromProjectName() rejects unknown projects', () => {
+test('viewportFromProjectName() accepts engine-suffixed compulsory projects', () => {
   assert.equal(viewportFromProjectName('responsive-tablet').name, 'tablet');
+  assert.equal(viewportFromProjectName('responsive-desktop-firefox').name, 'desktop');
+  assert.equal(viewportFromProjectName('responsive-mobile-webkit').name, 'mobile');
   assert.throws(() => viewportFromProjectName('webkit'), /Unknown responsive project/);
+});
+
+test('responsiveEngineProjects() is viewport × chromium/firefox/webkit', () => {
+  const projects = responsiveEngineProjects();
+  assert.equal(projects.length, 12);
+  assert.ok(projects.some((project) => project.name === 'responsive-desktop-chromium'));
+  assert.ok(projects.some((project) => project.name === 'responsive-mobile-webkit'));
+  assert.deepEqual(responsiveProjectArgs(['firefox']), [
+    '--project=responsive-desktop-firefox',
+    '--project=responsive-laptop-firefox',
+    '--project=responsive-tablet-firefox',
+    '--project=responsive-mobile-firefox',
+  ]);
 });

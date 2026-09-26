@@ -34,4 +34,11 @@ npm run test:content
 
 Reports: `reports/seo/`, `reports/content/`. Enterprise report sections 2.11 and 2.15.
 
-Never hide failures. A fixture missing meta/canonical/OG or planted content issues is a real observation.
+Never hide failures. A fixture missing meta/canonical/OG or planted content issues is a real observation. Inspect existing SEO/content runners before changing them. After implementation, run `npm run test:seo` and/or `npm run test:content` and fix actual errors. Do not merely say "looks good."
+
+## Integrity
+
+- Never invent requirements / API endpoints / credentials / test results.
+- Never hide failures.
+- Never weaken assertions.
+- Never claim complete coverage without evidence.
