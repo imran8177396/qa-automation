@@ -6,6 +6,7 @@ import { after, before, test } from 'node:test';
 import {
   ENGINE_RESULT_COLUMN_LABELS,
   collectEngineResults,
+  gatedCheckOutcomesToTestResults,
   mapEngineStatusToAllure,
   mapTestResultToReportRow,
   renderEngineResultsTableHtml,
@@ -202,4 +203,64 @@ test('required field labels appear in the HTML table renderer for a FAIL row', (
   assert.match(html, /<td>2xx\/3xx<\/td>/);
   assert.match(html, /<td>HTTP 500<\/td>/);
   assert.doesNotMatch(html, /<td>PASS<\/td>/);
+});
+
+test('gated-check-outcomes map to real statuses; missing/empty file adds no PASS rows', () => {
+  assert.deepEqual(gatedCheckOutcomesToTestResults(null), []);
+  assert.deepEqual(gatedCheckOutcomesToTestResults({ rows: [] }), []);
+  assert.deepEqual(gatedCheckOutcomesToTestResults({}), []);
+
+  const mapped = gatedCheckOutcomesToTestResults({
+    rows: [
+      {
+        id: 'INV-0001',
+        kind: 'form-submit',
+        title: 'submit blocked',
+        status: 'BLOCKED',
+        reason: 'BLOCKED: form submission is not authorized',
+        targetUrl: 'https://example.test/form',
+      },
+      {
+        id: 'INV-0002',
+        kind: 'visibility',
+        title: 'not visible',
+        status: 'NOT_TESTED',
+        reason: 'NOT_TESTED: not visible',
+        targetUrl: 'https://example.test/',
+      },
+      {
+        id: 'INV-0003',
+        kind: 'page-sanity',
+        title: 'gated page',
+        status: 'REQUIRES_CONFIGURATION',
+        reason: 'REQUIRES_CONFIGURATION: login wall',
+        targetUrl: 'https://example.test/account',
+      },
+      {
+        id: 'INV-skip',
+        kind: 'visibility',
+        title: 'planned should not map',
+        status: 'PLANNED',
+        reason: 'should be ignored',
+        targetUrl: 'https://example.test/',
+      },
+    ],
+  });
+
+  assert.equal(mapped.length, 3);
+  assert.ok(mapped.every((row) => row.status !== 'PASS'));
+  assert.equal(mapped[0]?.status, 'BLOCKED');
+  assert.equal(mapped[1]?.status, 'NOT_TESTED');
+  assert.equal(mapped[2]?.status, 'REQUIRES_CONFIGURATION');
+  assert.equal(mapped[0]?.testType, 'ui');
+  assert.match(mapped[0]?.error?.message ?? '', /form submission/i);
+});
+
+test('collectEngineResults with includeGatedCheckOutcomes false never invents gated PASS', () => {
+  const collected = collectEngineResults({
+    sources: sourcesFor({ engineId: 'smoke', dir: failDir }),
+    includeGatedCheckOutcomes: false,
+  });
+  assert.equal(collected.results.filter((row) => row.status === 'PASS').length, 0);
+  assert.ok(collected.results.every((row) => row.metadata?.source !== 'gated-check-outcomes'));
 });

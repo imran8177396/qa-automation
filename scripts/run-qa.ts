@@ -12,11 +12,25 @@ import { PATHS } from './lib/paths';
 import { resolveNpmCommand, runCommand } from './lib/run-command';
 import {
   executionModeUsage,
+  exitCodeWhenNotSpawning,
   hasArgFlag,
   resolveExecutionMode,
   spawnableScripts,
   type ExecutionModePlan,
 } from './cli/execution-mode';
+import {
+  formatGenerateTestsSummary,
+  generateTestsExitCode,
+  resolveGenerateTestsPlan,
+} from './cli/generate-tests';
+import { isGenerationInventory, type GenerationInventory } from './discovery/generation-contract';
+import { writeJson } from './discovery/write-json';
+import { toChangeAwareMappings } from './planning/change-aware-generation';
+import { loadHumanOverridesDocument } from './planning/human-overrides';
+import {
+  loadPersistedTestCases,
+  savePersistedTestCases,
+} from './planning/test-case-identity';
 import type { PipelineStep } from './types';
 
 function parseRequestedSteps(argv: string[]): PipelineStep[] | null {
@@ -70,20 +84,6 @@ function readDiffFile(argv: string[]): string | undefined {
     ? pathValue
     : path.join(PATHS.root, pathValue);
   return fs.readFileSync(resolved, 'utf8');
-}
-
-/**
- * Exit code for a plan that does not spawn.
- * Unknown / missing configuration → non-zero.
- * A successfully produced plan (including category plan-only) → 0,
- * but stdout always says tests were not executed (never claim PASS).
- */
-function planOnlyExitCode(plan: ExecutionModePlan): number {
-  if (plan.mode === null) return 1;
-  if (plan.status === 'BLOCKED') return 1;
-  if (plan.status === 'REQUIRES_CONFIGURATION') return 1;
-  if (plan.status === 'NOT_IMPLEMENTED') return 1;
-  return 0;
 }
 
 function spawnNpmScripts(plan: ExecutionModePlan): number {
@@ -183,10 +183,107 @@ async function runLegacyPipeline(argv: string[]): Promise<void> {
   logSuccess('Pipeline finished');
 }
 
+function loadGenerationInventoryOrNull(): GenerationInventory | null {
+  if (!fs.existsSync(PATHS.generationInventoryFile)) {
+    return null;
+  }
+  try {
+    const raw = JSON.parse(fs.readFileSync(PATHS.generationInventoryFile, 'utf8')) as unknown;
+    return isGenerationInventory(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Load changeImpact.mappings for --generate-tests --changed (may be []). */
+function loadChangeAwareMappingsFromConfig() {
+  try {
+    const config = loadConfig();
+    return toChangeAwareMappings(config.changeImpact?.mappings ?? []);
+  } catch {
+    return [];
+  }
+}
+
+function runGenerateTestsPath(argv: string[]): number {
+  const overridesLoad = loadHumanOverridesDocument(PATHS.generatedOverrides);
+  if (!overridesLoad.ok) {
+    console.error(`REQUIRES_CONFIGURATION: ${overridesLoad.reason}`);
+    console.error('invalid qa.generated-overrides.json; not writing generated-tests.json');
+    return 1;
+  }
+
+  const inventory = loadGenerationInventoryOrNull();
+  const gitDiff = (() => {
+    try {
+      return readDiffFile(argv);
+    } catch {
+      return undefined;
+    }
+  })();
+
+  // Missing identity file → null (start a new registry). Corrupt → throw (do not wipe).
+  const previousIdentities = loadPersistedTestCases(PATHS.testCaseIdentitiesFile);
+
+  const plan = resolveGenerateTestsPlan(argv, {
+    inventory,
+    overrides: overridesLoad.document,
+    previousIdentities,
+    changeAwareMappings: loadChangeAwareMappingsFromConfig(),
+    ...(gitDiff !== undefined ? { gitDiff } : {}),
+  });
+
+  const code = generateTestsExitCode(plan);
+  if (code !== 0) {
+    console.error(plan.reason);
+    for (const note of plan.notes) {
+      console.error(note);
+    }
+    console.log(formatGenerateTestsSummary(plan));
+    return code;
+  }
+
+  if (plan.persistedIdentities !== undefined) {
+    savePersistedTestCases(PATHS.testCaseIdentitiesFile, plan.persistedIdentities);
+    logSuccess(`wrote ${PATHS.testCaseIdentitiesFile}`);
+  }
+
+  if (plan.filter.changed && plan.status === 'UPDATED') {
+    // Change-aware artifact: regenerated + preserved; do not claim all cases were regenerated.
+    writeJson(PATHS.generatedTestsFile, {
+      status: plan.status,
+      regenerated: plan.regenerated ?? [],
+      preserved: plan.preserved ?? [],
+      unmappedFiles: plan.unmappedFiles ?? [],
+      reason: plan.reason,
+      execution: 'NOT_EXECUTED',
+      note: 'Change-aware generation; tests not executed; no PASS claimed.',
+    });
+  } else {
+    writeJson(PATHS.generatedTestsFile, {
+      generatedAt: new Date().toISOString(),
+      filter: plan.filter,
+      caseCount: plan.kept.length,
+      cases: plan.kept,
+      execution: 'NOT_EXECUTED',
+      note: 'Generated from discovery inventory; tests not executed; no PASS claimed.',
+    });
+  }
+  console.log(formatGenerateTestsSummary(plan));
+  logSuccess(`wrote ${PATHS.generatedTestsFile}`);
+  return 0;
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2).filter((arg) => arg !== '--');
+  const hasGenerateTests = hasArgFlag(argv, 'generate-tests');
   const hasMode = hasArgFlag(argv, 'mode');
   const hasStep = argv.some((arg) => arg.startsWith('--step='));
+
+  // --generate-tests is handled before --mode so the resolver can reject the combination.
+  if (hasGenerateTests) {
+    process.exit(runGenerateTestsPath(argv));
+  }
 
   if (hasMode) {
     const gitDiff = readDiffFile(argv);
@@ -196,11 +293,11 @@ async function main(): Promise<void> {
 
     printPlan(plan);
 
-    const planOnly = hasArgFlag(argv, 'plan') || !plan.spawn;
-
-    if (planOnly) {
+    const explicitPlan = hasArgFlag(argv, 'plan');
+    // Explicit --plan keeps plan-only exit rules. Non-spawn without --plan is never success.
+    if (explicitPlan || !plan.spawn) {
       console.log(`mode=${plan.mode ?? '(none)'}; plan only; tests not executed`);
-      process.exit(planOnlyExitCode(plan));
+      process.exit(exitCodeWhenNotSpawning(plan, explicitPlan));
     }
 
     const code = spawnNpmScripts(plan);
@@ -212,10 +309,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  // No --mode and no --step: do not silently run the pipeline / qa:all.
+  // No --mode, --generate-tests, or --step: do not silently run the pipeline / qa:all.
   console.error(executionModeUsage());
   console.error(
-    'REQUIRES_CONFIGURATION: pass --mode=<mode> or legacy --step=<sync|api|e2e|load>'
+    'REQUIRES_CONFIGURATION: pass --mode=<mode>, --generate-tests, or legacy --step=<sync|api|e2e|load>'
   );
   process.exit(1);
 }

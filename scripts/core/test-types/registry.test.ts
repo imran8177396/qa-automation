@@ -193,6 +193,21 @@ test('getTestType(privacy) is PARTIAL (evidence-only; live deletion/retention/ex
   assert.notEqual(row.status, 'IMPLEMENTED');
 });
 
+test('getTestType(ui) is PARTIAL — scenario inventory planning; not a separate generation engine', () => {
+  const ui = getTestType('ui');
+  assert.ok(ui);
+  assert.equal(ui.status, 'PARTIAL');
+  assert.equal(ui.npmScript, 'test:ui');
+  assert.match(ui.note ?? '', /scenario inventory/i);
+  assert.match(ui.note ?? '', /not a separate test-generation engine/i);
+});
+
+test('registry does not define a separate test-generation engine id', () => {
+  assert.equal(getTestType('test-generation'), undefined);
+  assert.ok(!TEST_TYPE_IDS.includes('test-generation' as (typeof TEST_TYPE_IDS)[number]));
+  assert.ok(!TEST_TYPE_REGISTRY.some((row) => row.id === ('test-generation' as never)));
+});
+
 test('unknown id does not silently count as implemented', () => {
   const unknown = getTestType('not-a-real-test-type');
   // Unknown lookups must not invent an IMPLEMENTED row.

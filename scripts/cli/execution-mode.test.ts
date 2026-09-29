@@ -7,6 +7,8 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   EXECUTION_MODES,
+  exitCodeWhenNotSpawning,
+  planOnlyExitCode,
   resolveExecutionMode,
   type ResolveExecutionModeOptions,
 } from './execution-mode';
@@ -207,5 +209,28 @@ describe('resolveExecutionMode — mode catalog completeness', () => {
       'smoke',
       'type',
     ]);
+  });
+});
+
+describe('exitCodeWhenNotSpawning', () => {
+  it('explicit --plan keeps plan-only exit rules', () => {
+    const smoke = resolveExecutionMode(['--mode=smoke', '--plan'], opts());
+    assert.equal(planOnlyExitCode(smoke), 0);
+    assert.equal(exitCodeWhenNotSpawning(smoke, true), 0);
+
+    const changed = resolveExecutionMode(['--mode=changed'], opts());
+    assert.equal(changed.status, 'NOT_IMPLEMENTED');
+    assert.equal(planOnlyExitCode(changed), 1);
+    assert.equal(exitCodeWhenNotSpawning(changed, true), 1);
+  });
+
+  it('non-spawn without --plan always exits 1 (category must not look like success)', () => {
+    const category = resolveExecutionMode(['--mode=category', '--category=functional'], opts());
+    assert.equal(category.spawn, false);
+    assert.equal(exitCodeWhenNotSpawning(category, false), 1);
+
+    const smokePlanShape = resolveExecutionMode(['--mode=smoke', '--plan'], opts());
+    // Same plan shape as --plan, but without the flag → still exit 1.
+    assert.equal(exitCodeWhenNotSpawning(smokePlanShape, false), 1);
   });
 });

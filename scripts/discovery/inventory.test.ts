@@ -93,6 +93,9 @@ test('buildDiscoveryInventory() empty inputs yield empty arrays and no demo URLs
   for (const key of DISCOVERY_INVENTORY_CATEGORY_KEYS) {
     assert.equal(inventory[key].length, 0, `${key} must be empty`);
   }
+  assert.equal(inventory.screens.length, 0);
+  assert.equal(inventory.inventories.length, 0);
+  assert.equal(inventory.unresolvedChannels.length, 0);
   assert.equal(inventory.coverage.workflows.status, 'NOT_IMPLEMENTED');
   assert.equal(inventory.coverage.externalIntegrations.status, 'NOT_IMPLEMENTED');
   assert.equal(inventory.coverage.criticalPaths.status, 'NOT_IMPLEMENTED');
@@ -211,4 +214,47 @@ test('buildDiscoveryInventory() maps forms and data inputs from UI scan element 
   assert.equal(inventory.uiElements.length, 3);
   assert.equal(inventory.coverage.uiElements.status, 'POPULATED');
   assert.equal(inventory.coverage.dataInputs.status, 'POPULATED');
+});
+
+test('buildDiscoveryInventory() persists authenticatedCoverage next to screens', () => {
+  const coverage = {
+    layers: [
+      {
+        gate: 'public' as const,
+        status: 'DISCOVERED' as const,
+        reason: 'screens crawled without an authentication gate',
+        screenIds: ['SCREEN-001'],
+      },
+      {
+        gate: 'login' as const,
+        status: 'NOT_TESTED' as const,
+        reason: 'no login screen was discovered',
+        screenIds: [],
+      },
+      {
+        gate: 'role' as const,
+        status: 'REQUIRES_CONFIGURATION' as const,
+        reason: 'role was not supplied',
+        screenIds: [],
+      },
+    ],
+    publicScreenIds: ['SCREEN-001'],
+  };
+  const inventory = buildDiscoveryInventory({
+    pages: [{ url: 'https://example.com/' }],
+    screens: [
+      {
+        id: 'SCREEN-001',
+        url: 'https://example.com/',
+        state: 'default',
+        source: 'direct-url',
+      },
+    ],
+    authenticatedCoverage: coverage,
+  });
+  assert.ok(inventory.authenticatedCoverage);
+  assert.deepEqual(inventory.authenticatedCoverage?.publicScreenIds, ['SCREEN-001']);
+  assert.equal(inventory.authenticatedCoverage?.layers.find((l) => l.gate === 'role')?.status, 'REQUIRES_CONFIGURATION');
+  assert.equal(inventory.screens.length, 1);
+  assertNoDemoHosts(inventory);
 });

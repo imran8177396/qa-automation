@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateUiChecks } from './generate-ui-checks';
+import { buildScenarioInventory } from './scenario-inventory';
 import { resolveSafetyConfig } from '../core/safety-policy';
 import { applicableTestTypes } from '../discovery/test-types';
 import type { PageMap } from '../discovery/page-map';
 import type { UiElementRecord, UiInventory } from '../discovery/ui-scan';
 
-function pageMap(pages: PageMap['pages']): PageMap {
+function pageMap(pages: PageMap['pages'], navigation: PageMap['navigation'] = []): PageMap {
   return {
     generatedAt: new Date().toISOString(),
     seedUrl: 'http://app.test/',
@@ -14,7 +15,7 @@ function pageMap(pages: PageMap['pages']): PageMap {
     truncated: false,
     pages,
     routes: pages.map((page) => ({ path: page.route, url: page.url, title: page.title, source: 'crawl' })),
-    navigation: [],
+    navigation,
     skippedByScope: [],
     categoryStatus: [],
   };
@@ -65,6 +66,14 @@ function ui(elements: UiElementRecord[]): UiInventory {
 
 const safety = resolveSafetyConfig();
 
+test('generateUiChecks delegates to buildScenarioInventory (one planning algorithm)', () => {
+  const pages = pageMap([page('/contact.html')]);
+  const inventory = ui([element({ page: 'http://app.test/contact.html' })]);
+  const viaEntry = generateUiChecks(pages, inventory, safety);
+  const viaInventory = buildScenarioInventory(pages, inventory, safety);
+  assert.deepEqual(viaEntry, viaInventory);
+});
+
 test('generateUiChecks() never plans a form submit or submit-button click', () => {
   const checks = generateUiChecks(
     pageMap([page('/contact.html')]),
@@ -82,11 +91,12 @@ test('generateUiChecks() never plans a form submit or submit-button click', () =
     safety
   );
 
-  const plannedClicks = checks.filter((c) => c.status === 'PLANNED' && (c.kind === 'click-button' || c.kind === 'form-submit'));
+  const plannedClicks = checks.filter(
+    (c) => c.status === 'PLANNED' && (c.kind === 'click-button' || c.kind === 'form-submit')
+  );
   assert.equal(plannedClicks.length, 0);
   assert.ok(checks.some((c) => c.kind === 'form-submit' && c.status === 'BLOCKED'));
-  assert.ok(checks.some((c) => c.status === 'BLOCKED' && /empty submission/i.test(c.title)));
-  assert.ok(checks.some((c) => c.status === 'BLOCKED' && /duplicate-click/i.test(c.title)));
+  assert.ok(checks.some((c) => c.kind === 'click-behavior' && c.status === 'BLOCKED'));
 });
 
 test('generateUiChecks() does not authorize GET/click on a destructive query-string link', () => {
@@ -109,14 +119,20 @@ test('generateUiChecks() does not authorize GET/click on a destructive query-str
     (c) => c.status === 'PLANNED' && (c.kind === 'click-link' || c.kind === 'broken-link') && c.expect?.href
   );
   assert.equal(planned.length, 0);
-  assert.ok(checks.some((c) => c.status === 'NOT_TESTED' && /state-changing/i.test(c.reason ?? '')));
 });
 
-test('generateUiChecks() asserts HTML5 constraint invalid only for typed fields, not free-text', () => {
+test('generateUiChecks() plans negative fill without submit for typed fields', () => {
   const checks = generateUiChecks(
     pageMap([page('/contact.html')]),
     ui([
-      element({ elementId: 'UI-0018', locator: '#email', accessibleName: 'email', evidence: 'text-like input' }),
+      element({
+        elementId: 'UI-0018',
+        locator: '#email',
+        accessibleName: 'email',
+        evidence: 'text-like input',
+        inputType: 'email',
+        required: false,
+      }),
       element({
         elementId: 'UI-0017',
         locator: '#name',
@@ -128,11 +144,25 @@ test('generateUiChecks() asserts HTML5 constraint invalid only for typed fields,
     safety
   );
 
-  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#email' && c.status === 'PLANNED'));
-  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#email' && c.expect?.constraintInvalid === true));
-  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#name' && c.status === 'PLANNED'));
-  assert.ok(checks.some((c) => c.kind === 'invalid-input' && c.expect?.locator === '#name' && c.expect?.constraintInvalid !== true));
-  assert.ok(checks.some((c) => c.kind === 'valid-input' && c.expect?.locator === '#name' && c.status === 'PLANNED'));
+  assert.ok(
+    checks.some(
+      (c) =>
+        c.kind === 'invalid-input' &&
+        c.expect?.locator === '#email' &&
+        c.status === 'PLANNED' &&
+        c.action === 'fill-no-submit' &&
+        c.expect?.constraintInvalid === true
+    )
+  );
+  assert.ok(
+    checks.some(
+      (c) =>
+        c.kind === 'empty-input' &&
+        c.expect?.locator === '#name' &&
+        c.status === 'PLANNED' &&
+        c.action === 'fill-no-submit'
+    )
+  );
 });
 
 test('generateUiChecks() plans broken-link for a discovered 404, not a successful page-load', () => {
@@ -141,12 +171,23 @@ test('generateUiChecks() plans broken-link for a discovered 404, not a successfu
   assert.ok(!checks.some((c) => c.kind === 'page-sanity' && c.status === 'PLANNED'));
 });
 
-test('generateUiChecks() plans a safe in-scope link click', () => {
+test('generateUiChecks() plans workflow click-link only when a navigation edge matches a safe link', () => {
+  const from = 'http://app.test/index.html';
+  const to = 'http://app.test/contact.html';
   const checks = generateUiChecks(
-    pageMap([page('/index.html')]),
+    pageMap([page('/index.html'), page('/contact.html')], [
+      {
+        from,
+        to,
+        linkText: 'Contact',
+        inScope: true,
+        applicableTestTypes: applicableTestTypes('navigation'),
+        potentialAction: 'navigate',
+      },
+    ]),
     ui([
       element({
-        page: 'http://app.test/index.html',
+        page: from,
         elementType: 'link',
         locator: 'text=Contact',
         accessibleName: 'Contact',
@@ -158,8 +199,8 @@ test('generateUiChecks() plans a safe in-scope link click', () => {
     safety
   );
 
-  assert.ok(checks.some((c) => c.kind === 'click-link' && c.status === 'PLANNED' && c.expect?.href === '/contact.html'));
-  assert.ok(checks.some((c) => c.kind === 'link-href' && c.status === 'PLANNED'));
+  assert.ok(checks.some((c) => c.kind === 'click-link' && c.status === 'PLANNED' && c.scenarioKind === 'workflow'));
+  assert.ok(checks.some((c) => c.kind === 'link-href' && c.status === 'PLANNED' && c.scenarioKind === 'positive'));
 });
 
 test('generateUiChecks() does not require an H1 when discovery observed none', () => {
@@ -173,7 +214,7 @@ test('generateUiChecks() does not require an H1 when discovery observed none', (
   assert.equal(sanity?.expect?.requireHeading, true);
 });
 
-test('generateUiChecks() plans password fill-without-submit using a synthetic sample, not credentials', () => {
+test('generateUiChecks() plans password observation and negative fill without credentials', () => {
   const checks = generateUiChecks(
     pageMap([page('/contact.html')]),
     ui([
@@ -182,18 +223,27 @@ test('generateUiChecks() plans password fill-without-submit using a synthetic sa
         locator: '[data-test="password"]',
         accessibleName: 'Password',
         evidence: 'text-like input (type=password)',
+        inputType: 'password',
         required: false,
       }),
     ]),
     safety
   );
 
-  const valid = checks.find((c) => c.kind === 'valid-input' && c.status === 'PLANNED');
-  assert.ok(valid);
-  assert.equal(valid?.expect?.fillValue, 'SamplePass_qa');
-  assert.ok(!checks.some((c) => c.kind === 'valid-input' && c.status === 'REQUIRES_CONFIGURATION'));
-  assert.ok(checks.some((c) => c.kind === 'validation-state' && c.status === 'BLOCKED'));
-  assert.ok(checks.some((c) => c.kind === 'boundary-values' && c.status === 'NOT_TESTED'));
+  assert.ok(
+    checks.some(
+      (c) =>
+        c.kind === 'security-observation' &&
+        c.status === 'PLANNED' &&
+        c.expect?.inputType === 'password' &&
+        c.action === 'observe'
+    )
+  );
+  const fills = checks.filter((c) => c.action === 'fill-no-submit' && c.status === 'PLANNED');
+  for (const row of fills) {
+    const value = row.expect?.fillValue ?? '';
+    assert.ok(!/secret|credential|password123/i.test(value));
+  }
 });
 
 test('generateUiChecks() does not invent link or dropdown checks when none were discovered', () => {
@@ -224,7 +274,7 @@ test('generateUiChecks() does not invent link or dropdown checks when none were 
   assert.ok(checks.every((c) => c.kind !== 'toggle-state'));
 });
 
-test('generateUiChecks() records unmapped element types as NOT_TESTED instead of omitting them', () => {
+test('generateUiChecks() records unknown-purpose elements as NOT_TESTED instead of omitting them', () => {
   const checks = generateUiChecks(
     pageMap([page('/contact.html')]),
     ui([
@@ -243,7 +293,7 @@ test('generateUiChecks() records unmapped element types as NOT_TESTED instead of
       (c) =>
         c.status === 'NOT_TESTED' &&
         c.targetElementId === 'UI-0099' &&
-        (c.reason ?? '').includes('no mapped inventory kind')
+        (c.reason ?? '').includes('purpose not determined')
     )
   );
 });

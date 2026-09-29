@@ -15,6 +15,8 @@ import {
   buildDiscoveryInventory,
   type DiscoveryInventory,
 } from './inventory';
+import { toGenerationInventory } from './generation-contract';
+import { attachElementsToScreens, buildScreenInventory } from './screens';
 import { readJsonIfExists, writeJson } from './write-json';
 import { logStep, logSuccess, logWarn } from '../lib/logger';
 import { analyzeSeo, isSeoSkippedPage } from '../seo/analyze-seo';
@@ -163,6 +165,27 @@ export async function runFullDiscovery(url: string, maxPages?: number): Promise<
   writeJson(PATHS.workflowInventoryFile, workflows);
   logSuccess(`Workflow inventory: ${workflows.workflows.length} evidence-based workflow(s)`);
 
+  const screenInventory = buildScreenInventory({
+    pageMap,
+    ui,
+    auth: auth ?? pageMap.auth,
+    // No caller session object — do not invent roles. Extra gates stay REQUIRES_CONFIGURATION.
+    session: { established: false },
+  });
+  pageMap.screens = screenInventory.screens;
+  pageMap.unresolvedChannels = screenInventory.unresolvedChannels;
+  pageMap.authenticatedCoverage = screenInventory.authenticatedCoverage;
+  writeJson(PATHS.pageMapFile, pageMap);
+  logSuccess(
+    `Screen inventory: ${screenInventory.screens.length} screen(s), ${screenInventory.unresolvedChannels.length} unresolved channel(s)`
+  );
+
+  const uiWithScreens = attachElementsToScreens(ui, screenInventory.screens);
+  writeJson(PATHS.uiInventoryFile, uiWithScreens);
+  logSuccess(
+    `UI screen elements: ${uiWithScreens.screenElements?.length ?? 0} screen group(s) attached → ${PATHS.uiInventoryFile}`
+  );
+
   const discoveryInventory = buildDiscoveryInventory({
     pages: pageMap.pages.map((page) => ({
       url: page.url,
@@ -170,12 +193,22 @@ export async function runFullDiscovery(url: string, maxPages?: number): Promise<
       route: page.route,
       source: 'crawl',
     })),
-    uiElements: ui.elements,
+    uiElements: uiWithScreens.elements,
     apiRequests: apiCallsToInventoryInputs(api.calls),
     auth: auth ?? pageMap.auth,
+    screens: screenInventory.screens,
+    inventories: screenInventory.inventories,
+    unresolvedChannels: screenInventory.unresolvedChannels,
+    authenticatedCoverage: screenInventory.authenticatedCoverage,
   });
   writeJson(PATHS.discoveryInventoryFile, discoveryInventory);
   logSuccess(`Discovery inventory: ten-category normalized inventory → ${PATHS.discoveryInventoryFile}`);
 
-  return { pageMap, ui, api, workflows, discoveryInventory };
+  const generationInventory = toGenerationInventory(screenInventory.inventories);
+  writeJson(PATHS.generationInventoryFile, generationInventory);
+  logSuccess(
+    `Generation inventory: ${generationInventory.screens.length} screen(s) → ${PATHS.generationInventoryFile}`
+  );
+
+  return { pageMap, ui: uiWithScreens, api, workflows, discoveryInventory };
 }

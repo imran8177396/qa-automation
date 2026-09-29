@@ -260,8 +260,13 @@ export function tallyEngineResults(results: TestResult[]): {
     cancelledCount,
     flakyCount,
     status,
-    /** Stage fails only on application FAIL — SKIPPED / TIMEOUT / CANCELLED / FLAKY / REQUIRES_CONFIGURATION / NOT_TESTED exit 0. */
-    passed: failCount === 0,
+    /**
+     * True only for a passing execution: at least one PASS, no FAIL, and FLAKY
+     * does not count as passed. Incomplete-only tallies (NOT_TESTED / BLOCKED /
+     * REQUIRES_CONFIGURATION / SKIPPED / TIMEOUT / CANCELLED) are not passed.
+     * Exit policy stays in runners — do not treat this as "exit 0 allowed".
+     */
+    passed: passCount > 0 && failCount === 0 && flakyCount === 0,
   };
 }
 

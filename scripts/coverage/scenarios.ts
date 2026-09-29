@@ -56,6 +56,7 @@ const UI_COMPONENT_TYPES = new Set<DiscoveryCategory>([
   'tab',
   'accordion',
   'modal',
+  'drawer',
   'popup',
   'tooltip',
   'image',
@@ -63,6 +64,17 @@ const UI_COMPONENT_TYPES = new Set<DiscoveryCategory>([
   'filter',
   'sort',
   'navigation',
+  'list',
+  'card',
+  'carousel',
+  'slider',
+  'chart',
+  'badge',
+  'alert',
+  'notification',
+  'empty-state',
+  'error-state',
+  'menu',
 ]);
 
 export function kindForElement(elementType: DiscoveryCategory): InventoryKind | null {

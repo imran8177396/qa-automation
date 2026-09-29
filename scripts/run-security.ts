@@ -348,7 +348,8 @@ async function main(): Promise<void> {
     return;
   }
   console.log(`! ${counts.failCount} security FAIL observation(s) recorded`);
-  if (!isLoopback) process.exit(1);
+  // Finding FAIL and unreachable targets always exit 1 — including loopback fixtures.
+  process.exit(1);
 }
 
 main().catch((error: unknown) => {

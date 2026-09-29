@@ -104,15 +104,32 @@ describe('suite rollup', () => {
     );
   });
 
-  it('exits 1 when OVERALL is FAIL even if every child process exited 0', () => {
+  it('exits 1 when OVERALL is FAIL or BLOCKED even if every child process exited 0', () => {
     const rollup = buildSuiteRollup([stage('e2e', 'PASS'), stage('security', 'PASS')], {
       security: { failCount: 2, warningCount: 0, blockedCount: 0, passCount: 1 },
     });
     assert.equal(rollup.overall, 'FAIL');
     assert.equal(orchestratorProcessExitCode(rollup.overall, 0), 1);
-    assert.equal(orchestratorProcessExitCode('BLOCKED', 0), 0);
+    assert.equal(orchestratorProcessExitCode('BLOCKED', 0), 1);
     assert.equal(orchestratorProcessExitCode('WARNING', 0), 0);
+    assert.equal(orchestratorProcessExitCode('PASS', 0), 0);
     assert.equal(orchestratorProcessExitCode('PASS', 1), 1);
+  });
+
+  it('coverage is not PASS without a finite percent', () => {
+    const missing = buildSuiteRollup([stage('coverage', 'PASS')], { coveragePercent: null });
+    assert.equal(missing.lines.find((row) => row.label === 'COVERAGE')?.status, 'NOT_EXECUTED');
+    assert.equal(missing.lines.find((row) => row.label === 'COVERAGE')?.percent, undefined);
+
+    const nan = buildSuiteRollup([stage('coverage', 'PASS')], { coveragePercent: Number.NaN });
+    assert.equal(nan.lines.find((row) => row.label === 'COVERAGE')?.status, 'NOT_EXECUTED');
+
+    const zero = buildSuiteRollup([stage('coverage', 'PASS')], { coveragePercent: 0 });
+    assert.equal(zero.lines.find((row) => row.label === 'COVERAGE')?.status, 'PASS');
+    assert.equal(zero.lines.find((row) => row.label === 'COVERAGE')?.percent, 0);
+
+    const blocked = buildSuiteRollup([stage('coverage', 'BLOCKED')], { coveragePercent: null });
+    assert.equal(blocked.lines.find((row) => row.label === 'COVERAGE')?.status, 'BLOCKED');
   });
 
   it('treats required-suite WARNING as OVERALL FAIL — never PASS', () => {

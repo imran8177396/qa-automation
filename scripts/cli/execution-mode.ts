@@ -786,3 +786,27 @@ export function spawnableScripts(plan: ExecutionModePlan): PlannedNpmScript[] {
       !row.npmScript.startsWith('(')
   );
 }
+
+/**
+ * Exit code for an explicit `--plan` (tests not executed).
+ * Unknown / missing configuration → non-zero.
+ * A successfully produced plan (including smoke/category plan-only) → 0,
+ * but stdout always says tests were not executed (never claim PASS).
+ */
+export function planOnlyExitCode(plan: ExecutionModePlan): number {
+  if (plan.mode === null) return 1;
+  if (plan.status === 'BLOCKED') return 1;
+  if (plan.status === 'REQUIRES_CONFIGURATION') return 1;
+  if (plan.status === 'NOT_IMPLEMENTED') return 1;
+  return 0;
+}
+
+/**
+ * Exit when the mode path will not spawn.
+ * Explicit `--plan` keeps planOnlyExitCode rules; any other non-spawn path exits 1
+ * so category / blocked / not-implemented modes never look like success.
+ */
+export function exitCodeWhenNotSpawning(plan: ExecutionModePlan, explicitPlan: boolean): number {
+  if (explicitPlan) return planOnlyExitCode(plan);
+  return 1;
+}

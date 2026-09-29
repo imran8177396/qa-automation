@@ -157,7 +157,11 @@ export interface TestFeatureMapping {
 const DIFF_PLUS_PLUS_PLUS = /^\+\+\+ b\/(.+)$/gm;
 const DIFF_GIT_HEADER = /^diff --git a\/.+ b\/(.+)$/gm;
 
-function parseChangedFilesFromDiff(gitDiff: string): string[] {
+/**
+ * Parse changed paths from unified diff text (`+++ b/` and `diff --git`).
+ * Does not spawn git. Shared by analyzeChangeImpact and change-aware generation.
+ */
+export function parseChangedFilesFromDiff(gitDiff: string): string[] {
   const files = new Set<string>();
   for (const re of [DIFF_PLUS_PLUS_PLUS, DIFF_GIT_HEADER]) {
     re.lastIndex = 0;

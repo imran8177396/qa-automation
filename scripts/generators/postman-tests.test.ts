@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PostmanRequestConfig } from '../types';
+import { evaluateHttpStatus } from '../lib/api/http-status-matrix';
 import { buildPostmanTestScript, resolveAssertions, resolveExpectedStatus } from './postman-tests';
 
 const solutions: PostmanRequestConfig = {
@@ -99,4 +100,12 @@ test('generated status script embeds 400/5xx wording with expected status (not f
   assert.match(script, /actual responseShape:/);
   assert.match(script, /pm\.expect\(qaCode, qaDetail\)\.to\.eql\(200\)/);
   assert.match(script, /pm\.response\.to\.have\.status\(200\)/);
+});
+
+test('missing expected status is SPECIFICATION_REQUIRED in the matrix evaluator (generator does not invent 200)', () => {
+  // Postman generation does not call evaluateHttpStatus at sandbox runtime; report parsing
+  // uses it only when a numeric expectedStatus already exists. Missing expected stays SPECIFICATION_REQUIRED.
+  const evaluation = evaluateHttpStatus({ expected: undefined, actual: 404 });
+  assert.equal(evaluation.result, 'SPECIFICATION_REQUIRED');
+  assert.doesNotMatch(evaluation.reason, /\b200\b/);
 });

@@ -55,7 +55,8 @@ test('disabled → all five NOT_TESTED; exit policy matches smoke (no FAIL)', as
   assert.equal(fetchCalls, 0);
   const tallied = tallyEngineResults(results);
   assert.equal(tallied.failCount, 0);
-  assert.equal(tallied.passed, true);
+  assert.equal(tallied.passCount, 0);
+  assert.equal(tallied.passed, false);
   assert.equal(tallied.notTestedCount, 5);
 });
 

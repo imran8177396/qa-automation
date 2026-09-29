@@ -8,6 +8,7 @@ import type {
   PostmanExecutionLike,
   PostmanReportLike,
 } from './types';
+import { evaluateHttpStatus } from './http-status-matrix';
 import {
   classifyResponseShape,
   decodeExecutionResponseBody,
@@ -126,6 +127,8 @@ function decideResult(input: {
   includedInPassCount: boolean;
   expectedVsActual?: { expected: string; actual: string };
   actualResponseShape?: ObservedResponseShape;
+  /** From evaluateHttpStatus when a numeric expectedStatus already exists — never invents 200. */
+  statusReason?: string;
 } {
   const bareActual = input.actualStatus == null ? 'Not Provided' : String(input.actualStatus);
   const shapeDetail =
@@ -158,11 +161,29 @@ function decideResult(input: {
     };
   }
 
+  // Caller already supplied a numeric expectedStatus — use the matrix evaluator (no 200 invent).
+  const statusEval = evaluateHttpStatus({
+    expected: input.expectedStatus,
+    actual: input.actualStatus,
+  });
   const expectedVsActual = { expected: String(input.expectedStatus), actual };
-  if (input.actualStatus == null || input.actualStatus !== input.expectedStatus || !input.collectionPassed) {
-    return { result: 'FAIL', includedInPassCount: true, expectedVsActual, actualResponseShape };
+  const statusFailed = statusEval.result === 'FAIL';
+  if (statusFailed || !input.collectionPassed) {
+    return {
+      result: 'FAIL',
+      includedInPassCount: true,
+      expectedVsActual,
+      actualResponseShape,
+      statusReason: statusEval.reason,
+    };
   }
-  return { result: 'PASS', includedInPassCount: true, expectedVsActual, actualResponseShape };
+  return {
+    result: 'PASS',
+    includedInPassCount: true,
+    expectedVsActual,
+    actualResponseShape,
+    statusReason: statusEval.reason,
+  };
 }
 
 function authRows(auth: ApiAuthStance, startIndex: number): ApiSection27Request[] {
@@ -283,7 +304,7 @@ export function parsePostmanReportForSection27(input: {
       expectedVsActual: decided.expectedVsActual,
       actualResponseShape: decided.actualResponseShape,
       includedInPassCount: decided.includedInPassCount,
-      note: matched?.assertionFlags?.[0]?.note,
+      note: [matched?.assertionFlags?.[0]?.note, decided.statusReason].filter(Boolean).join(' — ') || undefined,
     };
   });
 

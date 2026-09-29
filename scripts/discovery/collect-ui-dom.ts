@@ -53,13 +53,34 @@ export function collectUiDomScript(testIdAttributes: string[] = ['data-testid', 
 
   const relevantAttributes = function (el) {
     const attrs = {};
-    const keys = ['id', 'name', 'type', 'role', 'href', 'placeholder', 'autocomplete', 'aria-label', 'aria-expanded', 'aria-required'];
+    const keys = [
+      'id', 'name', 'type', 'role', 'href', 'placeholder', 'autocomplete', 'inputmode', 'value',
+      'pattern', 'min', 'max', 'minlength', 'maxlength',
+      'aria-label', 'aria-expanded', 'aria-required', 'aria-busy', 'aria-invalid', 'aria-modal',
+      'aria-hidden', 'aria-autocomplete', 'aria-haspopup', 'aria-pressed', 'aria-roledescription',
+      'kind', 'multiple', 'popover',
+    ];
     TEST_ID_ATTRS.forEach(function (key) { keys.push(key); });
     keys.forEach(function (key) {
+      if (!el.hasAttribute(key)) return;
       const value = el.getAttribute(key);
-      if (value) attrs[key] = value;
+      attrs[key] = value == null ? '' : value;
     });
     return attrs;
+  };
+
+  const overlayRoot = function (el) {
+    return el.closest && el.closest('dialog, [role="dialog"], [aria-modal="true"]');
+  };
+
+  const accessibleNameHint = function (el) {
+    const aria = el.getAttribute('aria-label');
+    if (aria && aria.trim()) return aria.trim().slice(0, 120);
+    const labelled = associatedLabel(el);
+    if (labelled) return labelled;
+    const alt = el.getAttribute('alt');
+    if (alt && alt.trim()) return alt.trim().slice(0, 120);
+    return (el.textContent || '').trim().slice(0, 120);
   };
 
   const snapshot = function (el, category, evidence, candidate) {
@@ -67,9 +88,18 @@ export function collectUiDomScript(testIdAttributes: string[] = ['data-testid', 
     const nameAttr = el.getAttribute('name');
     const nameProp = typeof input.name === 'string' ? input.name : '';
     const testId = firstTestId(el);
+    const inFigure = Boolean(el.closest && el.closest('figure'));
+    const roleAttr = (el.getAttribute('role') || '').toLowerCase();
+    const tagName = el.tagName.toLowerCase();
+    const nameHint = accessibleNameHint(el);
+    const chartCandidate = Boolean(
+      inFigure &&
+      nameHint &&
+      (roleAttr === 'img' || tagName === 'img')
+    );
     return {
       category: category,
-      tag: el.tagName.toLowerCase(),
+      tag: tagName,
       inputType: typeof input.type === 'string' ? input.type : null,
       role: el.getAttribute('role'),
       text: (el.textContent || '').trim().slice(0, 120),
@@ -98,8 +128,23 @@ export function collectUiDomScript(testIdAttributes: string[] = ['data-testid', 
       href: el.getAttribute('href'),
       isSubmit: input.type === 'submit' || el.getAttribute('type') === 'submit',
       attributes: relevantAttributes(el),
+      optionValues: (function () {
+        if (tagName !== 'select') return undefined;
+        const values = [];
+        const opts = el.options || el.querySelectorAll('option');
+        for (var i = 0; i < opts.length; i++) {
+          const opt = opts[i];
+          const v = (opt.value != null && String(opt.value).length > 0)
+            ? String(opt.value)
+            : String(opt.textContent || '').trim();
+          if (v) values.push(v.slice(0, 80));
+        }
+        return values.length ? values.slice(0, 50) : [];
+      })(),
       evidence: evidence,
       candidate: Boolean(candidate),
+      insideOverlay: Boolean(overlayRoot(el)),
+      chartCandidate: chartCandidate,
     };
   };
 
@@ -154,8 +199,53 @@ export function collectUiDomScript(testIdAttributes: string[] = ['data-testid', 
   collect('dialog, [role="dialog"], [aria-modal="true"]', 'modal', 'dialog / role=dialog / aria-modal');
   collect('[role="menu"], [role="listbox"], [popover]', 'popup', 'menu, listbox, or popover');
   collect('[role="tooltip"]', 'tooltip', 'role=tooltip');
+  collect('[role="progressbar"], [aria-busy="true"]', 'interactive', 'progressbar or aria-busy loading evidence');
+  collect('[role="alert"]', 'alert', 'role=alert');
+  collect(
+    '[role="status"][aria-label*="notif" i], [role="status"][kind="notification"]',
+    'notification',
+    'role=status notification evidence'
+  );
+  collect(
+    '[role="status"][aria-label*="badge" i], [kind="badge"], [role="status"][kind="badge"]',
+    'badge',
+    'badge evidence (aria-label/kind)'
+  );
+  collect(
+    '[role="status"][aria-label*="empty" i], [kind="empty-state"], [role="status"][kind="empty"]',
+    'empty-state',
+    'empty-state evidence'
+  );
+  collect(
+    '[role="status"][aria-label*="error" i], [kind="error-state"], [role="alert"][kind="error"]',
+    'error-state',
+    'error-state evidence'
+  );
+  collect('[role="status"], [role="alert"]', 'interactive', 'role=status|alert (scanner text / kind only)');
   collect('img', 'image', '<img>');
   collect('video, iframe[src*="youtube"], iframe[src*="vimeo"]', 'video', 'video element or known embed');
+
+  collect('ul, ol, [role="list"]', 'list', 'ul/ol / role=list');
+  collect('article, [role="article"]', 'card', 'article / role=article');
+  collect(
+    '[aria-roledescription*="carousel" i], [role="region"][aria-roledescription*="carousel" i]',
+    'carousel',
+    'aria-roledescription carousel'
+  );
+  collect('input[type="range"], [role="slider"]', 'slider', 'input type=range / role=slider');
+  collect(
+    'figure [role="img"], figure img[alt]:not([alt=""])',
+    'chart',
+    'named role=img or img[alt] inside figure (chart candidate)'
+  );
+  collect('[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]', 'menu', 'role=menuitem*');
+  collect('[role="menu"]', 'menu', 'role=menu');
+  collect(
+    '[aria-label*="drawer" i][role="dialog"], [kind="drawer"], dialog[kind="drawer"]',
+    'drawer',
+    'drawer dialog evidence (aria-label/kind)'
+  );
+  collect('input[type="reset"], button[type="reset"]', 'button', 'reset control');
 
   const filterLike = /filter|refine/i;
   const sortLike = /sort|order by|newest|oldest/i;

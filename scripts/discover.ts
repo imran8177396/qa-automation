@@ -38,6 +38,7 @@ async function main(): Promise<void> {
   logSuccess(`workflow-inventory.json  ${PATHS.workflowInventoryFile}`);
   logSuccess(`api-inventory.json       ${PATHS.apiInventoryFile}`);
   logSuccess(`discovery-inventory.json ${PATHS.discoveryInventoryFile}`);
+  logSuccess(`generation-inventory.json ${PATHS.generationInventoryFile}`);
   logSuccess(`planned-checks.json      ${PATHS.plannedChecksFile} (${planned} runnable / ${checks.length} total)`);
 }
 

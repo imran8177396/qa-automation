@@ -27,6 +27,14 @@ describe('parsePersistableWebsiteUrl', () => {
     assert.equal(parsePersistableWebsiteUrl(''), null);
   });
 
+  it('strips username and password before returning a persistable URL', () => {
+    const cleaned = parsePersistableWebsiteUrl('https://user:pass@example.com/path?q=1#hash');
+    assert.ok(cleaned);
+    assert.equal(cleaned, 'https://example.com/path?q=1#hash');
+    assert.doesNotMatch(cleaned, /user/);
+    assert.doesNotMatch(cleaned, /pass/);
+  });
+
   it('ignores loopback unless explicitly allowed', () => {
     assert.equal(parsePersistableWebsiteUrl('http://127.0.0.1:4173/'), null);
     assert.equal(parsePersistableWebsiteUrl('http://localhost:4173/'), null);
@@ -53,6 +61,18 @@ describe('last-target persist file', () => {
     assert.equal(readLastTargetUrl(filePath), 'https://second.example/path');
     const stored = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { websiteUrl: string };
     assert.equal(stored.websiteUrl, 'https://second.example/path');
+  });
+
+  it('never persists URL userinfo', () => {
+    const filePath = tmpFile('userinfo');
+    const recorded = persistCliWebsiteUrl('https://user:pass@example.com/path', { filePath });
+    assert.ok(recorded);
+    assert.doesNotMatch(recorded.websiteUrl, /user/);
+    assert.doesNotMatch(recorded.websiteUrl, /pass/);
+    const stored = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { websiteUrl: string };
+    assert.equal(stored.websiteUrl, 'https://example.com/path');
+    assert.doesNotMatch(stored.websiteUrl, /user/);
+    assert.doesNotMatch(stored.websiteUrl, /pass/);
   });
 
   it('does not persist invalid URLs and does not write a file', () => {
@@ -169,6 +189,16 @@ describe('websiteTargetEnv', () => {
       QA_WEBSITE_URL: 'https://example.test/',
       QA_PLAYWRIGHT_BASE_URL: 'https://example.test',
     });
+  });
+
+  it('strips userinfo before copying into env', () => {
+    const env = websiteTargetEnv('https://user:pass@example.com/path');
+    assert.doesNotMatch(env.QA_WEBSITE_URL, /user/);
+    assert.doesNotMatch(env.QA_WEBSITE_URL, /pass/);
+    assert.doesNotMatch(env.QA_PLAYWRIGHT_BASE_URL, /user/);
+    assert.doesNotMatch(env.QA_PLAYWRIGHT_BASE_URL, /pass/);
+    assert.equal(env.QA_WEBSITE_URL, 'https://example.com/path/');
+    assert.equal(env.QA_PLAYWRIGHT_BASE_URL, 'https://example.com/path');
   });
 });
 

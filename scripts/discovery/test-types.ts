@@ -43,12 +43,24 @@ export function applicableTestTypes(
     case 'sidebar':
     case 'breadcrumbs':
     case 'table':
+    case 'list':
+    case 'card':
     case 'pagination':
     case 'tab':
     case 'accordion':
     case 'modal':
+    case 'drawer':
     case 'popup':
     case 'tooltip':
+    case 'carousel':
+    case 'slider':
+    case 'chart':
+    case 'badge':
+    case 'alert':
+    case 'notification':
+    case 'empty-state':
+    case 'error-state':
+    case 'menu':
     case 'video':
     case 'interactive':
       return flags.interactive ? ['visibility', 'form-presence'] : ['visibility'];

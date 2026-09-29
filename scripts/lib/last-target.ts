@@ -28,6 +28,17 @@ export interface LastTargetRecord {
   source: LastTargetSource;
 }
 
+/** Drop username/password from a URL before persist or env copy. Never log the original userinfo. */
+export function stripUrlUserinfo(url: URL, originalWhenClean?: string): string {
+  if (!url.username && !url.password) {
+    return originalWhenClean ?? url.href;
+  }
+  const cleaned = new URL(url.href);
+  cleaned.username = '';
+  cleaned.password = '';
+  return cleaned.href;
+}
+
 export function parsePersistableWebsiteUrl(
   value: string,
   options?: { allowLoopback?: boolean }
@@ -42,7 +53,7 @@ export function parsePersistableWebsiteUrl(
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (!options?.allowLoopback && isLoopbackHost(parsed.hostname)) return null;
-  return trimmed;
+  return stripUrlUserinfo(parsed, trimmed);
 }
 
 export function readLastTargetUrl(filePath: string = PATHS.lastTarget): string | null {
@@ -86,9 +97,15 @@ export function websiteTargetEnv(url: string): {
   QA_PLAYWRIGHT_BASE_URL: string;
 } {
   const trimmed = url.trim();
-  const base = trimmed.replace(/\/+$/, '');
+  let sanitized = trimmed;
+  try {
+    sanitized = stripUrlUserinfo(new URL(trimmed), trimmed);
+  } catch {
+    // Non-URL values are rejected elsewhere; keep trim-only fallback for callers.
+  }
+  const base = sanitized.replace(/\/+$/, '');
   return {
-    QA_WEBSITE_URL: trimmed.endsWith('/') ? trimmed : `${trimmed}/`,
+    QA_WEBSITE_URL: sanitized.endsWith('/') ? sanitized : `${sanitized}/`,
     QA_PLAYWRIGHT_BASE_URL: base,
   };
 }

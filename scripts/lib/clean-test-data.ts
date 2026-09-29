@@ -64,6 +64,7 @@ export const CLEAN_ALLOWLIST_RELATIVE = [
   'discovery/workflow-inventory.json',
   'discovery/api-inventory.json',
   'discovery/discovery-inventory.json',
+  'discovery/generation-inventory.json',
   'docs/test-inventory.md',
   'docs/coverage-matrix.md',
   'docs/uncovered-test-items.md',
@@ -155,11 +156,16 @@ function isReportsTreeWipe(relative: string): boolean {
   return relative === 'reports' || relative === 'reports/allure';
 }
 
+/** Stable identity registry — must survive qa:clean (not a crawl inventory). */
+export const PRESERVED_DISCOVERY_JSON = new Set(['test-case-identities.json']);
+
 function isTempDiscoveryJson(target: string): boolean {
   const relative = toPosixRelative(target);
   if (!relative.startsWith('discovery/') || !relative.endsWith('.json')) return false;
   const rest = relative.slice('discovery/'.length);
-  return rest.length > 0 && !rest.includes('/');
+  if (rest.length === 0 || rest.includes('/')) return false;
+  if (PRESERVED_DISCOVERY_JSON.has(rest)) return false;
+  return true;
 }
 
 function isVisualDiffArtifact(target: string): boolean {
@@ -253,6 +259,7 @@ function removeDiscoveryJson(removed: string[], skipped: string[]): void {
   if (!fs.existsSync(PATHS.discoveryDir)) return;
   for (const entry of fs.readdirSync(PATHS.discoveryDir, { withFileTypes: true })) {
     if (entry.isFile() && entry.name.endsWith('.json')) {
+      if (PRESERVED_DISCOVERY_JSON.has(entry.name)) continue;
       const full = path.join(PATHS.discoveryDir, entry.name);
       if (!fs.existsSync(full)) continue;
       if (removed.includes(toPosixRelative(full))) continue;

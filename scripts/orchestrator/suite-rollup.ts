@@ -128,7 +128,8 @@ function coverageLine(
       detail: 'item coverage (covered ÷ testable — not pass rate)',
     };
   }
-  return { status: stage === 'PASS' ? 'PASS' : 'NOT_EXECUTED' };
+  // Stage PASS / WARNING / RECORDED without a finite percent is not coverage PASS.
+  return { status: 'NOT_EXECUTED' };
 }
 
 /**
@@ -165,7 +166,7 @@ export function orchestratorProcessExitCode(
   overall: OverallRollupStatus | 'WARNING',
   stageExitCode: number
 ): number {
-  if (overall === 'FAIL') return 1;
+  if (overall === 'FAIL' || overall === 'BLOCKED') return 1;
   return stageExitCode;
 }
 

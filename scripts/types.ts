@@ -550,6 +550,15 @@ export interface ChangeImpactMappingConfig {
   service: string;
   feature: string;
   testIds: string[];
+  /**
+   * Optional generation-aware fields (item 39). When set, `--generate-tests --changed`
+   * uses pathPrefix (fallback: path) plus screenIds / elementIds / testCaseIds.
+   * Regression analyzeChangeImpact still uses path + testIds only.
+   */
+  pathPrefix?: string;
+  screenIds?: string[];
+  elementIds?: string[];
+  testCaseIds?: string[];
 }
 
 export interface ChangeImpactConfig {

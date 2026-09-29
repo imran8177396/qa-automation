@@ -64,6 +64,36 @@ export class DiscoveredPage extends BasePage {
     expect(observed.toLowerCase()).toContain(name.trim().toLowerCase().slice(0, 80));
   }
 
+  /** Non-destructive: assert the control can receive keyboard focus (not a WCAG audit). */
+  async expectKeyboardFocusable(selector: string): Promise<void> {
+    const locator = await this.expectVisible(selector);
+    const focusable = await locator.evaluate((el) => {
+      const html = el as HTMLElement;
+      const input = el as HTMLInputElement;
+      const tag = el.tagName.toLowerCase();
+      if (input.disabled) return false;
+      if (['a', 'button', 'input', 'select', 'textarea'].includes(tag)) return true;
+      return html.tabIndex >= 0;
+    });
+    expect(focusable, `${selector} should be keyboard-focusable`).toBe(true);
+  }
+
+  /**
+   * Non-destructive password security observation: type=password only.
+   * Does not fill credentials, submit, or generate exploit payloads.
+   */
+  async expectPasswordSecurityObservation(selector: string): Promise<void> {
+    const locator = await this.expectVisible(selector);
+    const info = await locator.evaluate((el) => {
+      const input = el as HTMLInputElement;
+      return {
+        type: (input.type || el.getAttribute('type') || '').toLowerCase(),
+        autocomplete: input.autocomplete || el.getAttribute('autocomplete') || '',
+      };
+    });
+    expect(info.type, `${selector} should use type=password (security observation)`).toBe('password');
+  }
+
   async expectRequired(selector: string, required: boolean): Promise<void> {
     const locator = await this.expectVisible(selector);
     const actual = await locator.evaluate((el) => Boolean((el as HTMLInputElement).required));

@@ -306,6 +306,7 @@ export {
   analyzeChangeImpact,
   executeByPriority,
   mappingToOwnership,
+  parseChangedFilesFromDiff,
   prioritize,
   resolveRuntimeDependencyGraph,
   resolveStaticDependencyGraph,

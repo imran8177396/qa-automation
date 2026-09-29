@@ -2,6 +2,9 @@
  * Collects normalized engine summary JSON (buildEngineSummary) into the same
  * enterprise report row shape HTML / Word / PDF already render.
  * Missing summary files are skipped — never treated as PASS.
+ * Also attaches discovery gated-check-outcomes.json rows (BLOCKED / NOT_TESTED /
+ * REQUIRES_CONFIGURATION / NOT_APPLICABLE) when that evidence file exists —
+ * missing file adds no row and is not PASS.
  */
 import crypto from 'crypto';
 import fs from 'fs';
@@ -9,6 +12,7 @@ import path from 'path';
 import {
   ENGINE_RESULT_STATUSES,
   isEngineResultStatus,
+  makeResult,
   type EngineResultStatus,
   type EngineSummary,
   type TestResult,
@@ -78,6 +82,12 @@ export interface CollectEngineResultsOptions {
   sources?: EngineSummarySource[];
   /** When false, skip reading disk (tests). Default true. */
   readFromDisk?: boolean;
+  /**
+   * Attach reports/discovery/gated-check-outcomes.json when present.
+   * Defaults to true only when using default summary sources; custom `sources`
+   * (unit tests) skip the gated file unless this is set true. Missing file → no rows.
+   */
+  includeGatedCheckOutcomes?: boolean;
 }
 
 export interface CollectEngineResultsOutput {
@@ -255,6 +265,84 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+const GATED_OUTCOME_STATUSES = new Set<EngineResultStatus>([
+  'BLOCKED',
+  'NOT_TESTED',
+  'REQUIRES_CONFIGURATION',
+  'NOT_APPLICABLE',
+]);
+
+interface GatedCheckOutcomeRow {
+  id?: unknown;
+  kind?: unknown;
+  title?: unknown;
+  status?: unknown;
+  reason?: unknown;
+  targetUrl?: unknown;
+}
+
+/**
+ * Map discovery-harness gated planned-check outcomes into engine TestResult rows.
+ * Missing or empty file → no rows (never PASS).
+ */
+export function gatedCheckOutcomesToTestResults(
+  raw: unknown,
+  evidencePath = 'reports/discovery/gated-check-outcomes.json'
+): TestResult[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const rows = (raw as { rows?: unknown }).rows;
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const results: TestResult[] = [];
+  for (const entry of rows) {
+    if (!entry || typeof entry !== 'object') continue;
+    const row = entry as GatedCheckOutcomeRow;
+    if (typeof row.id !== 'string' || typeof row.title !== 'string') continue;
+    if (typeof row.status !== 'string') continue;
+    const statusUpper = row.status.trim().toUpperCase() as EngineResultStatus;
+    if (!GATED_OUTCOME_STATUSES.has(statusUpper)) continue;
+
+    const reason =
+      typeof row.reason === 'string' && row.reason.trim()
+        ? row.reason.trim()
+        : `${statusUpper}: no reason recorded`;
+    const kind = typeof row.kind === 'string' ? row.kind : 'gated';
+    const target = typeof row.targetUrl === 'string' ? row.targetUrl : '';
+
+    results.push(
+      makeResult({
+        id: `gated-${row.id}`,
+        testType: 'ui',
+        category: 'functional',
+        name: row.title,
+        status: statusUpper,
+        target,
+        error: { message: reason },
+        evidence: { log: evidencePath },
+        metadata: {
+          reason,
+          kind,
+          source: 'gated-check-outcomes',
+          engine: 'ui',
+        },
+      })
+    );
+  }
+  return results;
+}
+
+function readGatedCheckOutcomes(): TestResult[] {
+  const filePath = PATHS.gatedCheckOutcomesFile;
+  if (!fs.existsSync(filePath)) return [];
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const relative = path.relative(PATHS.root, filePath).replace(/\\/g, '/');
+    return gatedCheckOutcomesToTestResults(parsed, relative);
+  } catch {
+    return [];
+  }
+}
+
 export function collectEngineResults(
   options: CollectEngineResultsOptions = {}
 ): CollectEngineResultsOutput {
@@ -278,6 +366,19 @@ export function collectEngineResults(
     for (const row of summary.results) {
       if (!row || typeof row !== 'object') continue;
       results.push(row);
+    }
+  }
+
+  if (readFromDisk) {
+    const includeGated =
+      options.includeGatedCheckOutcomes ?? options.sources === undefined;
+    if (includeGated) {
+      const gated = readGatedCheckOutcomes();
+      if (gated.length > 0) {
+        results.push(...gated);
+        const gatedRel = path.relative(PATHS.root, PATHS.gatedCheckOutcomesFile).replace(/\\/g, '/');
+        if (!sourcesRead.includes(gatedRel)) sourcesRead.push(gatedRel);
+      }
     }
   }
 

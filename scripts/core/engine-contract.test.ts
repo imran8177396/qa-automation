@@ -194,10 +194,88 @@ test('buildEngineSummary exposes timeoutCount, cancelledCount, and flakyCount wi
   assert.equal(summary.flakyCount, 1);
   assert.equal(summary.passCount, 0);
   assert.equal(summary.failCount, 0);
-  assert.equal(summary.passed, true);
+  assert.equal(summary.passed, false);
   assert.equal(summary.status, 'TIMEOUT');
   assert.notEqual(summary.status, 'PASS');
   assert.notEqual(summary.status, 'FAIL');
+});
+
+test('tallyEngineResults.passed requires at least one PASS and treats incomplete-only or FLAKY as not passed', () => {
+  assert.equal(
+    tallyEngineResults([
+      {
+        id: 'nt',
+        testType: 'unit',
+        category: 'functional',
+        name: 'gated',
+        status: 'NOT_TESTED',
+        metadata: { reason: 'disabled' },
+      },
+    ]).passed,
+    false
+  );
+  assert.equal(
+    tallyEngineResults([
+      {
+        id: 'block',
+        testType: 'unit',
+        category: 'functional',
+        name: 'blocked',
+        status: 'BLOCKED',
+        metadata: { reason: 'no target' },
+      },
+      {
+        id: 'cfg',
+        testType: 'unit',
+        category: 'functional',
+        name: 'needs config',
+        status: 'REQUIRES_CONFIGURATION',
+        metadata: { reason: 'missing url' },
+      },
+      {
+        id: 'skip',
+        testType: 'unit',
+        category: 'functional',
+        name: 'skipped',
+        status: 'SKIPPED',
+        metadata: { reason: 'gated' },
+      },
+    ]).passed,
+    false
+  );
+  assert.equal(
+    tallyEngineResults([
+      {
+        id: 'flaky',
+        testType: 'unit',
+        category: 'functional',
+        name: 'flaky',
+        status: 'FLAKY',
+        metadata: { reason: 'attempt 1 FAIL; attempt 2 PASS' },
+      },
+    ]).passed,
+    false
+  );
+  const realPass = tallyEngineResults([
+    {
+      id: 'ok',
+      testType: 'unit',
+      category: 'functional',
+      name: 'ok',
+      status: 'PASS',
+    },
+    {
+      id: 'skip',
+      testType: 'unit',
+      category: 'functional',
+      name: 'skipped',
+      status: 'SKIPPED',
+      metadata: { reason: 'gated' },
+    },
+  ]);
+  assert.equal(realPass.passCount, 1);
+  assert.equal(realPass.failCount, 0);
+  assert.equal(realPass.passed, true);
 });
 
 test('makeResult rejects TIMEOUT, CANCELLED, and FLAKY without a reason', () => {

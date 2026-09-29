@@ -63,6 +63,8 @@ docs/input/qa-test-results/
 
 # Generated application discovery inventories
 discovery/*.json
+# Stable test-case identity registry (survives qa:clean; needed for regression history)
+!discovery/test-case-identities.json
 
 # Full local snapshot (not the project SSOT — do not commit)
 QA Automation Structure/

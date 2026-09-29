@@ -1,5 +1,11 @@
 import type { AuthAttempt } from './auth-session';
 import type { ApiCallRecord } from './api-observe';
+import type { AuthenticatedCoverage } from './authenticated-coverage';
+import type {
+  DiscoveredScreen,
+  ScreenInventory,
+  UnresolvedDiscoveryChannel,
+} from './screens';
 import type { UiElementRecord } from './ui-scan';
 
 /**
@@ -104,6 +110,17 @@ export interface DiscoveryCriticalPath {
 export interface DiscoveryInventory {
   generatedAt: string;
   pages: DiscoveryPage[];
+  /** Unique screens (url + state). Distinct from pages[]; never invents unobserved URLs. */
+  screens: DiscoveredScreen[];
+  /** Normalized ScreenInventory rows (one per screen id). Same identities as screens[]. */
+  inventories: ScreenInventory[];
+  /** Channels not observed as screens — NOT_TESTED / REQUIRES_CONFIGURATION, never PASS. */
+  unresolvedChannels: UnresolvedDiscoveryChannel[];
+  /**
+   * Authenticated discovery coverage (public / login / role / … access layers).
+   * Present when screen inventory ran; omitted only when screens were not built.
+   */
+  authenticatedCoverage?: AuthenticatedCoverage;
   uiElements: DiscoveryUiElement[];
   forms: DiscoveryForm[];
   workflows: DiscoveryWorkflow[];
@@ -154,6 +171,13 @@ export interface DiscoveryInventoryArtifacts {
   workflows?: DiscoveryWorkflow[];
   /** Pre-flagged critical paths only. When omitted, criticalPaths stay NOT_IMPLEMENTED. */
   criticalPaths?: DiscoveryCriticalPath[];
+  /** Pre-built screen inventory (from buildScreenInventory). Empty when omitted. */
+  screens?: DiscoveredScreen[];
+  /** Normalized ScreenInventory rows from toScreenInventories / buildScreenInventory. */
+  inventories?: ScreenInventory[];
+  unresolvedChannels?: UnresolvedDiscoveryChannel[];
+  /** Pre-built authenticated coverage from buildAuthenticatedCoverage / buildScreenInventory. */
+  authenticatedCoverage?: AuthenticatedCoverage;
 }
 
 const UI_SOURCE = 'ui-scan';
@@ -163,6 +187,15 @@ const AUTH_SOURCE = 'auth-session';
 
 /** Generic HTML/URL auth evidence: password control or route path matching common auth segments. */
 const AUTH_ROUTE = /(?:^|\/)(login|signin|sign-in|signup|sign-up|register|auth)(?:\/|$|\?)/i;
+
+/**
+ * True when a discovered route/path matches the same generic auth segments used for
+ * authenticationPoints (login, signin, sign-in, signup, sign-up, register, auth).
+ * Reuse this in planners — do not invent app-specific /login routes.
+ */
+export function isGenericAuthRoute(routeOrPath: string): boolean {
+  return AUTH_ROUTE.test(routeOrPath);
+}
 const DATA_INPUT_TYPES = new Set(['input', 'textarea', 'select', 'checkbox', 'radio', 'file-upload']);
 
 function coverageEntry(
@@ -425,6 +458,12 @@ export function buildDiscoveryInventory(artifacts: DiscoveryInventoryArtifacts =
   return {
     generatedAt: new Date().toISOString(),
     pages,
+    screens: artifacts.screens ? [...artifacts.screens] : [],
+    inventories: artifacts.inventories ? [...artifacts.inventories] : [],
+    unresolvedChannels: artifacts.unresolvedChannels ? [...artifacts.unresolvedChannels] : [],
+    ...(artifacts.authenticatedCoverage
+      ? { authenticatedCoverage: artifacts.authenticatedCoverage }
+      : {}),
     uiElements: uiMapped,
     forms,
     workflows,

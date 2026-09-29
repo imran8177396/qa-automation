@@ -107,6 +107,10 @@ function buildStatusTestLines(
   assertions: ResolvedPostmanAssertions,
   context: PostmanTestContext
 ): string[] {
+  // Status compare at report time: scripts/lib/api/http-status-matrix.evaluateHttpStatus
+  // (and evaluateApiResponse) when a numeric expectedStatus already exists.
+  // Postman sandbox scripts cannot import that module; do not invent status === 200 here.
+  // Missing expected → SPECIFICATION_REQUIRED in the TypeScript evaluator, not a generated 200 assert.
   const label = requestLabel(context);
   const suffix = statusFlagSuffix(context);
   const expectedLabel = escapeJsString(expectedStatusLabel(context));

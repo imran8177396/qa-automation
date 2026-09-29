@@ -22,6 +22,17 @@ test('tallyFindings() counts every recorded status', () => {
   assert.equal(counts.blockedCount, 1);
 });
 
+test('FAIL findings keep failCount > 0 so stage/process exit cannot claim PASS', () => {
+  const counts = tallyFindings([
+    { status: 'FAIL', rule: 'content-security-policy', severity: 'medium', detail: 'missing' },
+    { status: 'FAIL', rule: 'x-frame-options', severity: 'medium', detail: 'missing' },
+    { status: 'PASS', rule: 'https-scheme', severity: 'info', detail: 'ok' },
+  ]);
+  assert.equal(counts.failCount, 2);
+  assert.equal(counts.passCount, 1);
+  assert.ok(counts.failCount > 0);
+});
+
 test('renderFindingsMarkdown() quotes statuses and the disclaimer', () => {
   const summary: SecuritySummary = {
     generatedAt: '2026-01-01T00:00:00.000Z',

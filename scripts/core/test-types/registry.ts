@@ -47,7 +47,7 @@ export const TEST_TYPE_REGISTRY: readonly TestTypeDefinition[] = [
     'Positive / negative / boundary checks via existing E2E and generated UI stages.',
     'PARTIAL',
     null,
-    'No dedicated functional stage — covered by npm run test:e2e and npm run test:ui.'
+    'No dedicated functional stage — covered by npm run test:e2e and npm run test:ui. UI planning emits scenario inventory rows; unexecuted / gated kinds stay honest.'
   ),
   entry(
     'integration',
@@ -89,8 +89,9 @@ export const TEST_TYPE_REGISTRY: readonly TestTypeDefinition[] = [
     'functional',
     'UI testing',
     'Discovery-driven non-destructive generated UI checks.',
-    'IMPLEMENTED',
-    'test:ui'
+    'PARTIAL',
+    'test:ui',
+    'Planning emits a screen/element scenario inventory (positive/negative/edge/validation/security/a11y/workflow) via writePlannedUiChecks. Executable PLANNED rows run in discovery-checks.spec.ts; workflow inference and full WCAG remain NOT_TESTED — not a separate test-generation engine.'
   ),
   entry(
     'e2e',

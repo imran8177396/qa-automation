@@ -15,6 +15,11 @@ export const PATHS = {
   root: ROOT,
   config: path.join(ROOT, 'qa.config.json'),
   /**
+   * Human edit surface for generated unique cases (include/exclude/override).
+   * Optional — absence means no overrides. Not secrets; safe to commit when used.
+   */
+  generatedOverrides: path.join(ROOT, 'qa.generated-overrides.json'),
+  /**
    * Last CLI `--url` / positional target. Gitignored. qa:clean must never delete this —
    * qa:all starts with clean, and the next run without `--url` must reuse this origin.
    */
@@ -105,6 +110,13 @@ export const PATHS = {
   apiInventoryFile: path.join(ROOT, 'discovery', 'api-inventory.json'),
   /** Normalized ten-category discovery inventory (evidence-only; never invents). */
   discoveryInventoryFile: path.join(ROOT, 'discovery', 'discovery-inventory.json'),
+  /** Discovery → generation contract (ScreenInventory projection). Same directory as discovery-inventory. */
+  generationInventoryFile: path.join(ROOT, 'discovery', 'generation-inventory.json'),
+  /**
+   * Stable test-case identity registry (TC- + sha256). Survives qa:clean —
+   * not a temp discovery inventory JSON. Used for regression / historical reporting.
+   */
+  testCaseIdentitiesFile: path.join(ROOT, 'discovery', 'test-case-identities.json'),
   qualityChecksFile: path.join(ROOT, 'reports', 'quality', 'quality-checks.json'),
   orchestratorUniversalFlow: path.join(ROOT, 'reports', 'orchestrator', 'universal-qa-flow.json'),
   orchestratorQualityGate: path.join(ROOT, 'reports', 'orchestrator', 'quality-gate.json'),
@@ -118,6 +130,30 @@ export const PATHS = {
   coverageRiskAreasFile: path.join(ROOT, 'reports', 'coverage', 'risk-areas.json'),
   coverageDimensionsFile: path.join(ROOT, 'reports', 'coverage', 'dimensions.json'),
   coverageFindingsDoc: path.join(ROOT, 'reports', 'coverage', 'findings.md'),
+  /** Screen × scenario inventory counts (plan rows) — not a second coverage percent formula. */
+  screenCoverageMatrixFile: path.join(ROOT, 'reports', 'coverage', 'screen-coverage-matrix.json'),
+  screenCoverageMatrixDoc: path.join(ROOT, 'reports', 'coverage', 'screen-coverage-matrix.md'),
+  /** Per planned-check traces + gaps (Project→Screen→Element→…→Result). Absent when no planned-checks. */
+  testCaseTraceFile: path.join(ROOT, 'reports', 'coverage', 'test-case-trace.json'),
+  /**
+   * Deduped unique test cases from planned checks (post-pass).
+   * planned-checks.json retains the full pre-dedupe audit; this file is the unique set.
+   */
+  uniqueTestCasesFile: path.join(ROOT, 'reports', 'coverage', 'unique-test-cases.json'),
+  /** Filtered unique cases from `npm run qa -- --generate-tests` (not PASS / not executed). */
+  generatedTestsFile: path.join(ROOT, 'reports', 'coverage', 'generated-tests.json'),
+  /**
+   * Discovery completeness (screens/elements/cases + gaps). Written only when
+   * planned-checks.json exists — never a fake zero report without a plan.
+   */
+  completenessReportFile: path.join(ROOT, 'reports', 'coverage', 'completeness-report.json'),
+  completenessReportDoc: path.join(ROOT, 'reports', 'coverage', 'completeness-report.txt'),
+  /**
+   * Five separate measurements (discovery / generation / execution / pass rate /
+   * requirement). Never treats generation as the other percents.
+   */
+  coverageSeparationFile: path.join(ROOT, 'reports', 'coverage', 'coverage-separation.json'),
+  coverageSeparationDoc: path.join(ROOT, 'reports', 'coverage', 'coverage-separation.txt'),
   testInventoryDoc: path.join(ROOT, 'docs', 'test-inventory.md'),
   coverageMatrixDoc: path.join(ROOT, 'docs', 'coverage-matrix.md'),
   uncoveredItemsDoc: path.join(ROOT, 'docs', 'uncovered-test-items.md'),

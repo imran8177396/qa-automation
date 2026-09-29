@@ -1,6 +1,7 @@
 /**
  * Stable 11-phase orchestrator flow for qa:all.
  * Maps onto existing child stages — does not spawn a second pipeline or run-all.
+ * Conceptual stage graph (does not replace this map): ./architecture.ts
  */
 import fs from 'fs';
 import path from 'path';

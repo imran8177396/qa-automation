@@ -9,6 +9,11 @@ import type {
 } from './types';
 import type { AuthAttempt } from './auth-session';
 import type { RedirectHop } from './redirects';
+import type {
+  AuthenticatedCoverage,
+  DiscoveredScreen,
+  UnresolvedDiscoveryChannel,
+} from './screens';
 
 export interface PageMapEntry {
   url: string;
@@ -26,6 +31,11 @@ export interface PageMapEntry {
   access?: PageAccess;
   gatedReason?: string;
   error?: string;
+  /**
+   * Optional crawl/caller metadata only. Never invent keys.
+   * Existing keys such as `role` / `permission` may attribute a page to an access layer.
+   */
+  metadata?: Record<string, unknown>;
   applicableTestTypes: ReturnType<typeof applicableTestTypes>;
   isAutoindex?: boolean;
 }
@@ -61,6 +71,12 @@ export interface PageMap {
   pagesDiscoveredUnique?: number;
   auth?: AuthAttempt;
   categoryStatus: CategoryStatus[];
+  /** Screen identity (url + state). Filled by attachScreenInventory / run-discover. */
+  screens?: DiscoveredScreen[];
+  /** Channels not observed as SCREEN-NNN rows — never PASS. */
+  unresolvedChannels?: UnresolvedDiscoveryChannel[];
+  /** Authenticated discovery coverage — access layers from crawl + optional session only. */
+  authenticatedCoverage?: AuthenticatedCoverage;
 }
 
 function routeOf(url: string): string {

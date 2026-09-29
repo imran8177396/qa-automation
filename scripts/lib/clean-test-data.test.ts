@@ -155,4 +155,15 @@ describe('clean-test-data safety', () => {
     assert.equal(shouldKeepArtifacts(['--url=https://example.com/']), false);
     assert.equal(shouldKeepArtifacts(['--keep-artifacts']), true);
   });
+
+  it('preserves discovery/test-case-identities.json (not allowlisted temp discovery JSON)', () => {
+    const identityFile = PATHS.testCaseIdentitiesFile;
+    assert.equal(rel(identityFile), 'discovery/test-case-identities.json');
+    assert.equal(isAllowlistedCleanTarget(identityFile), false);
+    assert.equal(
+      (CLEAN_ALLOWLIST_RELATIVE as readonly string[]).includes('discovery/test-case-identities.json'),
+      false
+    );
+    assert.throws(() => assertSafeCleanTarget(identityFile), /protected|not on allowlist/i);
+  });
 });

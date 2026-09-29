@@ -29,7 +29,7 @@ interface CountHolder {
   pages?: unknown[] | number;
   elements?: unknown[];
   findings?: unknown[];
-    workflows?: unknown[];
+  workflows?: unknown[];
   correlatedExecuted?: number;
   correlationUsed?: boolean;
   checks?: unknown[];
@@ -39,6 +39,51 @@ interface CountHolder {
   failures?: number;
   successful?: number;
   byFinalStatus?: { PASS?: number; FAIL?: number; NOT_EXECUTED?: number };
+  passCount?: number;
+  failCount?: number;
+  skippedCount?: number;
+  blockedCount?: number;
+  notTestedCount?: number;
+  requiresConfigurationCount?: number;
+  timeoutCount?: number;
+  cancelledCount?: number;
+  flakyCount?: number;
+}
+
+/** Opt-in engines whose exit 0 must not become PASS without a real PASS row. */
+export const OPT_IN_STAGE_KEYS = ['smoke', 'regression', 'localization'] as const;
+
+export type OptInStageKey = (typeof OPT_IN_STAGE_KEYS)[number];
+
+export function isOptInStageKey(key: string): key is OptInStageKey {
+  return (OPT_IN_STAGE_KEYS as readonly string[]).includes(key);
+}
+
+/**
+ * Map an engine-contract summary into orchestrator counts.
+ * Only PASS/FAIL rows count as executed — NOT_TESTED / REQUIRES_CONFIGURATION /
+ * BLOCKED / SKIPPED / TIMEOUT / CANCELLED / FLAKY alone never resolve to PASS.
+ */
+export function countsFromEngineSummary(raw: CountHolder): ExecutedItemCounts {
+  const failedCount = numberCount(raw.failCount) ?? 0;
+  const passedCount = numberCount(raw.passCount) ?? 0;
+  return {
+    executedCount: passedCount + failedCount,
+    failedCount,
+    passedCount,
+  };
+}
+
+function optInEngineCounts(key: OptInStageKey): ExecutedItemCounts | null {
+  const dir =
+    key === 'smoke'
+      ? PATHS.reports.smoke
+      : key === 'regression'
+        ? PATHS.reports.regression
+        : PATHS.reports.localization;
+  const raw = readJsonIfExists<CountHolder>(path.join(dir, 'summary.json'));
+  if (!raw) return null;
+  return countsFromEngineSummary(raw);
 }
 
 function playwrightCounts(filePath: string): ExecutedItemCounts | null {
@@ -129,9 +174,22 @@ export function readStageExecutedCounts(key: string): ExecutedItemCounts | null 
     }
     case 'security': {
       const raw = readJsonIfExists<CountHolder>(path.join(PATHS.reports.security, 'summary.json'));
-      const executedCount = numberCount(raw?.pagesAnalyzed) ?? arrayCount(raw?.findings);
-      return executedCount == null ? null : { executedCount, failedCount: 0, passedCount: executedCount };
+      if (!raw) return null;
+      const failedCount = numberCount(raw.failCount) ?? 0;
+      const passedCount = numberCount(raw.passCount) ?? 0;
+      // Prefer conclusive PASS/FAIL tallies so FAIL findings cannot look like PASS.
+      // Warnings/notes/blocked-only leave executedCount 0 → NOT_EXECUTED via resolveSuiteStatus.
+      if (passedCount + failedCount > 0) {
+        return { executedCount: passedCount + failedCount, failedCount, passedCount };
+      }
+      const pagesOrFindings = numberCount(raw.pagesAnalyzed) ?? arrayCount(raw.findings);
+      if (pagesOrFindings == null) return null;
+      return { executedCount: 0, failedCount: 0, passedCount: 0 };
     }
+    case 'smoke':
+    case 'regression':
+    case 'localization':
+      return optInEngineCounts(key);
     case 'dependencies': {
       // Mirrors the 'security' case: executedCount is scope scanned, not a
       // pass/fail tally — the process exit code (processFailed) carries FAIL.
@@ -243,6 +301,13 @@ export function resolveStageOutcome(input: {
   const counts = readStageExecutedCounts(input.key);
   if (!counts) {
     if (input.processFailed) return { status: 'FAIL' };
+    // Opt-in engines: missing summary + exit 0 is not an unqualified PASS.
+    if (isOptInStageKey(input.key)) {
+      return {
+        status: resolveSuiteStatus({ executedCount: 0, processFailed: false }),
+        executedCount: 0,
+      };
+    }
     return { status: 'PASS' };
   }
 

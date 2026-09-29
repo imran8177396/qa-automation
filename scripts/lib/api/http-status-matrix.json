@@ -1,0 +1,960 @@
+{
+  "version": "1.0.0",
+  "purpose": "Machine-readable HTTP status code knowledge base for QA automation, API testing, Postman, Playwright API tests, and automated reporting.",
+  "classification": {
+    "1xx": "informational",
+    "2xx": "success",
+    "3xx": "redirection",
+    "4xx": "client_error",
+    "5xx": "server_error"
+  },
+  "evaluation_rules": {
+    "pass_rule": "actual_status == expected_status",
+    "fail_rule": "actual_status != expected_status",
+    "unknown_expected_status": "SPECIFICATION_REQUIRED",
+    "do_not_assume_4xx_is_failure": true,
+    "do_not_assume_2xx_means_complete_success": true,
+    "api_specification_has_priority": true
+  },
+  "statuses": {
+    "100": {
+      "name": "Continue",
+      "category": "informational",
+      "outcome": "Request headers received; client may continue.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "101": {
+      "name": "Switching Protocols",
+      "category": "informational",
+      "outcome": "Server is switching protocols.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "102": {
+      "name": "Processing",
+      "category": "informational",
+      "outcome": "Server is processing the request.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "103": {
+      "name": "Early Hints",
+      "category": "informational",
+      "outcome": "Preliminary response headers are provided before the final response.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "200": {
+      "name": "OK",
+      "category": "success",
+      "outcome": "Request completed successfully.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical"
+    },
+    "201": {
+      "name": "Created",
+      "category": "success",
+      "outcome": "A new resource was successfully created.",
+      "typical_methods": [
+        "POST"
+      ],
+      "qa_relevance": "critical"
+    },
+    "202": {
+      "name": "Accepted",
+      "category": "success",
+      "outcome": "Request accepted for asynchronous processing.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "high"
+    },
+    "203": {
+      "name": "Non-Authoritative Information",
+      "category": "success",
+      "outcome": "Response contains information that may differ from the origin server.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "204": {
+      "name": "No Content",
+      "category": "success",
+      "outcome": "Request succeeded with no response body.",
+      "typical_methods": [
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "response_body_expected": false
+    },
+    "205": {
+      "name": "Reset Content",
+      "category": "success",
+      "outcome": "Request succeeded; client should reset the view.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "low"
+    },
+    "206": {
+      "name": "Partial Content",
+      "category": "success",
+      "outcome": "Partial resource content returned.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "207": {
+      "name": "Multi-Status",
+      "category": "success",
+      "outcome": "Multiple operation results are returned.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "208": {
+      "name": "Already Reported",
+      "category": "success",
+      "outcome": "Resource was already reported.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "226": {
+      "name": "IM Used",
+      "category": "success",
+      "outcome": "GET request fulfilled using instance manipulation.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "300": {
+      "name": "Multiple Choices",
+      "category": "redirection",
+      "outcome": "Multiple possible representations or resources exist.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "301": {
+      "name": "Moved Permanently",
+      "category": "redirection",
+      "outcome": "Resource permanently moved.",
+      "typical_methods": [
+        "GET",
+        "HEAD"
+      ],
+      "qa_relevance": "medium"
+    },
+    "302": {
+      "name": "Found",
+      "category": "redirection",
+      "outcome": "Resource temporarily redirected.",
+      "typical_methods": [
+        "GET",
+        "POST"
+      ],
+      "qa_relevance": "medium"
+    },
+    "303": {
+      "name": "See Other",
+      "category": "redirection",
+      "outcome": "Client should retrieve another URL.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "304": {
+      "name": "Not Modified",
+      "category": "redirection",
+      "outcome": "Cached representation can be reused.",
+      "typical_methods": [
+        "GET",
+        "HEAD"
+      ],
+      "qa_relevance": "medium"
+    },
+    "305": {
+      "name": "Use Proxy",
+      "category": "redirection",
+      "outcome": "Proxy should be used.",
+      "status": "obsolete",
+      "qa_relevance": "none"
+    },
+    "306": {
+      "name": "Switch Proxy",
+      "category": "redirection",
+      "outcome": "Reserved and unused.",
+      "status": "reserved",
+      "qa_relevance": "none"
+    },
+    "307": {
+      "name": "Temporary Redirect",
+      "category": "redirection",
+      "outcome": "Temporary redirect while preserving HTTP method.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium",
+      "preserve_method": true
+    },
+    "308": {
+      "name": "Permanent Redirect",
+      "category": "redirection",
+      "outcome": "Permanent redirect while preserving HTTP method.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium",
+      "preserve_method": true
+    },
+    "400": {
+      "name": "Bad Request",
+      "category": "client_error",
+      "outcome": "Request is malformed or invalid.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "401": {
+      "name": "Unauthorized",
+      "category": "client_error",
+      "outcome": "Authentication is missing, invalid, or expired.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true,
+      "authentication_related": true
+    },
+    "402": {
+      "name": "Payment Required",
+      "category": "client_error",
+      "outcome": "Reserved status; may be used by APIs for payment-related restrictions.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "403": {
+      "name": "Forbidden",
+      "category": "client_error",
+      "outcome": "Request understood but access is forbidden.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true,
+      "authorization_related": true
+    },
+    "404": {
+      "name": "Not Found",
+      "category": "client_error",
+      "outcome": "Requested resource or endpoint was not found.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "405": {
+      "name": "Method Not Allowed",
+      "category": "client_error",
+      "outcome": "HTTP method is not supported by the endpoint.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "406": {
+      "name": "Not Acceptable",
+      "category": "client_error",
+      "outcome": "Requested response representation cannot be provided.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "407": {
+      "name": "Proxy Authentication Required",
+      "category": "client_error",
+      "outcome": "Proxy authentication is required.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "408": {
+      "name": "Request Timeout",
+      "category": "client_error",
+      "outcome": "Server timed out waiting for the request.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium"
+    },
+    "409": {
+      "name": "Conflict",
+      "category": "client_error",
+      "outcome": "Request conflicts with the current resource state.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "410": {
+      "name": "Gone",
+      "category": "client_error",
+      "outcome": "Resource has been permanently removed.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "411": {
+      "name": "Length Required",
+      "category": "client_error",
+      "outcome": "Content-Length header is required.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "low"
+    },
+    "412": {
+      "name": "Precondition Failed",
+      "category": "client_error",
+      "outcome": "Request precondition was not satisfied.",
+      "typical_methods": [
+        "GET",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium"
+    },
+    "413": {
+      "name": "Content Too Large",
+      "category": "client_error",
+      "outcome": "Request content exceeds server limits.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "414": {
+      "name": "URI Too Long",
+      "category": "client_error",
+      "outcome": "Request URI is too long.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "415": {
+      "name": "Unsupported Media Type",
+      "category": "client_error",
+      "outcome": "Request media type is not supported.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true
+    },
+    "416": {
+      "name": "Range Not Satisfiable",
+      "category": "client_error",
+      "outcome": "Requested resource range cannot be satisfied.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "medium"
+    },
+    "417": {
+      "name": "Expectation Failed",
+      "category": "client_error",
+      "outcome": "Server cannot satisfy the Expect request header.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "low"
+    },
+    "418": {
+      "name": "I'm a Teapot",
+      "category": "client_error",
+      "outcome": "Humorous status code.",
+      "typical_methods": [
+        "GET",
+        "POST"
+      ],
+      "qa_relevance": "low",
+      "special": true
+    },
+    "421": {
+      "name": "Misdirected Request",
+      "category": "client_error",
+      "outcome": "Request was sent to a server unable to produce a response.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "422": {
+      "name": "Unprocessable Content",
+      "category": "client_error",
+      "outcome": "Request syntax is valid but content fails validation or business rules.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true,
+      "validation_related": true
+    },
+    "423": {
+      "name": "Locked",
+      "category": "client_error",
+      "outcome": "Resource is locked.",
+      "typical_methods": [
+        "GET",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "424": {
+      "name": "Failed Dependency",
+      "category": "client_error",
+      "outcome": "Request failed because a dependent operation failed.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "425": {
+      "name": "Too Early",
+      "category": "client_error",
+      "outcome": "Server refuses potentially replayable request.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "426": {
+      "name": "Upgrade Required",
+      "category": "client_error",
+      "outcome": "Client must switch or upgrade protocol.",
+      "typical_methods": [
+        "GET",
+        "POST"
+      ],
+      "qa_relevance": "low"
+    },
+    "428": {
+      "name": "Precondition Required",
+      "category": "client_error",
+      "outcome": "Server requires a conditional request.",
+      "typical_methods": [
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium"
+    },
+    "429": {
+      "name": "Too Many Requests",
+      "category": "client_error",
+      "outcome": "Client exceeded the allowed request rate.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "negative_testing": true,
+      "rate_limit_related": true
+    },
+    "431": {
+      "name": "Request Header Fields Too Large",
+      "category": "client_error",
+      "outcome": "Request headers are too large.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium"
+    },
+    "451": {
+      "name": "Unavailable For Legal Reasons",
+      "category": "client_error",
+      "outcome": "Resource is unavailable due to legal restrictions.",
+      "typical_methods": [
+        "GET",
+        "POST"
+      ],
+      "qa_relevance": "low"
+    },
+    "500": {
+      "name": "Internal Server Error",
+      "category": "server_error",
+      "outcome": "Unexpected server-side error occurred.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "server_failure": true
+    },
+    "501": {
+      "name": "Not Implemented",
+      "category": "server_error",
+      "outcome": "Server does not support the requested functionality.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "medium"
+    },
+    "502": {
+      "name": "Bad Gateway",
+      "category": "server_error",
+      "outcome": "Gateway received an invalid response from an upstream server.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "server_failure": true,
+      "upstream_failure": true
+    },
+    "503": {
+      "name": "Service Unavailable",
+      "category": "server_error",
+      "outcome": "Server is temporarily unable to process requests.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "server_failure": true
+    },
+    "504": {
+      "name": "Gateway Timeout",
+      "category": "server_error",
+      "outcome": "Gateway did not receive a timely upstream response.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "critical",
+      "server_failure": true,
+      "timeout_related": true
+    },
+    "505": {
+      "name": "HTTP Version Not Supported",
+      "category": "server_error",
+      "outcome": "Server does not support the HTTP version used.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "506": {
+      "name": "Variant Also Negotiates",
+      "category": "server_error",
+      "outcome": "Server configuration/content negotiation error.",
+      "typical_methods": [
+        "GET"
+      ],
+      "qa_relevance": "low"
+    },
+    "507": {
+      "name": "Insufficient Storage",
+      "category": "server_error",
+      "outcome": "Server cannot store the required representation.",
+      "typical_methods": [
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "medium"
+    },
+    "508": {
+      "name": "Loop Detected",
+      "category": "server_error",
+      "outcome": "Server detected an infinite loop.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "qa_relevance": "low"
+    },
+    "510": {
+      "name": "Not Extended",
+      "category": "server_error",
+      "outcome": "Additional request extensions are required.",
+      "typical_methods": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH"
+      ],
+      "qa_relevance": "low"
+    },
+    "511": {
+      "name": "Network Authentication Required",
+      "category": "server_error",
+      "outcome": "Client must authenticate to obtain network access.",
+      "typical_methods": [
+        "GET",
+        "POST"
+      ],
+      "qa_relevance": "medium",
+      "authentication_related": true
+    }
+  },
+  "common_api_expectations": {
+    "create": {
+      "method": "POST",
+      "typical_success_statuses": [
+        201
+      ],
+      "alternative_success_statuses": [
+        200,
+        202
+      ]
+    },
+    "read": {
+      "method": "GET",
+      "typical_success_statuses": [
+        200
+      ],
+      "alternative_success_statuses": [
+        206
+      ]
+    },
+    "update": {
+      "methods": [
+        "PUT",
+        "PATCH"
+      ],
+      "typical_success_statuses": [
+        200,
+        204
+      ],
+      "alternative_success_statuses": [
+        202
+      ]
+    },
+    "delete": {
+      "method": "DELETE",
+      "typical_success_statuses": [
+        204
+      ],
+      "alternative_success_statuses": [
+        200,
+        202
+      ]
+    }
+  },
+  "negative_test_matrix": [
+    {
+      "scenario": "missing_required_field",
+      "possible_statuses": [
+        400,
+        422
+      ]
+    },
+    {
+      "scenario": "malformed_json",
+      "possible_statuses": [
+        400
+      ]
+    },
+    {
+      "scenario": "missing_authentication",
+      "possible_statuses": [
+        401
+      ]
+    },
+    {
+      "scenario": "invalid_authentication",
+      "possible_statuses": [
+        401
+      ]
+    },
+    {
+      "scenario": "expired_token",
+      "possible_statuses": [
+        401
+      ]
+    },
+    {
+      "scenario": "insufficient_permission",
+      "possible_statuses": [
+        403
+      ]
+    },
+    {
+      "scenario": "resource_not_found",
+      "possible_statuses": [
+        404
+      ]
+    },
+    {
+      "scenario": "unsupported_http_method",
+      "possible_statuses": [
+        405
+      ]
+    },
+    {
+      "scenario": "duplicate_resource",
+      "possible_statuses": [
+        409
+      ]
+    },
+    {
+      "scenario": "invalid_content_type",
+      "possible_statuses": [
+        415
+      ]
+    },
+    {
+      "scenario": "business_validation_failure",
+      "possible_statuses": [
+        422
+      ]
+    },
+    {
+      "scenario": "request_too_large",
+      "possible_statuses": [
+        413
+      ]
+    },
+    {
+      "scenario": "rate_limit_exceeded",
+      "possible_statuses": [
+        429
+      ]
+    },
+    {
+      "scenario": "internal_server_failure",
+      "possible_statuses": [
+        500
+      ]
+    },
+    {
+      "scenario": "upstream_failure",
+      "possible_statuses": [
+        502
+      ]
+    },
+    {
+      "scenario": "service_unavailable",
+      "possible_statuses": [
+        503
+      ]
+    },
+    {
+      "scenario": "gateway_timeout",
+      "possible_statuses": [
+        504
+      ]
+    }
+  ],
+  "required_response_validation": [
+    "status_code",
+    "response_body",
+    "response_schema",
+    "headers",
+    "content_type",
+    "response_time"
+  ],
+  "classification_examples": [
+    {
+      "test": "successful_create",
+      "expected": 201,
+      "actual": 201,
+      "result": "PASS"
+    },
+    {
+      "test": "successful_create",
+      "expected": 201,
+      "actual": 500,
+      "result": "FAIL"
+    },
+    {
+      "test": "invalid_login",
+      "expected": 401,
+      "actual": 401,
+      "result": "PASS"
+    },
+    {
+      "test": "invalid_login",
+      "expected": 401,
+      "actual": 200,
+      "result": "FAIL"
+    },
+    {
+      "test": "delete_resource",
+      "expected": 204,
+      "actual": 204,
+      "result": "PASS"
+    }
+  ],
+  "engine_instructions": [
+    "Always prioritize the API specification over generic HTTP conventions.",
+    "Never automatically classify every 4xx response as a test failure.",
+    "Never automatically classify every 2xx response as complete success.",
+    "Compare expected status with actual status.",
+    "Validate response body and schema in addition to status code.",
+    "Generate negative tests for authentication, authorization, validation, conflicts, unsupported methods, rate limits, and malformed requests.",
+    "Use SPECIFICATION_REQUIRED when expected behavior cannot be determined.",
+    "Record the exact actual status code in every test result.",
+    "Include a failure reason whenever expected and actual behavior differ.",
+    "Treat 401 as authentication-related and 403 as authorization-related unless the API specification states otherwise.",
+    "Treat 422 as validation/business-rule related when applicable.",
+    "Treat 429 as rate-limit related.",
+    "Treat 5xx responses as server-side failures unless the test explicitly expects a server failure.",
+    "Do not invent status-code expectations."
+  ]
+}

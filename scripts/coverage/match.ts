@@ -161,12 +161,12 @@ export function evidenceMatchesItem(item: InventoryItem, evidence: ExecutionEvid
 function titleSuggestsScenario(title: string, scenarioId: AssignedScenario['id']): boolean {
   switch (scenarioId) {
     case 'valid-input':
-      return /valid|fill|type=|enter /i.test(title);
+      return /valid|fill|type=|enter |positive/i.test(title);
     case 'invalid-input':
-      return /invalid|malformed|bad email|wrong format/i.test(title);
+      return /invalid|malformed|bad email|wrong format|negative/i.test(title);
     case 'empty-input':
     case 'required-validation':
-      return /empty|required|blank|boundary/i.test(title);
+      return /empty|required|blank|boundary|validation|negative/i.test(title);
     case 'special-characters':
       return /special char/i.test(title);
     case 'whitespace-input':
@@ -178,17 +178,19 @@ function titleSuggestsScenario(title: string, scenarioId: AssignedScenario['id']
     case 'editability':
       return /editab|read-only|readonly/i.test(title);
     case 'required-state':
-      return /required-state|required\/optional|optional/i.test(title);
+      return /required-state|required\/optional|optional|validation/i.test(title);
     case 'accessible-name':
-      return /accessible name/i.test(title);
+      return /accessible name|usability\/accessibility|keyboard-focus/i.test(title);
     case 'validation-state':
       return /validity|validation-state|constraint/i.test(title);
     case 'error-recovery':
       return /error recovery|recover/i.test(title);
     case 'boundary-values':
-      return /boundary|min|max|length/i.test(title);
+      return /boundary|min|max|length|edge/i.test(title);
     case 'click-behavior':
       return /click/i.test(title);
+    case 'security-baseline':
+      return /security|password observation|type=password/i.test(title);
     default:
       return true;
   }

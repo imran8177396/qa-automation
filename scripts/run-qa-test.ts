@@ -12,7 +12,7 @@ import { discoveryCredentials } from './discovery/credentials';
 import { inventoryPage } from './inventory/element-inventory';
 import { classifyElements } from './inventory/classify-elements';
 import { generateChecks } from './planning/generate-checks';
-import { generateUiChecks } from './planning/generate-ui-checks';
+import { writePlannedUiChecks } from './planning/write-planned-checks';
 import { readJsonIfExists } from './discovery/write-json';
 import type { PageMap } from './discovery/page-map';
 import type { UiInventory } from './discovery/ui-scan';
@@ -123,12 +123,14 @@ async function main(): Promise<void> {
   const uiInventory = readJsonIfExists<UiInventory>(PATHS.uiInventoryFile);
   const plannedChecks =
     pageMap && uiInventory
-      ? generateUiChecks(pageMap, uiInventory, safety)
+      ? writePlannedUiChecks(pageMap, uiInventory, safety)
       : generateChecks(discovery, inventory);
-  fs.mkdirSync(path.dirname(PATHS.plannedChecksFile), { recursive: true });
-  fs.writeFileSync(PATHS.plannedChecksFile, `${JSON.stringify(plannedChecks, null, 2)}\n`, 'utf8');
+  if (!(pageMap && uiInventory)) {
+    fs.mkdirSync(path.dirname(PATHS.plannedChecksFile), { recursive: true });
+    fs.writeFileSync(PATHS.plannedChecksFile, `${JSON.stringify(plannedChecks, null, 2)}\n`, 'utf8');
+  }
   if (pageMap && uiInventory) {
-    logSuccess('Planned checks from current discovery page-map + ui-inventory (generateUiChecks)');
+    logSuccess('Planned checks from current discovery page-map + ui-inventory (scenario inventory)');
   }
   const gated = plannedChecks.filter((check) => check.status !== 'PLANNED').length;
   logSuccess(
