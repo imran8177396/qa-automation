@@ -61,6 +61,8 @@ export default defineConfig({
     }),
     headless,
     ...PLAYWRIGHT_FAILURE_ARTIFACTS,
+    trace: 'off',
+    video: 'off',
     actionTimeout: 15000,
     navigationTimeout: 35000,
     colorScheme: 'light',

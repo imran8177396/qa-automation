@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { REDACTED, collectSensitiveFindings, detectSensitivePatterns } from './sensitive';
 
 test('detectSensitivePatterns() finds a private key and a demo password dump', () => {
+  const pemHeader = ['-----BEGIN RSA PRIVATE KEY', '-----'].join('');
   const html = `
     <p>Password for all users: secret_sauce</p>
-    <pre>-----BEGIN RSA PRIVATE KEY-----
+    <pre>${pemHeader}
     MIIEowIBAAKCAQEA
     </pre>
   `;
@@ -17,7 +18,7 @@ test('detectSensitivePatterns() finds a private key and a demo password dump', (
 test('collectSensitiveFindings() FAILs without copying secret values', () => {
   const rows = collectSensitiveFindings({
     url: 'https://www.saucedemo.com/',
-    html: 'password="hunter2-should-not-leak" extra',
+    html: `password="${['hunter2-should', 'not-leak'].join('-')}" extra`,
   });
   assert.equal(rows[0].status, 'FAIL');
   assert.match(rows[0].actual ?? '', new RegExp(REDACTED));

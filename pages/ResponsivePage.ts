@@ -93,7 +93,15 @@ export class ResponsivePage extends BasePage {
     await this.page.setViewportSize({ width: this.profile.width, height: this.profile.height });
     await this.goto(targetPath);
     await this.page.waitForLoadState('domcontentloaded');
-    await this.page.evaluate(() => document.fonts.ready);
+    await this.page.evaluate(
+      () =>
+        Promise.race([
+          document.fonts.ready,
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 3000);
+          }),
+        ])
+    );
   }
 
   async snapshot(): Promise<LayoutSnapshot> {
@@ -289,7 +297,8 @@ export class ResponsivePage extends BasePage {
   }
 
   async ensureNavAvailable(): Promise<void> {
-    if (await this.menuToggle.isVisible()) {
+    const toggleVisible = await this.menuToggle.isVisible().catch(() => false);
+    if (toggleVisible) {
       const expanded = await this.menuToggle.getAttribute('aria-expanded');
       if (expanded !== 'true') {
         await this.menuToggle.click();

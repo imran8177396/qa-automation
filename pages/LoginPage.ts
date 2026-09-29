@@ -24,7 +24,7 @@ export class LoginPage extends BasePage {
    * return a non-2xx status — do not use BasePage.goto, which requires ok().
    */
   async openGated(target: string): Promise<number> {
-    const response = await this.page.goto(target);
+    const response = await this.page.goto(target, { waitUntil: 'domcontentloaded' });
     expect(response, `expected a response for ${target}`).not.toBeNull();
     return response!.status();
   }

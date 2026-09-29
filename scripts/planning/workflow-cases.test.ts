@@ -14,6 +14,7 @@ import {
   buildSimplePaths,
   buildWorkflowCases,
   collectWorkflowEdges,
+  MAX_SIMPLE_PATHS,
   selectWorkflowChains,
   stableEdgeId,
 } from './workflow-cases';
@@ -362,6 +363,21 @@ test('scenario-inventory zero edges → workflow-none only; no Create User', () 
   assert.ok(workflow.some((c) => c.status === 'NOT_TESTED' && /no navigation edges/i.test(c.reason ?? '')));
   assert.ok(!JSON.stringify(workflow).includes('Create User'));
   assert.ok(!JSON.stringify(workflow).includes('Delete User'));
+});
+
+test('dense site navigation stays within the path cap', () => {
+  const routes = Array.from({ length: 12 }, (_, index) => `/p${index}`);
+  const navigation: NavigationEntry[] = [];
+  for (const from of routes) {
+    for (const to of routes) {
+      if (from !== to) navigation.push(edge(from, to));
+    }
+  }
+  const started = Date.now();
+  const paths = buildSimplePaths(collectWorkflowEdges(navigation));
+  assert.ok(Date.now() - started < 2000);
+  assert.ok(paths.length > 0);
+  assert.ok(paths.length <= MAX_SIMPLE_PATHS);
 });
 
 test('stableEdgeId is deterministic for the same URLs', () => {

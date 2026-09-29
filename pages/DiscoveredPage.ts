@@ -17,14 +17,14 @@ export class DiscoveredPage extends BasePage {
   }
 
   async open(url: string, options?: { requireOk?: boolean }): Promise<void> {
-    const response = await this.page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
+    const response = await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
     if (options?.requireOk === false) return;
     expect(response, `expected a response for ${url}`).not.toBeNull();
     expect(response!.ok(), `${url} should return a successful status`).toBeTruthy();
   }
 
   async openAllowingError(url: string): Promise<number> {
-    const response = await this.page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS }).catch(() => null);
+    const response = await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS }).catch(() => null);
     return response?.status() ?? 0;
   }
 

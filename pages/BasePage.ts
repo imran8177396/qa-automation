@@ -8,7 +8,7 @@ export class BasePage {
   constructor(protected readonly page: Page) {}
 
   async goto(path = '/'): Promise<void> {
-    const response = await this.page.goto(path);
+    const response = await this.page.goto(path, { waitUntil: 'domcontentloaded' });
     expect(response, `expected a response for ${path}`).not.toBeNull();
     expect(response!.ok(), `${path} should return a successful status`).toBeTruthy();
   }

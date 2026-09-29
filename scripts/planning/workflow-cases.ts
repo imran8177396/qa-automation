@@ -22,6 +22,12 @@ import type {
 /** Max navigation edges in one chain (cycle-safe walk). */
 export const MAX_WORKFLOW_STEPS = 8;
 
+/**
+ * Stop after this many simple paths. A site nav where every page links to
+ * every other page would otherwise enumerate millions of paths and run out of memory.
+ */
+export const MAX_SIMPLE_PATHS = 64;
+
 const RECOVERY_NAME = /cancel|back/i;
 const DELETE_KIND = /delete/i;
 const DELETE_BLOCKED_REASON =
@@ -169,9 +175,11 @@ export function buildSimplePaths(edges: WorkflowEdge[]): SimplePath[] {
   const collected: SimplePath[] = [];
 
   function dfs(urlKey: string, pathUrls: string[], pathEdges: string[], visited: Set<string>): void {
+    if (collected.length >= MAX_SIMPLE_PATHS) return;
     const outs = adj.get(urlKey) ?? [];
     let extended = false;
     for (const edge of outs) {
+      if (collected.length >= MAX_SIMPLE_PATHS) return;
       if (pathEdges.length >= MAX_WORKFLOW_STEPS) break;
       const toKey = canonicalScreenUrl(edge.to);
       if (visited.has(toKey)) continue; // cycle: stop this branch, do not loop
@@ -180,7 +188,7 @@ export function buildSimplePaths(edges: WorkflowEdge[]): SimplePath[] {
       dfs(toKey, [...pathUrls, nextUrl], [...pathEdges, edge.edgeId], new Set(visited).add(toKey));
     }
     // Maximal: record when we cannot extend further (and have at least one edge)
-    if (!extended && pathEdges.length > 0) {
+    if (!extended && pathEdges.length > 0 && collected.length < MAX_SIMPLE_PATHS) {
       collected.push({ urls: pathUrls, edgeIds: pathEdges });
     }
   }

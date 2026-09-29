@@ -102,7 +102,7 @@ export async function runUiAndApiDiscovery(
     if (credentials && (auth?.succeeded || auth === undefined)) {
       const bootstrap = await context.newPage();
       try {
-        await bootstrap.goto(pageMap.seedUrl, { waitUntil: 'load', timeout: 30000 });
+        await bootstrap.goto(pageMap.seedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         await tryDiscoveryLogin(bootstrap, credentials);
       } finally {
         await bootstrap.close();
@@ -122,7 +122,7 @@ export async function runUiAndApiDiscovery(
       const page = await context.newPage();
       const detach = attachApiObserver(page, pageInfo.url, calls);
       try {
-        await page.goto(pageInfo.url, { waitUntil: 'load', timeout: 30000 });
+        await page.goto(pageInfo.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
         const pageElements = await scanPageUi(page, pageInfo.url, { testIdAttributes: ids });
         elements.push(...pageElements);
         pagesScanned += 1;

@@ -20,6 +20,7 @@ import {
   type AuthAttempt,
 } from './auth-session';
 import { redirectChain } from './redirects';
+import { logWarn } from '../lib/logger';
 
 interface VisitResult {
   page: DiscoveredPage;
@@ -116,22 +117,37 @@ async function runCrawl(browser: Browser, seedUrl: string, options: CrawlOptions
   try {
     const seedPage = await bootstrap.newPage();
     try {
-      await seedPage.goto(seedUrl, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
-      resolvedSeed = seedPage.url() || seedUrl;
+      try {
+        await seedPage.goto(seedUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
+        const current = seedPage.url();
+        if (current && current !== 'about:blank') resolvedSeed = current;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWarn(
+          `Seed page did not finish loading (${seedUrl}): ${message}. Discovery continues from the seed URL.`
+        );
+      }
+
       await seedPage
         .locator('h1, a[href], input, button')
         .first()
         .waitFor({ state: 'attached', timeout: 5000 })
         .catch(() => undefined);
 
-      const wall = await observeLoginWall(seedPage);
-      if (options.credentials) {
-        auth = await tryDiscoveryLogin(seedPage, options.credentials);
-      } else {
-        auth = authWithoutCredentials(wall.loginForm);
-      }
-      if (auth.succeeded) {
-        storageState = await bootstrap.storageState();
+      try {
+        const wall = await observeLoginWall(seedPage);
+        if (options.credentials) {
+          auth = await tryDiscoveryLogin(seedPage, options.credentials);
+        } else {
+          auth = authWithoutCredentials(wall.loginForm);
+        }
+        if (auth.succeeded) {
+          storageState = await bootstrap.storageState();
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logWarn(`Seed login check failed (${seedUrl}): ${message}. Continuing unauthenticated.`);
+        auth = authWithoutCredentials(false);
       }
     } finally {
       await seedPage.close();
@@ -271,7 +287,7 @@ async function visitPage(
   let finalUrl = url;
 
   try {
-    const response = await page.goto(url, { waitUntil: 'load', timeout: NAV_TIMEOUT_MS });
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
     status = response?.status() ?? null;
     ok = response?.ok() ?? false;
     finalUrl = page.url() || url;
