@@ -2,6 +2,8 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { PATHS } from '../lib/paths';
 import { logError, logStep, logSuccess, logWarn } from '../lib/logger';
+import { applyQaRuntimeEnv } from '../lib/runtime-env';
+import { formatStageTimeoutReason, timeoutMsForStageKey } from './stage-timeouts';
 import type { StageDefinition, StageResult } from './types';
 import { resolveStageOutcome } from './stage-outcome';
 
@@ -11,6 +13,32 @@ function commandLine(script: string, args: string[]): string {
 
 function stamp(): string {
   return new Date().toISOString();
+}
+
+function resolveTimeoutMs(stage: StageDefinition): number {
+  if (typeof stage.timeoutMs === 'number' && stage.timeoutMs > 0) return stage.timeoutMs;
+  return timeoutMsForStageKey(stage.key);
+}
+
+/** Kill a child and its descendants so a hung Playwright teardown cannot block qa:all. */
+export function killProcessTree(pid: number): void {
+  if (!Number.isFinite(pid) || pid <= 0) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Process may already have exited.
+    }
+  }
 }
 
 export function skippedResult(stage: StageDefinition, reason: string): StageResult {
@@ -35,6 +63,8 @@ interface ProcessOutcome {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   launchError?: Error;
+  timedOut?: boolean;
+  timeoutMs?: number;
 }
 
 /**
@@ -53,7 +83,7 @@ function finalizeStageResult(input: {
   const completedAt = finishedAt.toISOString();
   const durationMs = finishedAt.getTime() - startedAt.getTime();
 
-  if (outcome.launchError) {
+  if (outcome.launchError && !outcome.timedOut) {
     logError(`${stage.name} could not start — ${outcome.launchError.message}. Continuing.`);
     return {
       id: stage.id,
@@ -70,6 +100,25 @@ function finalizeStageResult(input: {
     };
   }
 
+  if (outcome.timedOut) {
+    const timeoutMs = outcome.timeoutMs ?? resolveTimeoutMs(stage);
+    const reason = formatStageTimeoutReason(stage.key, timeoutMs);
+    logError(`${stage.name} timed out — ${reason}. Continuing.`);
+    return {
+      id: stage.id,
+      key: stage.key,
+      name: stage.name,
+      status: 'FAIL',
+      exitCode: 1,
+      startedAt: startedAt.toISOString(),
+      finishedAt: completedAt,
+      completedAt,
+      durationMs,
+      reason,
+      command,
+    };
+  }
+
   const killed = outcome.signal != null;
   const processFailed = killed || outcome.exitCode !== 0;
   const processStatus = processFailed ? 'FAIL' : 'PASS';
@@ -82,8 +131,13 @@ function finalizeStageResult(input: {
   const resolvedOutcome = resolveStageOutcome({ key: stage.key, processStatus, processFailed });
 
   if (resolvedOutcome.status === 'PASS') logSuccess(`${stage.name} exited 0`);
-  else if (resolvedOutcome.status === 'BLOCKED') {
-    logError(`${stage.name} BLOCKED — ${reason ?? 'required tool or configuration missing'}. Continuing.`);
+  else if (
+    resolvedOutcome.status === 'BLOCKED' ||
+    resolvedOutcome.status === 'REQUIRES_CONFIGURATION'
+  ) {
+    logError(
+      `${stage.name} ${resolvedOutcome.status} — ${resolvedOutcome.reason ?? reason ?? 'required tool or configuration missing'}. Continuing.`
+    );
   } else if (
     resolvedOutcome.status === 'NOT_EXECUTED' ||
     resolvedOutcome.status === 'DRY_RUN' ||
@@ -102,10 +156,16 @@ function finalizeStageResult(input: {
     finishedAt: completedAt,
     completedAt,
     durationMs,
-    reason,
+    reason: resolvedOutcome.reason ?? reason,
     command,
     executedCount: resolvedOutcome.executedCount,
   };
+}
+
+function childEnv(optionsEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...optionsEnv };
+  applyQaRuntimeEnv(env);
+  return env;
 }
 
 export function runChildStage(
@@ -119,25 +179,39 @@ export function runChildStage(
   const script = path.join(PATHS.root, stage.script);
   const command = commandLine(script, args);
   const startedAt = new Date();
+  const timeoutMs = resolveTimeoutMs(stage);
   logStep(`${stage.id}. ${stage.name}`);
   console.log(command);
+  console.log(`Stage timeout: ${Math.round(timeoutMs / 60000)} min (${timeoutMs}ms)`);
 
   const result = spawnSync(process.execPath, ['--import', 'tsx', script, ...args], {
     stdio: 'inherit',
     cwd: PATHS.root,
-    env: { ...process.env, ...options.env },
+    env: childEnv(options.env),
     shell: false,
+    timeout: timeoutMs,
+    killSignal: 'SIGTERM',
   });
   const finishedAt = new Date();
+
+  const timedOut = Boolean(
+    result.error && (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT'
+  );
+
+  if (timedOut && result.pid) {
+    killProcessTree(result.pid);
+  }
 
   return finalizeStageResult({
     stage,
     command,
     startedAt,
     finishedAt,
-    outcome: result.error
-      ? { exitCode: null, signal: null, launchError: result.error }
-      : { exitCode: result.status, signal: result.signal },
+    outcome: timedOut
+      ? { exitCode: null, signal: result.signal, timedOut: true, timeoutMs, launchError: result.error ?? undefined }
+      : result.error
+        ? { exitCode: null, signal: null, launchError: result.error }
+        : { exitCode: result.status, signal: result.signal },
   });
 }
 
@@ -158,17 +232,32 @@ export function runChildStageAsync(
   const script = path.join(PATHS.root, stage.script);
   const command = commandLine(script, args);
   const startedAt = new Date();
+  const timeoutMs = resolveTimeoutMs(stage);
   logStep(`${stage.id}. ${stage.name} (parallel: ${stage.parallelGroup ?? 'n/a'})`);
   console.log(command);
+  console.log(`Stage timeout: ${Math.round(timeoutMs / 60000)} min (${timeoutMs}ms)`);
 
   return new Promise<StageResult>((resolve) => {
     const child = spawn(process.execPath, ['--import', 'tsx', script, ...args], {
       cwd: PATHS.root,
-      env: { ...process.env, ...options.env },
+      env: childEnv(options.env),
       shell: false,
     });
 
     let output = '';
+    let timedOut = false;
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (child.pid) killProcessTree(child.pid);
+      try {
+        child.kill('SIGTERM');
+      } catch {
+        // Already exited.
+      }
+    }, timeoutMs);
+
     child.stdout?.on('data', (chunk: Buffer) => {
       output += chunk.toString();
     });
@@ -176,16 +265,29 @@ export function runChildStageAsync(
       output += chunk.toString();
     });
 
-    child.on('error', (launchError) => {
+    const finish = (outcome: ProcessOutcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       const finishedAt = new Date();
       console.log(output);
-      resolve(finalizeStageResult({ stage, command, startedAt, finishedAt, outcome: { exitCode: null, signal: null, launchError } }));
+      resolve(finalizeStageResult({ stage, command, startedAt, finishedAt, outcome }));
+    };
+
+    child.on('error', (launchError) => {
+      finish(
+        timedOut
+          ? { exitCode: null, signal: null, timedOut: true, timeoutMs, launchError }
+          : { exitCode: null, signal: null, launchError }
+      );
     });
 
     child.on('close', (exitCode, signal) => {
-      const finishedAt = new Date();
-      console.log(output);
-      resolve(finalizeStageResult({ stage, command, startedAt, finishedAt, outcome: { exitCode, signal } }));
+      finish(
+        timedOut
+          ? { exitCode, signal, timedOut: true, timeoutMs }
+          : { exitCode, signal }
+      );
     });
   });
 }

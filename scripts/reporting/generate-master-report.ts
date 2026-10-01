@@ -12,6 +12,7 @@ import {
 } from '../lib/qa-report/execution-archive';
 import { buildMasterReportModel, type MasterReportModel } from '../lib/qa-report/master-report-model';
 import { generateMasterReportHtml } from '../lib/qa-report/master-report-html';
+import { writeReconciledOrchestratorSummary } from '../orchestrator/reconcile-orchestrator-summary';
 
 export interface GenerateMasterReportInput {
   identity?: ExecutionIdentity | null;
@@ -38,6 +39,9 @@ export function generateMasterQaReport(input: GenerateMasterReportInput = {}): G
     );
   }
   fs.mkdirSync(folderPath, { recursive: true });
+
+  // Keep original orch summary; write reconciled view so MASTER can cite integrity.
+  writeReconciledOrchestratorSummary();
 
   const model = buildMasterReportModel({
     identity,

@@ -42,11 +42,15 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   outputDir: 'test-results/responsive',
   fullyParallel: true,
-  workers: process.env.CI ? 1 : 4,
+  // Live sites (4–6s navigations) + 12 engine×viewport projects: more than 1–2
+  // workers previously stacked Firefox setViewportSize/navigation hangs into
+  // uniform 60s test timeouts. Cap workers; CI stays serial.
+  workers: process.env.CI ? 1 : 2,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  timeout: 60000,
-  expect: { timeout: 15000 },
+  // Slow live origin headroom (pages often 4–6s); assertions stay unchanged.
+  timeout: 120000,
+  expect: { timeout: 20000 },
   reporter: [
     ['list'],
     ['html', playwrightHtmlReporterConfig(suiteName)],
@@ -61,10 +65,11 @@ export default defineConfig({
     }),
     headless,
     ...PLAYWRIGHT_FAILURE_ARTIFACTS,
+    // Override retain-on-failure video/trace — prior hangs were teardown-related.
     trace: 'off',
     video: 'off',
-    actionTimeout: 15000,
-    navigationTimeout: 35000,
+    actionTimeout: 20000,
+    navigationTimeout: 45000,
     colorScheme: 'light',
   },
   projects: responsiveEngineProjects(),

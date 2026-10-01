@@ -8,6 +8,10 @@ export interface ResolvedProfile {
   id: CanonicalPerformanceProfile;
   heavy: boolean;
   target: string;
+  /** `api` = documented API; `website` = liveness fallback against the URL under test. */
+  targetSource: 'api' | 'website';
+  /** Origin (scheme + host[:port]) the plan requests. Empty when unresolved. */
+  baseUrl: string;
   host: string;
   method: string;
   path: string;
@@ -105,13 +109,36 @@ function planNumbers(config: QaConfig, id: CanonicalPerformanceProfile): {
   );
 }
 
-function buildResolvedProfile(config: QaConfig, id: CanonicalPerformanceProfile): ResolvedProfile {
+/** Parse an http(s) website URL into origin + request path (query/hash dropped). */
+function parseWebsiteTarget(websiteUrl: string | undefined): { origin: string; path: string } | null {
+  const raw = websiteUrl?.trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return { origin: url.origin, path: url.pathname || '/' };
+  } catch {
+    return null;
+  }
+}
+
+function buildResolvedProfile(
+  config: QaConfig,
+  id: CanonicalPerformanceProfile,
+  websiteUrl?: string
+): ResolvedProfile {
   const api = resolveApiUrl({ apiUrl: config.urls.api });
+  // Liveness only: when no API URL is documented, ping the website under test.
+  // Heavy profiles never fall back — they need a documented, authorized API host.
+  const website = !api && isLivenessProfile(id) ? parseWebsiteTarget(websiteUrl) : null;
+  const targetSource: 'api' | 'website' = website ? 'website' : 'api';
+  const baseUrl = website ? website.origin : api;
+  const requestPath = website ? website.path : config.jmeter.path;
   let host = '';
   try {
-    host = api ? new URL(api).host : '';
+    host = baseUrl ? new URL(baseUrl).host : '';
   } catch {
-    host = api;
+    host = baseUrl;
   }
 
   const plan = planNumbers(config, id);
@@ -119,10 +146,12 @@ function buildResolvedProfile(config: QaConfig, id: CanonicalPerformanceProfile)
   return {
     id,
     heavy: !isLivenessProfile(id),
-    target: api ? `${api}${config.jmeter.path}` : config.jmeter.path,
+    target: baseUrl ? `${baseUrl}${requestPath}` : requestPath,
+    targetSource,
+    baseUrl,
     host,
     method: 'GET',
-    path: config.jmeter.path,
+    path: requestPath,
     planPath: resolveJmeterPlanPath(id),
     threads: plan.threads,
     rampUpSeconds: plan.rampUpSeconds,
@@ -162,12 +191,12 @@ export function resolvePerformanceProfile(config: QaConfig, profile: Performance
 export function resolvePerformanceProfile(
   requested: string,
   config: QaConfig,
-  options?: { authorizeHeavy?: boolean }
+  options?: { authorizeHeavy?: boolean; websiteUrl?: string }
 ): PerformanceProfileDecision;
 export function resolvePerformanceProfile(
   a: QaConfig | string,
   b?: PerformanceProfile | QaConfig,
-  c?: { authorizeHeavy?: boolean }
+  c?: { authorizeHeavy?: boolean; websiteUrl?: string }
 ): ResolvedProfile | PerformanceProfileDecision {
   if (typeof a !== 'string') {
     const id = normalizePerformanceProfile(b as PerformanceProfile);
@@ -192,7 +221,7 @@ export function resolvePerformanceProfile(
     };
   }
 
-  const resolved = buildResolvedProfile(config, mapped.id);
+  const resolved = buildResolvedProfile(config, mapped.id, c?.websiteUrl);
   const authorized = isHeavyAuthorized(mapped.id, { authorizeHeavy });
 
   if (!isPerformanceProfileEnabledInTests(config, mapped.id)) {
@@ -208,14 +237,14 @@ export function resolvePerformanceProfile(
     };
   }
 
-  const apiUrl = resolveApiUrl({ apiUrl: config.urls.api });
+  const apiUrl = resolved.baseUrl;
   if (!apiUrl || !resolved.host) {
     return {
       ok: false,
       requested,
       status: 'REQUIRES_CONFIGURATION',
       reason:
-        'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api). Refusing to run JMeter against a missing host — no public demo API is substituted.',
+        'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api) and no website URL under test to run liveness against. Refusing to run JMeter against a missing host — no public demo API is substituted.',
       id: mapped.id,
       heavy: resolved.heavy,
       authorized,

@@ -45,6 +45,9 @@ import {
   type ExecutionIdentity,
 } from './lib/qa-report/execution-archive';
 import { generateMasterQaReport } from './reporting/generate-master-report';
+import { writeReconciledOrchestratorSummary } from './orchestrator/reconcile-orchestrator-summary';
+import { applyQaRuntimeEnv } from './lib/runtime-env';
+import { ensurePlaywrightBrowsersInstalled } from './lib/ensure-playwright-browsers';
 
 function buildContext(url: string, failFast: boolean, extraArgs: string[]): OrchestratorContext {
   const config = loadConfig();
@@ -163,6 +166,7 @@ function ensureReportingStages(input: {
 }
 
 async function main(): Promise<void> {
+  applyQaRuntimeEnv(process.env);
   const startedAt = new Date();
   const { url: cliUrl, failFast, keepArtifacts, extraArgs } = parseOrchestratorCli();
   const config = loadConfig();
@@ -176,6 +180,12 @@ async function main(): Promise<void> {
   applyExecutionIdentityEnv(identity);
 
   logStep(`${config.project.name} — qa:all orchestrator`);
+  const browsers = ensurePlaywrightBrowsersInstalled();
+  if (!browsers.installed) {
+    logWarn(`Playwright browsers incomplete before stages: ${browsers.detail}`);
+  } else if (browsers.missingBefore.length > 0) {
+    logSuccess(`Playwright browsers ready: ${browsers.detail}`);
+  }
   logStep(`Execution ID ${identity.executionId} (${identity.startTime} ${identity.timezone})`);
   console.log(ORCHESTRATOR_DISCLAIMER);
   const phasePlan = buildOrchestratorPhasePlan({ tests: config.tests });
@@ -395,6 +405,15 @@ async function main(): Promise<void> {
   });
   logSuccess(`MASTER-QA-REPORT.html: ${master.htmlPath}`);
   logSuccess(`MASTER-QA-REPORT.json: ${master.jsonPath}`);
+
+  // Refresh reconciled view from the just-completed 26-stage summary (never overwrite summary.json).
+  const reconciled = writeReconciledOrchestratorSummary({ expectedStages: stages });
+  logSuccess(
+    `Reconciled orchestrator summary: ${PATHS.orchestratorReconciledSummary} (${reconciled.stages.length}/${reconciled.staleness.expectedStageCount} stages)`
+  );
+  if (reconciled.staleness.partial || reconciled.staleness.stale) {
+    logWarn(reconciled.staleness.note);
+  }
 
   logStep('Quality gate');
   console.log(formatQualityGateBanner(qualityGate));

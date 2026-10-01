@@ -98,6 +98,8 @@ export interface PerformanceSummary {
   skipReason: string | null;
   blocked: boolean;
   blockReason: string | null;
+  /** `website` = liveness against the URL under test because no API URL is documented. */
+  targetSource?: 'api' | 'website';
   jmeterAvailable: boolean;
   target: string;
   host: string;
@@ -209,6 +211,15 @@ export interface PerformanceStageSummary {
   profile: string;
   heavyProfiles: CanonicalPerformanceProfile[];
   ui: { status: UiPerformanceRunStatus | 'NOT_EXECUTED'; artifact: string };
-  jmeter: { status: PerformanceRunStatus; profile: string; heavy: boolean; artifact: string };
+  jmeter: {
+    status: PerformanceRunStatus;
+    profile: string;
+    heavy: boolean;
+    artifact: string;
+    /** Copied from reports/jmeter/summary.json — website fallback vs documented API. */
+    targetSource?: 'api' | 'website';
+    /** Honest note when liveness ran against the website (RECORDED, never PASS). */
+    note?: string;
+  };
   lighthouse: { status: 'RECORDED' | 'NOT_EXECUTED'; artifact: string };
 }

@@ -6,6 +6,7 @@ import {
   selectedOptInEngineDefs,
   type OrchestratorPhaseName,
 } from './phases';
+import { timeoutMsForStageKey } from './stage-timeouts';
 import type { StageDefinition } from './types';
 
 /**
@@ -193,5 +194,6 @@ export function buildStages(options?: { tests?: TestsConfig }): StageDefinition[
     ...stage,
     phase: stagePhaseForKey(stage.key),
     orchestratorPhase: orchestratorPhaseForStageKey(stage.key) as OrchestratorPhaseName,
+    timeoutMs: stage.timeoutMs ?? timeoutMsForStageKey(stage.key),
   }));
 }

@@ -389,10 +389,34 @@ function collectLimitations(ctx: ArtifactCtx, coverage: CoverageReport | Coverag
   if (responsive && responsive.realDeviceTesting === false) {
     lines.push('Responsive checks used emulated viewports. Real-device testing was not recorded as true.');
   }
-  const jmeter = readModuleJson<{ profile?: string; heavy?: boolean; authorized?: boolean }>(ctx, 'jmeter', 'summary.json');
+  const jmeter = readModuleJson<{
+    profile?: string;
+    heavy?: boolean;
+    authorized?: boolean;
+    targetSource?: string;
+    status?: string;
+  }>(ctx, 'jmeter', 'summary.json');
   if (jmeter?.profile) {
     lines.push(
       `JMeter profile recorded as ${jmeter.profile}. Heavy=${asText(jmeter.heavy)} authorized=${asText(jmeter.authorized)}.`
+    );
+  }
+  if (jmeter?.targetSource === 'website') {
+    lines.push(
+      'Liveness against the website under test, no API URL configured; status RECORDED, not PASS.'
+    );
+  }
+  const orchReconciled = readModuleJson<{
+    staleness?: { note?: string; partial?: boolean; stale?: boolean };
+  }>(ctx, 'orchestrator', 'reconciled-summary.json');
+  if (orchReconciled?.staleness?.note && (orchReconciled.staleness.partial || orchReconciled.staleness.stale)) {
+    lines.push(orchReconciled.staleness.note);
+  }
+  const postmanSummary = readModuleJson<{ status?: string; note?: string }>(ctx, 'postman', 'summary.json');
+  if (postmanSummary?.status === 'REQUIRES_CONFIGURATION') {
+    lines.push(
+      postmanSummary.note ??
+        'API suite is REQUIRES_CONFIGURATION: no documented API URL. This is not a product PASS.'
     );
   }
   return [...new Set(lines.filter((line) => line.trim()))];
@@ -1243,6 +1267,11 @@ function buildApi(
   ctx: ArtifactCtx,
   stages: Map<string, StageLike>
 ): MasterReportSection {
+  const postmanSummary = readModuleJson<{ status?: string; note?: string; passed?: boolean }>(
+    ctx,
+    'postman',
+    'summary.json'
+  );
   const report = readModuleJson<{
     run?: {
       summary?: {
@@ -1260,6 +1289,30 @@ function buildApi(
     };
   }>(ctx, 'postman', 'report.json');
   const stage = stageStatus(stages, 'api');
+  if (postmanSummary?.status === 'REQUIRES_CONFIGURATION') {
+    return section(def, number, {
+      status: 'REQUIRES_CONFIGURATION',
+      dataAvailable: true,
+      unavailableReason: '',
+      summaryText: 'Postman API suite REQUIRES_CONFIGURATION — no documented API URL.',
+      paragraphs: [
+        postmanSummary.note ??
+          'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api). Refusing to run Postman against a missing host — no public demo API is substituted.',
+        'This status is not a product PASS and is not remapped to FAIL or NOT_EXECUTED in this report.',
+      ],
+      fields: [
+        { label: 'API status', value: 'REQUIRES_CONFIGURATION' },
+        { label: 'Orchestrator stage status', value: asText(stage?.status) },
+        { label: 'Reason', value: asText(postmanSummary.note) },
+      ],
+      tables: [],
+      lists: [],
+      limitations: [
+        'Collection items still come only from qa.config.json postman.requests when an API URL is configured.',
+      ],
+      evidence: [],
+    });
+  }
   if (!report?.run?.summary) {
     return notExecuted(def, number, 'reports/postman/report.json was not present. Endpoints were not invented.');
   }
@@ -1384,6 +1437,7 @@ function buildPerformance(
     skipped?: boolean;
     skipReason?: string | null;
     target?: string;
+    targetSource?: 'api' | 'website';
     threads?: number;
     metrics?: Record<string, number>;
     samples?: Array<{ label?: string; success?: boolean; elapsed?: number; statusCode?: number }>;
@@ -1397,18 +1451,24 @@ function buildPerformance(
   if (!ui && !jmeter && !lighthouse) {
     return notExecuted(def, number, 'Performance / JMeter / Lighthouse summaries were not present. SLAs were not invented.');
   }
+  const websiteNote =
+    jmeter?.targetSource === 'website'
+      ? 'Liveness against the website under test, no API URL configured; status RECORDED, not PASS.'
+      : '';
   return section(def, number, {
     status: asText(stage?.status, asText(jmeter?.status, asText(ui?.status))),
     dataAvailable: true,
     unavailableReason: '',
     paragraphs: [
       'UI timing, JMeter, and Lighthouse are separate surfaces. Heavy JMeter profiles require authorization and are not implied by liveness/smoke.',
+      ...(websiteNote ? [websiteNote] : []),
     ],
     fields: [
       { label: 'UI performance status', value: asText(ui?.status) },
       { label: 'UI skip reason', value: asText(ui?.skipReason) },
       { label: 'JMeter profile actually executed', value: asText(jmeter?.profile) },
       { label: 'JMeter status', value: asText(jmeter?.status) },
+      { label: 'JMeter targetSource', value: asText(jmeter?.targetSource) },
       { label: 'JMeter heavy / authorized', value: `${asText(jmeter?.heavy)} / ${asText(jmeter?.authorized)}` },
       { label: 'JMeter target', value: asText(jmeter?.target) },
       { label: 'JMeter threads', value: asCount(jmeter?.threads) },

@@ -280,7 +280,7 @@ export function resolveStageOutcome(input: {
   key: string;
   processStatus: StageStatus;
   processFailed: boolean;
-}): { status: SuiteStatus; executedCount?: number } {
+}): { status: SuiteStatus; executedCount?: number; reason?: string } {
   if (input.processStatus === 'INVALID') {
     return { status: 'INVALID' };
   }
@@ -296,6 +296,41 @@ export function resolveStageOutcome(input: {
       return { status: 'PASS', executedCount: 1 };
     }
     return { status: 'BLOCKED' };
+  }
+
+  // Postman runner writes summary.json with REQUIRES_CONFIGURATION when urls.api is empty.
+  // Prefer that status over exit-code → FAIL / missing report.json → FAIL.
+  if (input.key === 'api') {
+    const postmanSummary = readJsonIfExists<{ status?: string; note?: string }>(
+      path.join(PATHS.reports.postman, 'summary.json')
+    );
+    if (postmanSummary?.status === 'REQUIRES_CONFIGURATION') {
+      return {
+        status: 'REQUIRES_CONFIGURATION',
+        executedCount: 0,
+        reason: postmanSummary.note,
+      };
+    }
+  }
+
+  // JMeter liveness/smoke is never a product PASS — prefer artifact status when RECORDED /
+  // REQUIRES_CONFIGURATION / BLOCKED so exit 0 with samples does not look like PASS here.
+  if (input.key === 'performance') {
+    const jmeter = readJsonIfExists<{ status?: string }>(PATHS.jmeterSummary);
+    const raw = (jmeter?.status ?? '').trim();
+    if (raw === 'REQUIRES_CONFIGURATION') {
+      return { status: 'REQUIRES_CONFIGURATION', executedCount: 0 };
+    }
+    if (raw === 'RECORDED' || raw === 'met') {
+      const counts = readStageExecutedCounts(input.key);
+      return {
+        status: 'RECORDED',
+        executedCount: counts?.executedCount ?? 0,
+      };
+    }
+    if (raw === 'BLOCKED') {
+      return { status: 'BLOCKED', executedCount: 0 };
+    }
   }
 
   const counts = readStageExecutedCounts(input.key);

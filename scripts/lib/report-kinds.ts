@@ -14,7 +14,7 @@ export const REPORT_KIND_IDS = [
 
 export type ReportKindId = (typeof REPORT_KIND_IDS)[number];
 
-export type ReportKindStatus = 'PRESENT' | 'NOT_EXECUTED' | 'BLOCKED';
+export type ReportKindStatus = 'PRESENT' | 'NOT_EXECUTED' | 'BLOCKED' | 'REQUIRES_CONFIGURATION';
 
 export interface ReportKindRecord {
   id: ReportKindId;
@@ -130,10 +130,25 @@ export function inspectReportKinds(
   allureOverride?: AllureStatusOverride
 ): ReportKindRecord[] {
   const playwrightSuites = listPlaywrightHtmlReports(roots.playwright, roots.root);
+  const postmanSummaryPath = path.join(roots.postman, 'summary.json');
+  const postmanSummary = isExistingFile(postmanSummaryPath)
+    ? (() => {
+        try {
+          return JSON.parse(fs.readFileSync(postmanSummaryPath, 'utf8')) as {
+            status?: string;
+            note?: string;
+          };
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+  const postmanRequiresConfiguration = postmanSummary?.status === 'REQUIRES_CONFIGURATION';
   const postmanIndex = firstExisting([
     path.join(roots.postman, 'cli-report.html'),
     path.join(roots.postman, 'report.html'),
     path.join(roots.postman, 'report.json'),
+    ...(postmanRequiresConfiguration ? [postmanSummaryPath] : []),
   ]);
   const jmeterIndex = firstExisting([
     htmlIndexPath(path.join(roots.jmeter, 'html')),
@@ -190,21 +205,32 @@ export function inspectReportKinds(
           path: toPosixRelative(roots.playwright, roots.root),
           reason: 'No Playwright HTML index.html under reports/playwright/<suite>/html/.',
         },
-    postmanIndex
+    postmanRequiresConfiguration
       ? {
           id: 'postman',
           name: 'Postman report',
-          status: 'PRESENT',
+          status: 'REQUIRES_CONFIGURATION',
           path: toPosixRelative(roots.postman, roots.root),
-          indexFile: toPosixRelative(postmanIndex, roots.root),
+          indexFile: toPosixRelative(postmanSummaryPath, roots.root),
+          reason:
+            postmanSummary?.note ??
+            'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api). Scores were not invented.',
         }
-      : {
-          id: 'postman',
-          name: 'Postman report',
-          status: 'NOT_EXECUTED',
-          path: toPosixRelative(roots.postman, roots.root),
-          reason: 'No Postman CLI HTML/JSON under reports/postman/. Scores were not invented.',
-        },
+      : postmanIndex
+        ? {
+            id: 'postman',
+            name: 'Postman report',
+            status: 'PRESENT',
+            path: toPosixRelative(roots.postman, roots.root),
+            indexFile: toPosixRelative(postmanIndex, roots.root),
+          }
+        : {
+            id: 'postman',
+            name: 'Postman report',
+            status: 'NOT_EXECUTED',
+            path: toPosixRelative(roots.postman, roots.root),
+            reason: 'No Postman CLI HTML/JSON under reports/postman/. Scores were not invented.',
+          },
     jmeterIndex
       ? {
           id: 'jmeter',

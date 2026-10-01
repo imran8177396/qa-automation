@@ -23,6 +23,12 @@ export interface StageDefinition {
    * a shared browser/JVM resource — see run-all.ts's batching logic.
    */
   parallelGroup?: string;
+  /**
+   * Max wall-clock ms for the child process. When exceeded the child is killed,
+   * the stage is recorded FAIL (environment/timeout), and qa:all continues
+   * unless --fail-fast. Defaults come from stage-timeouts.ts.
+   */
+  timeoutMs?: number;
 }
 
 export interface StageResult {

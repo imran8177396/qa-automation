@@ -99,6 +99,70 @@ describe('resolveStageOutcome', () => {
     }
   });
 
+  it('propagates Postman summary REQUIRES_CONFIGURATION even when the process exited non-zero', () => {
+    const summaryPath = path.join(PATHS.reports.postman, 'summary.json');
+    const reportPath = path.join(PATHS.reports.postman, 'report.json');
+    const previousSummary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath) : null;
+    const previousReport = fs.existsSync(reportPath) ? fs.readFileSync(reportPath) : null;
+    fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+    try {
+      if (fs.existsSync(reportPath)) fs.unlinkSync(reportPath);
+      fs.writeFileSync(
+        summaryPath,
+        JSON.stringify({
+          status: 'REQUIRES_CONFIGURATION',
+          note: 'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api).',
+          passed: false,
+        })
+      );
+      const outcome = resolveStageOutcome({
+        key: 'api',
+        processStatus: 'FAIL',
+        processFailed: true,
+      });
+      assert.equal(outcome.status, 'REQUIRES_CONFIGURATION');
+      assert.notEqual(outcome.status, 'FAIL');
+      assert.notEqual(outcome.status, 'PASS');
+      assert.notEqual(outcome.status, 'NOT_EXECUTED');
+      assert.match(outcome.reason ?? '', /no documented API URL/i);
+    } finally {
+      if (previousSummary) fs.writeFileSync(summaryPath, previousSummary);
+      else fs.rmSync(summaryPath, { force: true });
+      if (previousReport) fs.writeFileSync(reportPath, previousReport);
+      else fs.rmSync(reportPath, { force: true });
+    }
+  });
+
+  it('keeps a genuine Postman FAIL when summary status is FAIL', () => {
+    const summaryPath = path.join(PATHS.reports.postman, 'summary.json');
+    const reportPath = path.join(PATHS.reports.postman, 'report.json');
+    const previousSummary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath) : null;
+    const previousReport = fs.existsSync(reportPath) ? fs.readFileSync(reportPath) : null;
+    fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+    try {
+      fs.writeFileSync(summaryPath, JSON.stringify({ status: 'FAIL', passed: false }));
+      fs.writeFileSync(
+        reportPath,
+        JSON.stringify({
+          run: { summary: { tests: { executed: 4, failed: 2, passed: 2 } } },
+        })
+      );
+      const outcome = resolveStageOutcome({
+        key: 'api',
+        processStatus: 'FAIL',
+        processFailed: true,
+      });
+      assert.equal(outcome.status, 'PARTIAL');
+      assert.notEqual(outcome.status, 'REQUIRES_CONFIGURATION');
+      assert.notEqual(outcome.status, 'PASS');
+    } finally {
+      if (previousSummary) fs.writeFileSync(summaryPath, previousSummary);
+      else fs.rmSync(summaryPath, { force: true });
+      if (previousReport) fs.writeFileSync(reportPath, previousReport);
+      else fs.rmSync(reportPath, { force: true });
+    }
+  });
+
   it('opt-in smoke NOT_TESTED-only summary is not PASS; FAIL stays FAIL; PASS stays PASS', () => {
     const summaryPath = path.join(PATHS.reports.smoke, 'summary.json');
     const previous = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath) : null;

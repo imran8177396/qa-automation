@@ -124,6 +124,11 @@ export const PATHS = {
   orchestratorEngineSelection: path.join(ROOT, 'reports', 'orchestrator', 'engine-selection.json'),
   orchestratorNormalizedResults: path.join(ROOT, 'reports', 'orchestrator', 'normalized-results.json'),
   orchestratorAssertions: path.join(ROOT, 'reports', 'orchestrator', 'assertions.json'),
+  /**
+   * Reconciled stage view from per-suite artifacts. Does not overwrite summary.json —
+   * written when report:final detects a partial/stale orchestrator run.
+   */
+  orchestratorReconciledSummary: path.join(ROOT, 'reports', 'orchestrator', 'reconciled-summary.json'),
   executionIdentityFile: path.join(ROOT, 'reports', 'orchestrator', 'execution-identity.json'),
   coverageJsonFile: path.join(ROOT, 'reports', 'coverage', 'coverage.json'),
   coverageSummaryFile: path.join(ROOT, 'reports', 'coverage', 'summary.json'),

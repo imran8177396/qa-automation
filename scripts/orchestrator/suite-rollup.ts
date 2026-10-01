@@ -26,7 +26,8 @@ export type SuiteRollupStatus =
   | 'BLOCKED'
   | 'NOT_EXECUTED'
   | 'RECORDED'
-  | 'PARTIAL';
+  | 'PARTIAL'
+  | 'REQUIRES_CONFIGURATION';
 
 export interface SuiteRollupLine {
   label: SuiteRollupLabel;
@@ -72,6 +73,7 @@ function fromStage(status: string | undefined): SuiteRollupStatus {
   if (value === 'PASS') return 'PASS';
   if (value === 'WARNING') return 'WARNING';
   if (value === 'BLOCKED') return 'BLOCKED';
+  if (value === 'REQUIRES_CONFIGURATION') return 'REQUIRES_CONFIGURATION';
   if (value === 'RECORDED') return 'RECORDED';
   if (value === 'PARTIAL') return 'PARTIAL';
   if (FAILED.has(value)) return 'FAIL';
@@ -102,11 +104,13 @@ function jmeterDisplay(stage: SuiteRollupStatus, artifactStatus: string | null |
   const raw = (artifactStatus ?? '').trim();
   if (raw === 'breached') return 'FAIL';
   if (raw === 'BLOCKED') return 'BLOCKED';
+  if (raw === 'REQUIRES_CONFIGURATION') return 'REQUIRES_CONFIGURATION';
   if (raw === 'RECORDED' || raw === 'met') return 'RECORDED';
   if (raw === 'NOT_EXECUTED' || raw === 'NOT_AVAILABLE') return 'NOT_EXECUTED';
   if (stage === 'FAIL' || stage === 'PARTIAL') return 'FAIL';
   if (stage === 'NOT_EXECUTED') return 'NOT_EXECUTED';
   if (stage === 'BLOCKED') return 'BLOCKED';
+  if (stage === 'REQUIRES_CONFIGURATION') return 'REQUIRES_CONFIGURATION';
   // Liveness/smoke is never a product PASS.
   return stage === 'PASS' ? 'RECORDED' : stage;
 }
@@ -137,6 +141,7 @@ function coverageLine(
  * PASS only when every required banner suite passed (or JMeter RECORDED /
  * coverage %). Application FAIL on a11y/security/SEO is OVERALL FAIL.
  * Config/env that prevented required work is BLOCKED — never disguised as PASS.
+ * REQUIRES_CONFIGURATION is treated like BLOCKED (config gap, not product PASS).
  * A required-suite WARNING is not PASS (no invented SLA).
  */
 export function resolveOverallStatus(required: SuiteRollupLine[]): OverallRollupStatus {
@@ -149,7 +154,13 @@ export function resolveOverallStatus(required: SuiteRollupLine[]): OverallRollup
     if (line.status === 'WARNING') sawWarning = true;
     if (line.label === 'JMETER' && line.status === 'RECORDED') continue;
     if (line.label === 'COVERAGE' && typeof line.percent === 'number') continue;
-    if (line.status === 'BLOCKED' || line.status === 'NOT_EXECUTED') sawBlocked = true;
+    if (
+      line.status === 'BLOCKED' ||
+      line.status === 'NOT_EXECUTED' ||
+      line.status === 'REQUIRES_CONFIGURATION'
+    ) {
+      sawBlocked = true;
+    }
   }
 
   if (sawBlocked) return 'BLOCKED';
@@ -243,7 +254,15 @@ export function buildSuiteRollup(results: StageResult[], artifacts: SuiteRollupA
 
   const required: SuiteRollupLine[] = [
     { label: 'PLAYWRIGHT', status: playwright },
-    { label: 'POSTMAN', status: postman },
+    {
+      label: 'POSTMAN',
+      status: postman,
+      detail:
+        postman === 'REQUIRES_CONFIGURATION'
+          ? stageByKey(results, 'api')?.reason ??
+            'REQUIRES_CONFIGURATION: no documented API URL (urls.api / QA_API_URL)'
+          : undefined,
+    },
     { label: 'JMETER', status: jmeter, detail: 'liveness/smoke only — never PASS; no --authorize-heavy' },
     { label: 'ACCESSIBILITY', status: accessibility },
     { label: 'VISUAL', status: visual },

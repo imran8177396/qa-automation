@@ -117,4 +117,54 @@ describe('report-kinds inspection', () => {
     assert.equal(allureResultsPresent(resultsDir), true);
     fs.rmSync(root, { recursive: true, force: true });
   });
+
+  it('surfaces Postman summary REQUIRES_CONFIGURATION instead of NOT_EXECUTED', () => {
+    const root = makeTempDir();
+    const roots = {
+      root,
+      allureResults: path.join(root, 'reports', 'allure', 'results'),
+      allureReport: path.join(root, 'reports', 'allure', 'report'),
+      playwright: path.join(root, 'reports', 'playwright'),
+      postman: path.join(root, 'reports', 'postman'),
+      jmeter: path.join(root, 'reports', 'jmeter'),
+      summary: path.join(root, 'reports', 'summary'),
+    };
+    fs.mkdirSync(roots.postman, { recursive: true });
+    fs.mkdirSync(roots.summary, { recursive: true });
+    fs.writeFileSync(
+      path.join(roots.postman, 'summary.json'),
+      JSON.stringify({
+        status: 'REQUIRES_CONFIGURATION',
+        note: 'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api).',
+      })
+    );
+    const kinds = inspectReportKinds(roots);
+    const postman = kinds.find((row) => row.id === 'postman');
+    assert.equal(postman?.status, 'REQUIRES_CONFIGURATION');
+    assert.notEqual(postman?.status, 'NOT_EXECUTED');
+    assert.notEqual(postman?.status, 'PRESENT');
+    assert.notEqual(postman?.status, 'PASS');
+    assert.match(postman?.reason ?? '', /no documented API URL/i);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('keeps Postman PRESENT when a real report.json exists without REQUIRES_CONFIGURATION', () => {
+    const root = makeTempDir();
+    const roots = {
+      root,
+      allureResults: path.join(root, 'reports', 'allure', 'results'),
+      allureReport: path.join(root, 'reports', 'allure', 'report'),
+      playwright: path.join(root, 'reports', 'playwright'),
+      postman: path.join(root, 'reports', 'postman'),
+      jmeter: path.join(root, 'reports', 'jmeter'),
+      summary: path.join(root, 'reports', 'summary'),
+    };
+    fs.mkdirSync(roots.postman, { recursive: true });
+    fs.mkdirSync(roots.summary, { recursive: true });
+    fs.writeFileSync(path.join(roots.postman, 'report.json'), JSON.stringify({ run: {} }));
+    fs.writeFileSync(path.join(roots.postman, 'summary.json'), JSON.stringify({ status: 'FAIL', passed: false }));
+    const kinds = inspectReportKinds(roots);
+    assert.equal(kinds.find((row) => row.id === 'postman')?.status, 'PRESENT');
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });

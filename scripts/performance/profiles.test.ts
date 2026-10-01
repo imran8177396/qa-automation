@@ -178,6 +178,54 @@ describe('performance profile resolution', () => {
     assert.doesNotMatch(decision.reason, /jsonplaceholder|saucedemo/i);
   });
 
+  it('runs liveness against the website under test when no API URL is documented', () => {
+    const config = baseConfig({ urls: { website: '', api: '' } });
+    const decision = resolvePerformanceProfile('liveness', config, {
+      authorizeHeavy: false,
+      websiteUrl: 'https://www.example.test/?x=1',
+    });
+    assert.equal(decision.ok, true);
+    if (!decision.ok) return;
+    assert.equal(decision.resolved.targetSource, 'website');
+    assert.equal(decision.resolved.baseUrl, 'https://www.example.test');
+    assert.equal(decision.resolved.path, '/');
+    assert.equal(decision.resolved.target, 'https://www.example.test/');
+  });
+
+  it('never falls back to the website for heavy profiles', () => {
+    const config = baseConfig({
+      urls: { website: '', api: '' },
+      tests: {
+        ...baseConfig().tests!,
+        performance: {
+          enabled: true,
+          load: { enabled: true },
+          stress: { enabled: false },
+          spike: { enabled: false },
+          endurance: { enabled: false },
+        },
+      },
+    });
+    const decision = resolvePerformanceProfile('load', config, {
+      authorizeHeavy: true,
+      websiteUrl: 'https://www.example.test/',
+    });
+    assert.equal(decision.ok, false);
+    if (decision.ok) return;
+    assert.equal(decision.status, 'REQUIRES_CONFIGURATION');
+  });
+
+  it('prefers the documented API over the website fallback', () => {
+    const decision = resolvePerformanceProfile('liveness', baseConfig(), {
+      authorizeHeavy: false,
+      websiteUrl: 'https://www.example.test/',
+    });
+    assert.equal(decision.ok, true);
+    if (!decision.ok) return;
+    assert.equal(decision.resolved.targetSource, 'api');
+    assert.equal(decision.resolved.host, 'api.example.test');
+  });
+
   it('returns NOT_TESTED for endurance when tests.performance.endurance is disabled', () => {
     const decision = resolvePerformanceProfile('endurance', baseConfig(), { authorizeHeavy: true });
     assert.equal(decision.ok, false);

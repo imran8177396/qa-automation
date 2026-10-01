@@ -208,14 +208,53 @@ npm run qa:all -- --keep-artifacts
 
 1. Cleans **allowlisted current-run** artifacts (`test-results/`, discovery JSON, current Playwright/Allure/Postman/JMeter dirs, and related scratch). It does **not** delete `reports/history/`, `reports/allure/history/`, dated packs under `docs/input|output/qa-test-results/`, or the gitignored last-target file `qa.last-target.json`.
 2. Runs `qa:sync`.
-3. Spawns **23 child stages** (20 named contract steps; performance is one process covering UI timing + JMeter liveness). Extra stages include dependencies, content, workflows, and collect.
-4. Records every exit code in `reports/orchestrator/summary.json` and `reports/orchestrator/stages.md`.
-5. Continues after failed stages unless `--fail-fast`.
-6. Runs retest with `--automation-only` so application defects are not silently re-run as a pass.
+3. Spawns **child stages** (20 named contract steps plus dependencies, content, workflows, collect, and enabled opt-in engines such as smoke / regression / localization — typically **26** stages with the default `qa.config.json`). Performance is one process covering UI timing + JMeter liveness.
+4. Records every exit code in `reports/orchestrator/summary.json` and `reports/orchestrator/stages.md`. Continues after failed or timed-out stages unless `--fail-fast`. Each stage has a wall-clock timeout; a hang is recorded as FAIL (environment/timeout) and the pipeline moves on.
+5. Auto-installs missing Playwright browsers (Chromium, Firefox, WebKit) during preflight when possible, and repairs an invalid/sandbox `PLAYWRIGHT_BROWSERS_PATH` so PDF generation can find Chromium.
+6. Writes a reconciled view at `reports/orchestrator/reconciled-summary.json` (original summary preserved). A complete N/N summary is not treated as “stale abort/resume.”
+7. Runs retest with `--automation-only` so application defects are not silently re-run as a pass.
 
 URL resolution: `--url=` or a positional URL, else `QA_PLAYWRIGHT_BASE_URL` / `QA_WEBSITE_URL`, else the gitignored last target (`qa.last-target.json`), else a previous discovery seed, else optional loopback `playwright.baseURL` when explicitly set, else `qa.config.json` `urls.website` (may be empty). A new `--url` overwrites the last target immediately. Every Playwright suite uses that resolved URL as `use.baseURL`. The next `qa:all` or `test:e2e` without `--url` reuses that persisted origin. Loopback URLs start the in-repo fixture site. Loopback is persisted only when you pass it explicitly. If no valid URL can be resolved, the run fails with REQUIRES_CONFIGURATION — no public demo is substituted.
 
 Related: `npm run test:all` is **core tools only** (Playwright → Postman → JMeter + enterprise report), not the full orchestrator.
+
+## Run everything with one command
+
+On Windows **Command Prompt** (`cmd.exe`), from the repo root:
+
+```bat
+run-qa.cmd https://www.schiwopakistan.com/
+```
+
+Or without a URL (reuses `QA_WEBSITE_URL` / `QA_PLAYWRIGHT_BASE_URL` / last-target / config — never invents a demo site):
+
+```bat
+run-qa.cmd
+```
+
+Same flow via npm (any shell):
+
+```bat
+npm run qa:full -- https://www.schiwopakistan.com/
+```
+
+What this does:
+
+1. Sets a safe Node heap (`NODE_OPTIONS=--max-old-space-size=4096` when unset) and a valid Playwright browsers path (`%USERPROFILE%\AppData\Local\ms-playwright` when needed).
+2. Checks Node/npm, installs `node_modules` only if missing, and ensures Chromium + Firefox + WebKit are installed.
+3. Runs the full `npm run qa:all -- --url "<url>"` pipeline (all orchestrator stages, continue-on-failure).
+4. Always refreshes reports at the end (`report:allure`, `report:playwright`, `report:final`, `report:master`, `report:all`) — no destructive clean after results exist.
+5. Prints a plain-English per-stage table and the paths to open (final report, MASTER-QA-REPORT, Allure, Playwright, Word/HTML/PDF pack).
+
+Exit codes (printed at the end):
+
+| Code | Meaning |
+| --- | --- |
+| **0** | Pipeline finished every stage; overall QA verdict is not FAIL |
+| **1** | Pipeline could not complete (no URL, missing tools, or incomplete stage summary) |
+| **2** | Pipeline finished every stage, but overall QA verdict is FAIL (site defects reported honestly) |
+
+`npm run qa:all` alone still works for CI unchanged. Use `run-qa.cmd` / `qa:full` when you want the Windows-friendly wrapper plus the end summary and exit-code convention above.
 
 ## Git workflow
 

@@ -17,6 +17,10 @@ import { writeFallbackCombinedReport, writeReportIndex } from './build-report-in
 import { dirHasHtmlIndex, toPosixRelative } from '../lib/report-kinds';
 import { archiveToHistory, loadOrBeginQaExecution } from '../lib/qa-report/execution-archive';
 import { generateMasterQaReport } from './generate-master-report';
+import {
+  formatOrchestratorStalenessBanner,
+  writeReconciledOrchestratorSummary,
+} from '../orchestrator/reconcile-orchestrator-summary';
 
 export async function generateFinalQaReport(): Promise<{
   mdPath: string;
@@ -30,6 +34,11 @@ export async function generateFinalQaReport(): Promise<{
   }
 
   logStep('Generating final QA report');
+  const reconciled = writeReconciledOrchestratorSummary();
+  if (reconciled.staleness.partial || reconciled.staleness.stale || reconciled.staleness.recordedStageCount === 0) {
+    logWarn(reconciled.staleness.note);
+    console.log(formatOrchestratorStalenessBanner(reconciled.staleness));
+  }
   const timeline = readJsonIfExists<StageTimeline>(path.join(PATHS.reports.orchestrator, 'timeline.json'));
   if (timeline) {
     const ordering = assertDiscoveryPrecedesExecution(timeline.stages);

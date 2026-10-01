@@ -152,4 +152,33 @@ describe('suite rollup', () => {
     assert.equal(rollup.overall, 'FAIL');
     assert.notEqual(rollup.overall, 'PASS');
   });
+
+  it('maps POSTMAN REQUIRES_CONFIGURATION and does not treat it as PASS or FAIL', () => {
+    const rollup = buildSuiteRollup(
+      [
+        stage('e2e', 'PASS'),
+        stage('api', 'REQUIRES_CONFIGURATION'),
+        stage('performance', 'RECORDED'),
+        stage('accessibility', 'PASS'),
+        stage('visual', 'PASS'),
+        stage('responsive', 'PASS'),
+        stage('security', 'PASS'),
+        stage('seo', 'PASS'),
+        stage('coverage', 'PASS'),
+      ],
+      { jmeterStatus: 'RECORDED', coveragePercent: 50, uiStatus: 'RECORDED' }
+    );
+    assert.equal(rollup.lines.find((row) => row.label === 'POSTMAN')?.status, 'REQUIRES_CONFIGURATION');
+    assert.notEqual(rollup.lines.find((row) => row.label === 'POSTMAN')?.status, 'FAIL');
+    assert.notEqual(rollup.lines.find((row) => row.label === 'POSTMAN')?.status, 'PASS');
+    assert.notEqual(rollup.lines.find((row) => row.label === 'POSTMAN')?.status, 'NOT_EXECUTED');
+    assert.equal(rollup.overall, 'BLOCKED');
+    assert.notEqual(rollup.overall, 'PASS');
+  });
+
+  it('keeps POSTMAN FAIL as FAIL when the stage truly failed', () => {
+    const rollup = buildSuiteRollup([stage('api', 'FAIL')], {});
+    assert.equal(rollup.lines.find((row) => row.label === 'POSTMAN')?.status, 'FAIL');
+    assert.equal(rollup.overall, 'FAIL');
+  });
 });

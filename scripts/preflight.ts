@@ -5,14 +5,15 @@ import { PATHS } from './lib/paths';
 import { loadConfig } from './lib/load-config';
 import { logStep } from './lib/logger';
 import { resolveJmeterCommand } from './lib/jmeter';
+import { ensurePlaywrightBrowsersInstalled } from './lib/ensure-playwright-browsers';
 import {
   ALL_PLAYWRIGHT_BROWSERS,
   isPlaywrightBrowserInstalled,
   resolvePlaywrightBrowsers,
-  type PlaywrightBrowser,
 } from './lib/playwright-browsers';
 import { assertUniquePlaywrightSuitePaths } from './lib/playwright-suites';
 import { resolvePostmanCommand } from './lib/postman';
+import { applyQaRuntimeEnv } from './lib/runtime-env';
 import { captureCommand, findOnPath, localBinPath, resolveNpmCommand } from './lib/run-command';
 import type { QaConfig } from './types';
 
@@ -361,19 +362,32 @@ function checkBrowsers(config: QaConfig | null): CheckResult {
     };
   }
 
+  // Auto-install missing Chromium/Firefox/WebKit (and repair sandbox PLAYWRIGHT_BROWSERS_PATH)
+  // so PDF generation and the 3-browser matrix can run. Still FAIL if install cannot complete.
+  const ensure = ensurePlaywrightBrowsersInstalled(needed);
   const present = needed.filter((name) => isPlaywrightBrowserInstalled(name));
-  const missing = needed.filter((name) => !isPlaywrightBrowserInstalled(name));
+  const missing = ensure.missingAfter;
 
   if (missing.length > 0) {
     return {
       name: 'Playwright browsers',
       status: 'FAIL',
-      detail: `missing ${missing.join(', ')} — run: npx playwright install ${missing.join(' ')}`,
+      detail: `missing ${missing.join(', ')} after auto-install — run: npx playwright install ${missing.join(' ')}. ${ensure.detail}`,
       required: true,
     };
   }
 
-  return { name: 'Playwright browsers', status: 'PASS', detail: present.join(', '), required: true };
+  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH
+    ? ` (PLAYWRIGHT_BROWSERS_PATH=${process.env.PLAYWRIGHT_BROWSERS_PATH})`
+    : '';
+  const installNote =
+    ensure.missingBefore.length > 0 ? ` — auto-installed ${ensure.missingBefore.join(', ')}` : '';
+  return {
+    name: 'Playwright browsers',
+    status: 'PASS',
+    detail: `${present.join(', ')}${installNote}${browsersPath}`,
+    required: true,
+  };
 }
 
 function checkTypeScript(): CheckResult {
@@ -592,10 +606,13 @@ function writeReport(checks: CheckResult[]): void {
   };
   fs.writeFileSync(reportPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   console.log(`Report          ${path.relative(PATHS.root, reportPath)}`);
-  console.log('Note            Preflight reports only; it does not install tools or change PATH.');
+  console.log(
+    'Note            Preflight auto-installs missing Playwright browsers (chromium/firefox/webkit) and repairs an invalid PLAYWRIGHT_BROWSERS_PATH; it does not install Node/Java/JMeter or rewrite PATH.'
+  );
 }
 
 function main(): void {
+  applyQaRuntimeEnv(process.env);
   const { config, error } = loadConfigSafe();
   printInspect(config, error);
 

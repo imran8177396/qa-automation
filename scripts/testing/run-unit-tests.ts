@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { PATHS } from '../lib/paths';
+import { applySafePlaywrightBrowsersPath } from '../lib/runtime-env';
 
 function findTestFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -36,6 +37,9 @@ const result = spawnSync(
   {
     stdio: 'inherit',
     cwd: PATHS.root,
+    // Unit tests that launch Chromium (crawler, ui-scan, fixture-safety) need the real browser cache,
+    // not an IDE/sandbox PLAYWRIGHT_BROWSERS_PATH. Same repair run-qa.cmd / qa:all already apply.
+    env: applySafePlaywrightBrowsersPath({ ...process.env }),
   }
 );
 

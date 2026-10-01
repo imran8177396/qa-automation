@@ -3,23 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-test('enterprise-model no longer falls back to shared Playwright JSON or overwrite disclaimer', () => {
+test('enterprise-model surfaces orchestrator integrity, API REQUIRES_CONFIGURATION, and JMeter targetSource', () => {
   const source = fs.readFileSync(path.join('scripts', 'lib', 'qa-report', 'enterprise-model.ts'), 'utf8');
-  assert.doesNotMatch(source, /Later Playwright suites[\s\S]*overwrite reports\/playwright\/results\.json/);
-  assert.doesNotMatch(source, /sharedPlaywrightJson/);
-  assert.match(source, /generatedCheckResultsPath/);
-  assert.match(source, /A shared reports\/playwright\/results\.json path is not read/);
-  assert.match(source, /resolveSuiteStatus/);
-  assert.match(source, /loadLighthouseSection/);
-  assert.match(source, /coverageFormula/);
-  assert.match(source, /loadFailureAnalysisSection/);
-  assert.match(source, /loadRetestSection/);
-  assert.match(source, /readTautologicalArtifact/);
-  assert.match(source, /cross-suite\.json/);
-  assert.match(source, /collectEngineResults/);
-  assert.match(source, /engineResults/);
-  assert.match(source, /evaluateReleaseGate/);
-  assert.match(source, /releaseGate/);
+  assert.match(source, /readReconciledOrchestratorSummary/);
+  assert.match(source, /orchestratorIntegrityNote/);
+  assert.match(source, /postmanSuiteSummary/);
+  assert.match(source, /REQUIRES_CONFIGURATION/);
+  assert.match(source, /targetSource/);
+  assert.match(source, /Liveness against the website under test, no API URL configured; status RECORDED, not PASS/);
 });
 
 test('HTML and DOCX consume 2.16 / 2.17 schema columns and do not invent confidence', () => {

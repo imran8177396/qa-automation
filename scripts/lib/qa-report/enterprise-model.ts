@@ -69,6 +69,7 @@ import {
   type EngineReportRow,
 } from './collect-engine-results';
 import { evaluateReleaseGate } from '../../orchestrator/quality-gate';
+import { readReconciledOrchestratorSummary } from '../../orchestrator/reconcile-orchestrator-summary';
 import {
   ALL_PLAYWRIGHT_ENGINES,
   PLAYWRIGHT_ENGINE_CAVEATS,
@@ -264,6 +265,9 @@ export interface EnterpriseReportModel {
   };
   api: {
     available: boolean;
+    /** Honest suite status from Postman summary (e.g. REQUIRES_CONFIGURATION). */
+    status: string;
+    statusNote: string;
     collection: string;
     iterations: number;
     requestsExecuted: number;
@@ -285,6 +289,9 @@ export interface EnterpriseReportModel {
     skipped: boolean;
     skipReason: string;
     target: string;
+    /** `website` = liveness fallback; `api` = documented API. */
+    targetSource: string;
+    targetSourceNote: string;
     threads: number;
     rampUpSeconds: number;
     loopCount: number;
@@ -447,6 +454,8 @@ export interface EnterpriseReportModel {
       completedAt: string;
     }>;
     evidenceIntegrityNote: string;
+    /** Honest note when reports/orchestrator/summary.json is partial or stale. */
+    orchestratorIntegrityNote: string;
   };
   risks: string[];
   recommendation: {
@@ -766,6 +775,9 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const perSuiteWired = true;
   const generatedCheckAvailable = Boolean(generatedCheckJson);
   const postman = readJson<PostmanReport>(path.join(PATHS.reports.postman, 'report.json'));
+  const postmanSuiteSummary = readJsonIfExists<{ status?: string; note?: string; passed?: boolean }>(
+    path.join(PATHS.reports.postman, 'summary.json')
+  );
   const perfSummary = readJson<PerformanceSummary>(PATHS.jmeterSummary);
   const jtl = parseJmeterJtl(PATHS.jmeterResults);
   const jmeterMetrics = jtl?.metrics ?? perfSummary?.metrics ?? null;
@@ -808,6 +820,12 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
     }>;
     notExecuted?: string[];
   }>(path.join(PATHS.reports.orchestrator, 'summary.json'));
+  const reconciledOrch = readReconciledOrchestratorSummary();
+  const orchIntegrityNote =
+    reconciledOrch?.staleness?.note ??
+    (orchestratorRaw
+      ? `Orchestrator summary present (${orchestratorRaw.stages?.length ?? 0} stage(s)).`
+      : 'Orchestrator summary was not present on disk.');
   const preflightRaw = readJson<{
     os?: string;
     checks?: Array<{ name: string; detail?: string }>;
@@ -1179,6 +1197,20 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
   const risks = [
     'UI tests, Postman API tests, and combined UI+API workflows are separate. Not every UI action is coupled to an internal API, and not every API request is exercised through the browser.',
     'Automated pass rate reflects only the executed automation scope, not the entire application.',
+    ...(reconciledOrch?.staleness?.partial || reconciledOrch?.staleness?.stale
+      ? [orchIntegrityNote]
+      : []),
+    ...(postmanSuiteSummary?.status === 'REQUIRES_CONFIGURATION'
+      ? [
+          postmanSuiteSummary.note ??
+            'API suite is REQUIRES_CONFIGURATION: no documented API URL (QA_API_URL / urls.api). This is not a product PASS.',
+        ]
+      : []),
+    ...(perfSummary?.targetSource === 'website'
+      ? [
+          'Liveness against the website under test, no API URL configured; status RECORDED, not PASS.',
+        ]
+      : []),
     `UI coverage is limited to ${uniqueScenarios.length} unique scenario(s) across ${executedBrowsers.length} browser(s).`,
     `API coverage is limited to smoke requests (${apiRequests.length} request(s)); this is not comprehensive API testing.`,
     perfSummary?.heavy
@@ -1248,8 +1280,9 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
     ...(orchestratorRaw
       ? [
           `The qa:all orchestrator recorded overall ${orchestratorRaw.overallStatus ?? NOT_AVAILABLE} for ${orchestratorRaw.url ?? config.urls.website}. Section 2.6 is sourced only from ${playwrightSourceFile}.`,
+          orchIntegrityNote,
         ]
-      : []),
+      : [orchIntegrityNote]),
     ...(responsiveRaw?.target && !isSameConfiguredOrigin(String(responsiveRaw.target), config.urls.website)
       ? [
           `Responsive suite target in reports/responsive/summary.json is ${responsiveRaw.target}. That is not the ${config.project.name} origin. A responsive PASS must not be treated as evidence for ${config.urls.website}.`,
@@ -1272,9 +1305,9 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
 
   const stageGroups = rollupStageGroups(orchestratorRaw?.stages ?? []);
   const pipelineModel = {
-    available: Boolean(orchestratorRaw?.stages?.length),
+    available: Boolean(orchestratorRaw?.stages?.length || reconciledOrch?.stages?.length),
     url: orchestratorRaw?.url ?? config.urls.website,
-    overallStatus: orchestratorRaw?.overallStatus ?? NOT_AVAILABLE,
+    overallStatus: orchestratorRaw?.overallStatus ?? reconciledOrch?.overallStatus ?? NOT_AVAILABLE,
     command: orchestratorRaw?.command ?? 'qa:all',
     stages: (orchestratorRaw?.stages ?? []).map((stage) => ({
       id: stage.id,
@@ -1289,16 +1322,32 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
     evidenceIntegrityNote: generatedCheckAvailable
       ? `Section 2.6 is sourced from ${playwrightSourceFile}. Playwright suites write unique reports/playwright/<suiteName>/results.json paths; output-path collision is structurally rejected.`
       : `Section 2.6 is NOT_AVAILABLE. Generated-check results were not on disk at ${playwrightSourceFile}. A shared reports/playwright/results.json path is not read.`,
+    orchestratorIntegrityNote: orchIntegrityNote,
   };
+
+  const apiSuiteStatus =
+    postmanSuiteSummary?.status ??
+    (postman?.run
+      ? toolSuiteStatus('Postman CLI', apiRequests.length, pmSummary?.tests?.failed ?? 0)
+      : 'NOT_EXECUTED');
+  const apiStatusNote =
+    postmanSuiteSummary?.note ??
+    (postmanSuiteSummary?.status === 'REQUIRES_CONFIGURATION'
+      ? 'REQUIRES_CONFIGURATION: no documented API URL (set QA_API_URL or qa.config.json urls.api).'
+      : '');
 
   const recommendationBullets = [
     `Within the executed automation scope, overall QA status is ${overallStatus}.`,
     `UI/E2E executions: ${pwPassed} passed, ${pwFailed} failed, ${pwSkipped} skipped out of ${executions.length}.`,
-    `API automation result (Postman CLI): ${toolSuiteStatus('Postman CLI', apiRequests.length, pmSummary?.tests?.failed ?? 0)}.`,
+    `API automation result (Postman CLI): ${apiSuiteStatus}${apiStatusNote ? ` — ${apiStatusNote}` : ''}.`,
     `Performance validation result (observed metrics only): ${
-      jmeter?.samples.length
-        ? 'RECORDED'
-        : 'NOT_EXECUTED'
+      jmeter?.samples.length ? (perfSummary?.status ?? 'RECORDED') : 'NOT_EXECUTED'
+    }${
+      perfSummary?.targetSource === 'website'
+        ? ' — targetSource=website (liveness against the website under test, no API URL configured; status RECORDED, not PASS)'
+        : perfSummary?.targetSource
+          ? ` — targetSource=${perfSummary.targetSource}`
+          : ''
     }.`,
     securityModel.available
       ? `QA-level security validation: ${securityModel.failCount} failure(s) across ${securityModel.pagesAnalyzed} page(s). Not a penetration test.`
@@ -1796,14 +1845,14 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
         type: 'API Automation (documented/discovered endpoints only)',
         tool: 'Postman CLI',
         coverage: `${apiRequests.length} request(s)`,
-        result: toolSuiteStatus('Postman CLI', apiRequests.length, pmSummary?.tests?.failed ?? 0),
+        result: String(apiSuiteStatus),
       },
       {
         type: `Performance (${perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE})`,
         tool: 'JMeter',
-        coverage: `${jmeter?.samples.length ?? 0} sample(s); ${perfSummary?.threads ?? config.jmeter.threads} thread(s); threshold ${perfSummary?.thresholds.status ?? NOT_AVAILABLE}`,
+        coverage: `${jmeter?.samples.length ?? 0} sample(s); ${perfSummary?.threads ?? config.jmeter.threads} thread(s); targetSource=${perfSummary?.targetSource ?? NOT_AVAILABLE}; threshold ${perfSummary?.thresholds.status ?? NOT_AVAILABLE}`,
         result: jmeter?.samples.length
-          ? 'RECORDED'
+          ? perfSummary?.status ?? 'RECORDED'
           : resolveSuiteStatus({ executedCount: 0 }),
       },
       {
@@ -1962,7 +2011,9 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       failureDetailsAvailable,
     },
     api: {
-      available: Boolean(postman?.run),
+      available: Boolean(postman?.run) || postmanSuiteSummary?.status === 'REQUIRES_CONFIGURATION',
+      status: String(apiSuiteStatus),
+      statusNote: apiStatusNote,
       collection: postman?.run?.meta?.collectionName ?? config.postman.collectionName,
       iterations: pmSummary?.iterations?.executed ?? 0,
       requestsExecuted: pmSummary?.executedRequests?.executed ?? apiRequests.length,
@@ -1975,7 +2026,7 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       maxMs: pmSummary?.timeStats?.responseMax ?? 0,
       requests: apiRequests,
       terminology:
-        'API automation via Postman CLI. When discovery records 0 xhr/fetch/websocket APIs, executed requests are documented in qa.config.json postman.requests, not invented from the UI page. Coverage is limited to those documented requests and xhr/fetch calls observed on the same API origin. Authentication/authorization stay NOT_EXECUTED unless the target documents them and QA_API_TOKEN is provided.',
+        'API automation via Postman CLI. When discovery records 0 xhr/fetch/websocket APIs, executed requests are documented in qa.config.json postman.requests, not invented from the UI page. Coverage is limited to those documented requests and xhr/fetch calls observed on the same API origin. Authentication/authorization stay NOT_EXECUTED unless the target documents them and QA_API_TOKEN is provided. An empty urls.api is REQUIRES_CONFIGURATION — never counted as PASS.',
     },
     performance: {
       available: Boolean(jmeter),
@@ -1985,6 +2036,13 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       skipped: Boolean(perfSummary?.skipped || perfSummary?.blocked),
       skipReason: textOrNa(perfSummary?.blockReason ?? perfSummary?.skipReason ?? ''),
       target: perfSummary?.target ?? `${config.urls.api.replace(/\/+$/, '')}${config.jmeter.path.startsWith('/') ? config.jmeter.path : `/${config.jmeter.path}`}`,
+      targetSource: perfSummary?.targetSource ?? NOT_AVAILABLE,
+      targetSourceNote:
+        perfSummary?.targetSource === 'website'
+          ? 'Liveness against the website under test, no API URL configured; status RECORDED, not PASS'
+          : perfSummary?.targetSource === 'api'
+            ? 'Liveness/load targeted the documented API URL'
+            : '',
       threads: perfSummary?.threads ?? config.jmeter.threads,
       rampUpSeconds: perfSummary?.rampUpSeconds ?? config.jmeter.rampUpSeconds,
       loopCount: perfSummary?.loopCount ?? config.jmeter.loopCount,
@@ -2009,9 +2067,13 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       samples: jmeterRows,
       thresholdStatus: perfSummary?.thresholds.status ?? NOT_AVAILABLE,
       slaNote:
-        perfSummary?.thresholds.note ??
-        'Performance results are reported as observed execution metrics. Threshold keys in qa.config.json are null — status is RECORDED / NOT_AVAILABLE, not PASS. No SLA was invented.',
-      terminology: `JMeter ${perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE} performance validation — status is RECORDED, never PASS`,
+        perfSummary?.targetSource === 'website'
+          ? 'Liveness against the website under test, no API URL configured; status RECORDED, not PASS. Threshold keys in qa.config.json are null — no SLA was invented.'
+          : perfSummary?.thresholds.note ??
+            'Performance results are reported as observed execution metrics. Threshold keys in qa.config.json are null — status is RECORDED / NOT_AVAILABLE, not PASS. No SLA was invented.',
+      terminology: `JMeter ${perfSummary ? formatPerformanceProfileLabel(perfSummary.profile) : NOT_AVAILABLE} performance validation — status is RECORDED, never PASS${
+        perfSummary?.targetSource === 'website' ? ' (targetSource=website)' : ''
+      }`,
     },
     lighthouse: lighthouseSection,
     defects: {
@@ -2066,6 +2128,10 @@ export function buildEnterpriseReportModel(): EnterpriseReportModel {
       { name: 'Combined Summary', location: 'reports/summary.json' },
       { name: 'Orchestrator stages', location: 'reports/orchestrator/stages.md' },
       { name: 'Orchestrator summary', location: 'reports/orchestrator/summary.json' },
+      {
+        name: 'Orchestrator reconciled summary',
+        location: 'reports/orchestrator/reconciled-summary.json',
+      },
       { name: 'Final QA report', location: 'reports/summary/final-qa-report.md' },
       { name: 'Allure results', location: 'reports/allure/results' },
       { name: 'Allure HTML report', location: 'reports/allure/report/index.html' },

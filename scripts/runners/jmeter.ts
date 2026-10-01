@@ -14,6 +14,9 @@ import {
 } from '../performance/profiles';
 import type { PerformanceCli } from '../performance/cli';
 import type { PerformanceRunStatus, PerformanceSummary } from '../performance/types';
+import { planInputFromConfig, renderJmeterPlan } from '../performance/jmx';
+import { readLastTargetUrl } from '../lib/last-target';
+import { resolveWebsiteTarget } from '../orchestrator/resolve-url';
 import type { QaConfig } from '../types';
 
 export interface RunJmeterOptions extends Partial<PerformanceCli> {}
@@ -42,7 +45,7 @@ function renderFindings(summary: PerformanceSummary): string {
     '',
     `- Profile: ${summary.profile}${summary.heavy ? ' (heavy — authorized only)' : ' (liveness)'}`,
     `- Run status: ${summary.status}`,
-    `- Target: ${summary.target}`,
+    `- Target: ${summary.target}${summary.targetSource === 'website' ? ' (website under test — no API URL configured)' : ''}`,
     `- Plan: ${summary.plan}`,
     `- Authorized: ${summary.authorized ? 'yes' : 'no'}`,
     `- Threshold status: ${summary.thresholds.status}`,
@@ -137,6 +140,7 @@ function emptySummaryShell(
     blocked: false,
     blockReason: null,
     jmeterAvailable: Boolean(resolveJmeterCommand()),
+    targetSource: resolved?.targetSource,
     target: resolved?.target ?? config.jmeter.path,
     host: resolved?.host ?? '',
     method: resolved?.method ?? 'GET',
@@ -185,7 +189,17 @@ export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}
     return true;
   }
 
-  const decision = resolvePerformanceProfile(requested, config, { authorizeHeavy });
+  const websiteUrl = resolveWebsiteTarget({
+    playwrightEnvUrl: process.env.QA_PLAYWRIGHT_BASE_URL,
+    websiteEnvUrl: process.env.QA_WEBSITE_URL,
+    lastTargetUrl: readLastTargetUrl(),
+    playwrightBaseUrl: config.playwright.baseURL,
+    websiteUrl: config.urls.website,
+    environments: config.environments,
+    activeEnvironment: config.environment?.active,
+  });
+
+  const decision = resolvePerformanceProfile(requested, config, { authorizeHeavy, websiteUrl });
 
   if (!decision.ok) {
     writeGateDecision(config, decision);
@@ -198,6 +212,24 @@ export async function runJmeter(config: QaConfig, options: RunJmeterOptions = {}
   }
 
   const resolved = decision.resolved;
+
+  if (resolved.targetSource === 'website') {
+    // No documented API URL: run the liveness plan against the website under test.
+    // The static plan under tests/performance/jmeter/ stays API-only; write a runtime plan instead.
+    const plan = planInputFromConfig(config, resolved.id);
+    const runtimePlan = path.join(PATHS.reports.jmeter, 'website-liveness.jmx');
+    fs.mkdirSync(PATHS.reports.jmeter, { recursive: true });
+    fs.writeFileSync(
+      runtimePlan,
+      renderJmeterPlan({ ...plan, apiUrl: resolved.baseUrl, requestPath: resolved.path, targetKind: 'website' }),
+      'utf8'
+    );
+    resolved.planPath = runtimePlan;
+    logWarn(
+      `No API URL configured — running JMeter liveness against the website under test: ${resolved.target}`
+    );
+  }
+
   const summary = emptySummaryShell(config, resolved.id, decision.authorized, resolved.heavy, resolved);
 
   const jmeterCommand = resolveJmeterCommand();

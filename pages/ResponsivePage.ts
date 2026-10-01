@@ -90,9 +90,17 @@ export class ResponsivePage extends BasePage {
   }
 
   async open(targetPath: string): Promise<void> {
-    await this.page.setViewportSize({ width: this.profile.width, height: this.profile.height });
+    // Project `use.viewport` already sets the emulated size. Calling
+    // setViewportSize again (especially on Firefox + isMobile before any
+    // navigation) can hang until the full test timeout under worker load —
+    // that is an automation defect, not a site failure. Only resize when needed.
+    const desired = { width: this.profile.width, height: this.profile.height };
+    const current = this.page.viewportSize();
+    if (!current || current.width !== desired.width || current.height !== desired.height) {
+      await this.page.setViewportSize(desired);
+    }
     await this.goto(targetPath);
-    await this.page.waitForLoadState('domcontentloaded');
+    // goto already waits for domcontentloaded; keep a bounded fonts settle only.
     await this.page.evaluate(
       () =>
         Promise.race([

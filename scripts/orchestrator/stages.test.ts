@@ -185,6 +185,29 @@ describe('orchestrator stages', () => {
     }
   });
 
+  it('attaches per-stage timeouts so hung children cannot block the pipeline forever', () => {
+    const stages = buildStages({ tests: fixtureTests() });
+    for (const stage of stages) {
+      assert.ok(typeof stage.timeoutMs === 'number' && stage.timeoutMs > 0, stage.key);
+    }
+    const responsive = stages.find((stage) => stage.key === 'responsive');
+    assert.ok((responsive?.timeoutMs ?? 0) >= 60 * 60 * 1000);
+  });
+
+  it('includes smoke, regression, and localization when enabled (26 stages with default opt-ins)', () => {
+    const stages = buildStages({
+      tests: fixtureTests({
+        smoke: { enabled: true },
+        regression: { enabled: true, mode: 'selective' },
+        localization: { enabled: true, locales: ['en-US'], timezones: ['UTC'] },
+      }),
+    });
+    assert.equal(stages.length, 26);
+    assert.ok(stages.some((stage) => stage.key === 'smoke'));
+    assert.ok(stages.some((stage) => stage.key === 'regression'));
+    assert.ok(stages.some((stage) => stage.key === 'localization'));
+  });
+
   it('runs security, seo, and content as a concurrent page-scan group', () => {
     const stages = buildStages({ tests: fixtureTests() });
     const pageScanStages = stages.filter((stage) => stage.parallelGroup === 'page-scan');

@@ -38,6 +38,7 @@
     "test:all": "tsx scripts/run-core-tools.ts",
     "qa:clean": "tsx scripts/clean-test-data.ts",
     "qa:all": "tsx scripts/run-all.ts",
+    "qa:full": "tsx scripts/run-qa-full.ts",
     "qa": "tsx scripts/run-qa.ts",
     "qa:sync": "tsx scripts/sync-from-config.ts",
     "qa:api": "tsx scripts/run-qa.ts --step=api",

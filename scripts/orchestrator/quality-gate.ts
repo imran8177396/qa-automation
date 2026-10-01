@@ -63,9 +63,18 @@ export function collectQualityGateReasons(required: SuiteRollupLine[]): QualityG
       continue;
     }
     if (isJmeterSatisfied(line) || isCoverageSatisfied(line)) continue;
-    if (line.status === 'BLOCKED' || line.status === 'NOT_EXECUTED') {
+    if (
+      line.status === 'BLOCKED' ||
+      line.status === 'NOT_EXECUTED' ||
+      line.status === 'REQUIRES_CONFIGURATION'
+    ) {
       reasons.push({
-        code: line.status === 'BLOCKED' ? 'required-suite-blocked' : 'required-suite-not-executed',
+        code:
+          line.status === 'REQUIRES_CONFIGURATION'
+            ? 'required-suite-requires-configuration'
+            : line.status === 'BLOCKED'
+              ? 'required-suite-blocked'
+              : 'required-suite-not-executed',
         detail: `${line.label} is ${line.status}${line.detail ? ` (${line.detail})` : ''}`,
       });
     }
